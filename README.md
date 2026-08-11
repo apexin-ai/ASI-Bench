@@ -182,7 +182,7 @@ with `--agent`.
 | Codex CLI | `npm install -g @openai/codex` | Requires OpenAI API key |
 | Kimi Code | `npm install -g @moonshot-ai/kimi-code` | **Use the npm package.** The PyPI package (`kimi-cli`) has different CLI arguments and is not compatible with this adapter. Requires Moonshot API key or local login (`kimi /login`) |
 | CodeWhale | See [CodeWhale docs](https://github.com/codewhale-ai/codewhale) | Requires DeepSeek API key by default |
-| AntiGravity | `npm install -g @anthropic-ai/antigravity` | Experimental |
+| AntiGravity | `curl -fsSL https://antigravity.google/cli/install.sh | bash` | Experimental |
 
 Example with Kimi Code:
 
