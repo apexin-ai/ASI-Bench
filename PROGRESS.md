@@ -141,3 +141,16 @@
 - Verification: public-policy tests passed `13 passed`; the complete default
   offline suite passed `2087 passed / 2 skipped / 22 deselected`.
 - Implementation commit: `a877776`
+
+## Restore allowlisted public task examples
+
+- Problem: the clean repository migration also removed the five intentionally
+  public, end-to-end sample tasks used to demonstrate task authoring and local
+  scorer integration.
+- Resolution: restore exactly the 37 prompt, GT generator, scorer/configuration,
+  and reference files belonging to the five allowlisted samples.
+- Prevention: `config/public_examples.json` and the public-task policy test keep
+  every other formal task metadata-only and reject unlisted private-like files.
+- Verification: focused policy/lifecycle tests passed `27 passed`; the complete
+  default offline suite passed `2087 passed / 2 skipped / 22 deselected`.
+- Implementation commit: `989808e`
