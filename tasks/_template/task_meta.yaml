@@ -1,0 +1,67 @@
+# task_meta.yaml (PUBLIC) — copy this directory to tasks/<domain>/<task_name>/ and fill in
+# Or use: asibench task create --domain <domain> --name <task_name>
+# Public metadata only. Scoring / generation / output shape+dtype live in task_eval.yaml.
+
+id: DOMAIN.TASK_NAME           # e.g., physics.example_task
+name: "Human-readable task name"
+version: "1.0"
+
+# Task lifecycle status:
+#   in_development  — task is being written, not yet runnable
+#   test            — runnable, still being debugged/calibrated
+#   sample          — runnable example, excluded from official runs by default
+#   final           — difficulty calibrated, prompts frozen, ready for official evaluation
+#   abandoned       — development discontinued, won't be included in runs
+status: in_development
+
+# Only used when status is 'abandoned' — briefly explain why
+# abandoned_reason: ""
+
+domain: DOMAIN                 # physics, chemistry, biology, biostat, materials, earth_science, astronomy, math, medicine, electrical_engineering, computer_science, finance, robotics
+subdomain: ""                  # e.g., computational_fluid_dynamics
+
+source:
+  paper: null                  # citation if based on a published method
+  repo: null                   # source code URL if applicable
+
+difficulty:
+  estimated_lines: 100-300     # expected lines of code for the solution
+  estimated_time_minutes: 30-60
+  requires_gpu: false
+  requires_network: false
+
+tags: []                       # free-form tags for filtering, e.g., [fluid_dynamics, taichi]
+
+# Task-local runtime dependencies (used by task sandboxing)
+runtime:
+  python: null                 # e.g., ">=3.11"
+  packages: []                 # e.g., ["taichi>=1.7.4", "scipy>=1.11"]
+
+# Prompt levels — four files providing decreasing information (B4 = B3 + redundancy)
+prompts:
+  b1: prompt_b1.md             # full algorithm description
+  b2: prompt_b2.md             # method name + background
+  b3: prompt_b3.md             # goal only
+  b4: prompt_b4.md             # B3 + factually correct redundant information
+
+# Input/output contract (agent-facing).
+# IMPORTANT: generate_gt.py (INPUT_SPEC / OUTPUT_SPEC) is the single source of truth.
+# The declarations below are derived documentation — they must match generate_gt.py.
+# Input files ARE given to the agent, so their shape/dtype stay here (public).
+input:
+  files: []
+  # Example:
+  # - name: input_data.npy
+  #   type: data
+  #   shape: [100, 100]
+  #   dtype: float32
+  #   description: "Input data for the task"
+
+# Output: agent-facing declaration = name + type + description ONLY.
+# The expected shape/dtype (scoring targets) go in task_eval.yaml, not here.
+output:
+  files: []
+  # Example:
+  # - name: result.npy
+  #   type: data
+  #   description: "Agent-produced result"

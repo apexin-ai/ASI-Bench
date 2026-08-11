@@ -1,0 +1,75 @@
+name: CI
+
+"on":
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install Python
+        run: uv python install "${{ matrix.python-version }}"
+      - name: Sync the locked development environment
+        run: uv sync --locked --python "${{ matrix.python-version }}"
+      - name: Run the offline-safe test suite
+        run: uv run --frozen pytest -q
+
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Build wheel and source distribution
+        run: uv build
+      - name: Validate package metadata
+        run: uvx --from twine twine check --strict dist/*
+      - name: Install and smoke-test the wheel
+        run: |
+          uv venv --python 3.11 .venv-wheel
+          uv pip install --python .venv-wheel/bin/python dist/*.whl
+          .venv-wheel/bin/asibench --help
+          .venv-wheel/bin/ai4sci-bench --help
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+
+  required:
+    name: CI required
+    if: ${{ always() }}
+    needs: [tests, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required jobs
+        env:
+          TESTS_RESULT: ${{ needs.tests.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          test "$TESTS_RESULT" = success
+          test "$BUILD_RESULT" = success

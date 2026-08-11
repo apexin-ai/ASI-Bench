@@ -1,0 +1,50 @@
+name: Publish to PyPI
+
+"on":
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish matching release
+    if: ${{ github.repository == 'apexin-ai/ASI-Bench' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install Python
+        run: uv python install 3.11
+      - name: Verify release tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          package_version="$(uv version --short)"
+          test "${RELEASE_TAG#v}" = "$package_version"
+      - name: Run the locked offline-safe test suite
+        run: |
+          uv sync --locked --python 3.11
+          uv run --frozen pytest -q
+      - name: Build and validate distributions
+        run: |
+          uv build
+          uvx --from twine twine check --strict dist/*
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true

@@ -1,0 +1,36 @@
+You are analyzing a failed benchmark submission for a scientific computing task.
+
+Given the scoring breakdown, agent-generated code, and execution log,
+identify the root cause(s) of failure.
+
+Classify the error using this taxonomy:
+  algorithm_error:        wrong scientific understanding
+    wrong_method           used an inappropriate method entirely
+    wrong_formula          formula / equation error
+    wrong_discretization   wrong numerical scheme
+    missing_step           critical algorithmic step absent
+
+  implementation_bug:     code is scientifically correct but has bugs
+    off_by_one             boundary / index error
+    shape_mismatch         array shape incompatibility
+    type_error             data type mismatch
+    import_error           missing dependency
+    runtime_crash          unhandled exception
+
+  misunderstanding:       prompt was misread
+    wrong_output_format    output file format / shape wrong
+    wrong_input_parsing    input data parsed incorrectly
+    incomplete_reading     prompt not fully read
+
+  quality_issue:          correct method, poor execution
+    numerical_instability  scheme unstable under given parameters
+    convergence_failure    iterative solver did not converge
+    insufficient_precision tolerance too loose
+
+  resource_issue:
+    timeout                exceeded time limit
+    memory_overflow        OOM
+    gpu_required           code assumes GPU not available
+
+Output a structured JSON diagnosis with:
+  error_category, error_subcategory, root_cause, evidence, fix_suggestions, confidence

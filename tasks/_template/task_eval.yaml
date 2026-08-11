@@ -1,0 +1,82 @@
+# task_eval.yaml (PRIVATE) — scoring + generation config. NEVER goes to the public repo.
+# Pairs with task_meta.yaml in the same directory (matched by task_id).
+
+task_id: DOMAIN.TASK_NAME      # must equal id in task_meta.yaml
+
+# Output shape/dtype = scoring expectations (NOT shown to the agent).
+# Match names to task_meta.yaml output.files.
+output:
+  files: []
+  # Example:
+  # - name: result.npy
+  #   type: data
+  #   shape: [100]
+  #   dtype: float32
+
+# Evaluation — hard/soft Gates + weighted Scoring pattern
+evaluation:
+  # Layer 1: gates
+  # - severity: hard (default) blocks scoring when failed
+  # - severity: soft records a warning but still allows scoring
+  gates: []
+  # Example:
+  # - scorer: file_match
+  #   severity: hard
+  #   config:
+  #     checks:
+  #       - {file: analysis.py}
+  # - scorer: code_analysis
+  #   severity: soft
+  #   config:
+  #     target_file: analysis.py
+  #     checks:
+  #       - {pattern: "import numpy", required: true}
+
+  # Layer 2: weighted scoring
+  # Runs if all hard gates pass. Soft-gate failures are reported separately.
+  scoring: []
+  # Example:
+  # - scorer: code_analysis
+  #   weight: 15
+  #   config:
+  #     target_file: analysis.py
+  #     scoring_mode: per_check      # all_or_nothing (default) or per_check
+  #     checks:
+  #       - {pattern: "import numpy", required: true}
+  #       - {pattern: "np.load", required: true}
+  # - scorer: file_match
+  #   weight: 10
+  #   config:
+  #     scoring_mode: per_check
+  #     checks:
+  #       - {file: result.npy, shape: [100], dtype: float32}
+  #       - {check: no_nan_inf}
+  # - scorer: numerical
+  #   weight: 75
+  #   config:
+  #     metric: relative_l2
+  #     pred_file: result.npy
+  #     ref_file: result_ref.npy
+  #     scoring: linear_interpolation
+  #     full_score_threshold: 0.02
+  #     zero_score_threshold: 0.10
+
+# Parametric generation
+generation:
+  script: generate_gt.py
+  mode: infinite                 # infinite (default) or finite
+  parameters: {}
+  # Example (infinite mode — random sampling):
+  # parameters:
+  #   grid_size:
+  #     type: int
+  #     range: [64, 512]
+  #     default: 255
+  #
+  # Example (finite mode — enumerated settings):
+  # mode: finite
+  # precomputed: false           # false = run generate_gt.py on-the-fly; true = load from reference/<id>/
+  # settings:
+  #   - {id: s1, grid_size: 64, seed: 1}
+  #   - {id: s2, grid_size: 128, seed: 2}
+  timeout_seconds: 1800

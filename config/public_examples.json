@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "description": "The framework-level author template is the only exception to the metadata-only public Task policy.",
+  "private_like_filenames": [
+    "task.yaml",
+    "task_eval.yaml",
+    "generate_gt.py",
+    "precompute_gt.py",
+    "custom_scorer.py",
+    "reference_specs.md"
+  ],
+  "private_like_directories": ["reference"],
+  "examples": [
+    {"task_id": "_template", "kind": "template", "allowed_private_like_files": ["generate_gt.py", "reference_specs.md", "task_eval.yaml"]}
+  ]
+}

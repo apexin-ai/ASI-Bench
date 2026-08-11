@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+.ai4sci-bench/
+.asibench/

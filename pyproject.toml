@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asibench"
+version = "0.1.2"
+description = "LLM Agent benchmark for AI for Science"
+authors = [{ name = "Apex Intelligence" }]
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1.0",
+    "huggingface-hub>=0.24.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+multimodal = [
+    "Pillow>=10.0.0",
+]
+full = [
+    "Pillow>=10.0.0",
+    "litellm>=1.0.0",
+    "matplotlib>=3.10.8",
+    "numpy>=2.0.0",
+    "openai>=1.0.0",
+    "pandas>=3.0.2",
+    "scipy>=1.11.0",
+    "taichi>=1.7.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "Pillow>=10.0.0",
+    "litellm>=1.0.0",
+    "matplotlib>=3.10.8",
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.6",
+    "numpy>=2.0.0",
+    "openai>=1.0.0",
+    "pandas>=3.0.2",
+    "pymdown-extensions>=10.21.2",
+    "scipy>=1.11.0",
+    "taichi>=1.7.4",
+]
+
+[project.scripts]
+asibench = "ai4sci_bench.cli:main"
+# Backwards-compatible alias for the pre-rename command name.
+ai4sci-bench = "ai4sci_bench.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ai4sci_bench"]
+
+# Source distribution allowlist. Without this, hatchling would ship every
+# VCS-tracked file into a public, permanent PyPI sdist. Explicitly ship only the
+# framework package + metadata (mirrors the wheel), so nothing else can leak.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/ai4sci_bench",
+    "/pyproject.toml",
+    "/README.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not integration and not e2e'"
+markers = [
+    "integration: end-to-end tests that regenerate real references / hit external state",
+    "e2e: tests that invoke installed agent CLIs or external model endpoints",
+]
