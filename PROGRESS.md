@@ -126,3 +126,18 @@
 - Verification: workflow tests `3 passed`; default suite `2087 passed / 2 skipped
   / 22 deselected`; `uv version --short` reports `0.1.2`.
 - Implementation commit: `eee5c47`
+
+## Clean public repository migration
+
+- Problem: exporting the latest private-repository tree verbatim would have
+  republished 37 prompt, generator, scorer, and reference files from five
+  formal benchmark task directories, even without copying Git history.
+- Resolution: build the new public repository from a fresh object database,
+  retain only `task_meta.yaml` in formal task directories, and keep
+  `tasks/_template/` as the sole framework-level author scaffold.
+- Prevention: the public-task policy and documentation now enforce the
+  metadata-only boundary, and migrations verify both the staged tree and the
+  absence of old commit objects before pushing.
+- Verification: public-policy tests passed `13 passed`; the complete default
+  offline suite passed `2087 passed / 2 skipped / 22 deselected`.
+- Implementation commit: `a877776`
