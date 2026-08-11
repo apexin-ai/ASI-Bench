@@ -1,0 +1,78 @@
+id: medicine.jama_id0014_malignant_an
+name: "JAMA ID0014: Longitudinal acanthosis-nigricans differential and triage"
+version: "0.4"
+
+status: sample
+
+domain: medicine
+subdomain: dermatology_oncology
+
+source:
+  paper: "JAMA clinical challenge case (internal ID: HardQA_Clinician_Student_Majority_Vote.csv ID0014, data_source: jama); expanded into synthetic differential variants"
+  repo: null
+
+difficulty:
+  estimated_lines: 40
+  estimated_time_minutes: 25-45
+  requires_gpu: false
+  requires_network: false
+
+tags:
+  - medicine
+  - dermatology
+  - oncology
+  - paraneoplastic
+  - longitudinal_reasoning
+  - differential_diagnosis
+  - calibrated_uncertainty
+  - resource_allocation
+
+runtime:
+  python: ">=3.10"
+  packages: []
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: clinical_dossier.md
+      type: text
+      description: "Four shuffled longitudinal dermatology records, an action-cost table, and allowed diagnosis IDs."
+
+output:
+  files:
+    - name: final_assessment.json
+      type: json
+      description: "Structured case-by-case diagnoses, calibrated differentials, evidence citations, budgeted actions, and counterfactuals."
+
+evaluation:
+  gates:
+    - scorer: file_match
+      severity: hard
+      config:
+        checks:
+          - {file: final_assessment.json}
+
+    - scorer: jama_clinical_contract
+      severity: hard
+      config:
+        script: custom_scorer.py
+
+  scoring:
+    - scorer: jama_clinical_reasoning
+      weight: 100
+      config:
+        script: custom_scorer.py
+
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters:
+    seed:
+      type: int
+      range: [0, 10000]
+      default: 0

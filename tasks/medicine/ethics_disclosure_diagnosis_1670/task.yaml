@@ -1,0 +1,75 @@
+id: medicine.ethics_disclosure_diagnosis_1670
+name: "ID1670: Decision-specific capacity and disclosure ethics audit"
+version: "0.4"
+
+status: sample
+domain: medicine
+subdomain: medical_ethics
+
+source:
+  paper: "medxpert clinical-ethics vignette (internal ID1670), expanded into synthetic longitudinal variants"
+  repo: null
+
+difficulty:
+  estimated_lines: 40
+  estimated_time_minutes: 25-45
+  requires_gpu: false
+  requires_network: false
+
+tags:
+  - medicine
+  - medical_ethics
+  - decision_specific_capacity
+  - informed_consent
+  - nondisclosure
+  - surrogate_decision_making
+  - longitudinal_reasoning
+
+runtime:
+  python: ">=3.10"
+  packages: []
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: ethics_dossier.md
+      type: text
+      description: "Four shuffled records involving disclosure preferences, capacity, family requests, and surrogate authority."
+
+output:
+  files:
+    - name: ethics_plan.json
+      type: json
+      description: "Structured decision-specific capacity, disclosure, surrogate, evidence, and contingency plan for every case."
+
+evaluation:
+  gates:
+    - scorer: file_match
+      severity: hard
+      config:
+        checks:
+          - {file: ethics_plan.json}
+    - scorer: ethics_decision_contract
+      severity: hard
+      config:
+        script: custom_scorer.py
+
+  scoring:
+    - scorer: ethics_decision_reasoning
+      weight: 100
+      config:
+        script: custom_scorer.py
+
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters:
+    seed:
+      type: int
+      range: [0, 10000]
+      default: 0

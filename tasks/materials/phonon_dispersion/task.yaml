@@ -1,0 +1,124 @@
+id: materials.phonon_dispersion
+name: "1D Diatomic Chain Phonon Dispersion, DOS, and Heat Capacity"
+version: "1.0"
+
+status: sample
+
+domain: materials
+subdomain: lattice_dynamics
+
+source:
+  paper: "Simon (2013) The Oxford Solid State Basics, Ch.10 (The Diatomic Chain)"
+  repo: null
+
+difficulty:
+  estimated_lines: 80-150
+  estimated_time_minutes: 20-40
+  requires_gpu: false
+  requires_network: false
+
+tags: [phonon, lattice_dynamics, diatomic_chain, solid_state_physics, heat_capacity, dos]
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: params.json
+      type: data
+      description: "Physical parameters (mass, kappa1, kappa2) and numerical grid specs"
+
+output:
+  files:
+    - name: dispersion.npy
+      type: data
+      dtype: float64
+      description: "Phonon dispersion: shape (2, n_kpoints); row 0 = acoustic, row 1 = optical"
+    - name: dos.npy
+      type: data
+      shape: [2, 200]
+      dtype: float64
+      description: "DOS: row 0 = frequency axis, row 1 = normalized DOS values"
+    - name: heat_capacity.npy
+      type: data
+      shape: [2, 100]
+      dtype: float64
+      description: "Heat capacity: row 0 = temperature axis, row 1 = Cv per mode"
+
+evaluation:
+  gates:
+    - scorer: file_match
+      severity: hard
+      config:
+        checks:
+          - {file: dispersion.npy, dtype: float64}
+          - {file: dos.npy, shape: "2,200", dtype: float64}
+          - {file: heat_capacity.npy, shape: "2,100", dtype: float64}
+          - {check: no_nan_inf}
+
+  scoring:
+    - scorer: file_match
+      weight: 10
+      config:
+        scoring_mode: per_check
+        checks:
+          - {file: dispersion.npy}
+          - {file: dos.npy}
+          - {file: heat_capacity.npy}
+
+    - scorer: numerical
+      weight: 45
+      config:
+        metric: mean_relative_l2
+        pred_file: dispersion.npy
+        ref_file: dispersion_ref.npy
+        scoring: linear_interpolation
+        full_score_threshold: 0.01
+        zero_score_threshold: 0.20
+
+    - scorer: numerical
+      weight: 30
+      config:
+        metric: mean_relative_l2
+        pred_file: dos.npy
+        ref_file: dos_ref.npy
+        row: 1
+        scoring: linear_interpolation
+        full_score_threshold: 0.05
+        zero_score_threshold: 0.30
+
+    - scorer: numerical
+      weight: 15
+      config:
+        metric: mean_relative_l2
+        pred_file: heat_capacity.npy
+        ref_file: heat_capacity_ref.npy
+        row: 1
+        scoring: linear_interpolation
+        full_score_threshold: 0.02
+        zero_score_threshold: 0.20
+
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters:
+    mass:
+      type: float
+      range: [0.5, 3.0]
+      default: 1.0
+    kappa1:
+      type: float
+      range: [0.5, 5.0]
+      default: 1.0
+    kappa2:
+      type: float
+      range: [0.5, 5.0]
+      default: 0.5
+    n_kpoints:
+      type: int
+      range: [100, 500]
+      default: 200
+  seed: true

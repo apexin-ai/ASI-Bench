@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "description": "The framework-level author template is the only exception to the metadata-only public Task policy.",
+  "description": "Explicit exceptions allowed to publish private-like Task files in the public ASI-Bench repository.",
+  "source_repository": "https://github.com/apexin-ai/Agent-AI4Sci-Bench",
+  "source_revision": "2ba9258442bf53ad6c4911957234e03e767476ad",
   "private_like_filenames": [
     "task.yaml",
     "task_eval.yaml",
@@ -11,6 +13,11 @@
   ],
   "private_like_directories": ["reference"],
   "examples": [
-    {"task_id": "_template", "kind": "template", "allowed_private_like_files": ["generate_gt.py", "reference_specs.md", "task_eval.yaml"]}
+    {"task_id": "_template", "kind": "template", "allowed_private_like_files": ["generate_gt.py", "reference_specs.md", "task_eval.yaml"]},
+    {"task_id": "chemistry.bsse_counterpoise_cbs_extrapolation", "kind": "full", "allowed_private_like_files": ["task.yaml", "generate_gt.py", "custom_scorer.py", "reference_specs.md"]},
+    {"task_id": "materials.phonon_dispersion", "kind": "full", "allowed_private_like_files": ["task.yaml", "generate_gt.py", "reference_specs.md"]},
+    {"task_id": "medicine.ethics_disclosure_diagnosis_1670", "kind": "full", "allowed_private_like_files": ["task.yaml", "generate_gt.py", "custom_scorer.py"]},
+    {"task_id": "medicine.jama_id0014_malignant_an", "kind": "full", "allowed_private_like_files": ["task.yaml", "generate_gt.py", "custom_scorer.py"]},
+    {"task_id": "robotics.minimum_snap_trajectory_conditioning", "kind": "full", "allowed_private_like_files": ["task.yaml", "generate_gt.py", "custom_scorer.py", "reference_specs.md"]}
   ]
 }

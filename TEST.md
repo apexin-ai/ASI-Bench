@@ -112,15 +112,20 @@ uv run pytest -q \
 
 ## Public task catalog policy
 
-Validate the exact author-template allowlist and scan the public tree for
-private scoring files, undeclared artifacts, repository identifiers, and
-secret-like content. The policy locks every formal task directory to
-`task_meta.yaml` only, keeps `tasks/_template/` as the sole framework-level
-exception, and locks the public catalog to 60 `final` task IDs:
+When replacing published task examples, validate the exact allowlist and scan
+the public tree for private scoring files, undeclared artifacts, repository
+identifiers, and secret-like content. The policy locks five full public sample
+tasks to their exact prompt, generator, scorer/configuration, and reference-spec
+file sets, as well as locking the catalog to 60 `final` and five exact `sample`
+task IDs. Lifecycle/CLI tests verify that sample tasks are accepted and opt-in
+runnable:
 
 ```bash
 uv run pytest -q \
-  tests/test_public_task_policy.py
+  tests/test_public_task_policy.py \
+  tests/test_types.py::TestTaskLifecycle \
+  tests/test_cli.py::TestCLIList \
+  tests/test_issue33_task_loader_robustness.py::TestIssue33DiscoverTasksRobustness
 ```
 
 ## PyPI packaging

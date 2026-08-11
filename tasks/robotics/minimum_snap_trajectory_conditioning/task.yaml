@@ -1,0 +1,146 @@
+id: robotics.minimum_snap_trajectory_conditioning
+name: "Minimum-Snap Trajectory Conditioning"
+version: "0.20"
+status: sample
+
+domain: robotics
+subdomain: trajectory_generation
+
+source:
+  paper: "Mellinger and Kumar (2011) Minimum snap trajectory generation and control for quadrotors"
+  repo: null
+
+difficulty:
+  estimated_lines: 180-360
+  estimated_time_minutes: 45-90
+  requires_gpu: false
+  requires_network: false
+
+tags:
+  - trajectory_generation
+  - polynomial_trajectory
+  - numerical_conditioning
+  - quadrotor
+  - convention_traps
+
+runtime:
+  python: ">=3.11"
+  packages:
+    - "numpy>=2.0"
+    - "matplotlib>=3.8"
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: data/observations.csv
+      type: data
+      description: "Noisy timestamped 3D flight-log observations, including outliers."
+    - name: data/waypoint_windows.csv
+      type: data
+      description: "Approximate timing windows for latent trajectory knots."
+    - name: data/constraints.csv
+      type: data
+      description: "Fixed derivative constraints at selected waypoints."
+    - name: data/segment_time_bounds.csv
+      type: data
+      description: "Per-segment duration bounds."
+    - name: data/query_times.csv
+      type: data
+      description: "Times at which reconstructed position and derivatives must be reported."
+    - name: data/task_info.json
+      type: data
+      description: "Polynomial degree, total time, basis convention, axes, quality-metric label and scoring components (the metric formula itself is not disclosed), continuity requirements, and required output schema."
+
+output:
+  files:
+    - name: analysis.py
+      type: code
+      description: "End-to-end implementation."
+    - name: results/knot_times.csv
+      type: data
+      description: "Optimized waypoint times with columns waypoint_id,t."
+    - name: results/segment_coefficients.npy
+      type: data
+      description: "Piecewise polynomial coefficients, shape [n_segments, 3, degree+1], ascending powers of segment elapsed time delta=t-t_start in seconds."
+    - name: results/knot_derivatives.csv
+      type: data
+      description: "Reported one-sided knot derivatives through order 4."
+    - name: results/query_predictions.csv
+      type: data
+      description: "Reconstructed position, velocity, acceleration, and jerk at public query times."
+    - name: results/outlier_scores.csv
+      type: data
+      description: "Outlier likelihood score for every public observation."
+    - name: results/objective.json
+      type: data
+      description: "Self-reported trajectory quality metric per axis and total (numeric values are consistency-checked, not directly scored)."
+    - name: results/trajectory_diagnostics.png
+      type: figure
+      description: "Diagnostic trajectory figure."
+
+evaluation:
+  gates:
+    - scorer: file_match
+      severity: hard
+      config:
+        checks:
+          - {file: analysis.py}
+          - {file: results/knot_times.csv}
+          - {file: results/segment_coefficients.npy}
+          - {file: results/knot_derivatives.csv}
+          - {file: results/query_predictions.csv}
+          - {file: results/outlier_scores.csv}
+          - {file: results/objective.json}
+          - {file: results/trajectory_diagnostics.png}
+          - {check: no_nan_inf}
+    - scorer: code_analysis
+      severity: hard
+      config:
+        target_file: analysis.py
+        checks:
+          - {forbidden_imports: ["scipy", "cvxpy", "casadi", "osqp", "qpsolvers", "quadprog", "sympy", "mpmath", "sklearn", "jax", "torch", "tensorflow"]}
+          - {pattern: "(?i)mav_trajectory_generation|minsnap_trajectories|trajectory[_-]?generation[_-]?toolbox|trajgen", forbidden: true}
+          - {pattern: "(?i)__import__\\s*\\(|importlib\\.", forbidden: true}
+          - {pattern: "(?i)reference[\\/]|segment_coefficients_ref|knot_times_ref|objective_ref|query_predictions_ref|labels_hidden|waypoints_ref|audit_times\\.npy|instance_meta|residual_field_ref|segment_coefficients_plan_ref", forbidden: true}
+
+  scoring:
+    - scorer: minimum_snap_trajectory_score
+      weight: 100
+      config:
+        coefficients_file: results/segment_coefficients.npy
+        reference_coefficients_file: segment_coefficients_ref.npy
+        knot_times_file: results/knot_times.csv
+        reference_knot_times_file: knot_times_ref.csv
+        knot_file: results/knot_derivatives.csv
+        query_file: results/query_predictions.csv
+        reference_query_file: query_predictions_ref.csv
+        outlier_file: results/outlier_scores.csv
+        outlier_label_file: labels_hidden.csv
+        objective_file: results/objective.json
+        reference_objective_file: objective_ref.json
+        figure_file: results/trajectory_diagnostics.png
+        reference_figure_file: trajectory_diagnostics_ref.png
+        audit_file: audit_times.npy
+
+
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters:
+    n_segments:
+      type: int
+      range: [8, 12]
+      default: 10
+    degree:
+      type: choice
+      options: [11]
+      default: 11
+    seed:
+      type: int
+      range: [0, 1000000]
+      default: 0

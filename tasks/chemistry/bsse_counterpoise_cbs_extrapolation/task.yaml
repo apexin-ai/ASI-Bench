@@ -1,0 +1,139 @@
+id: chemistry.bsse_counterpoise_cbs_extrapolation
+name: "Synthetic BSSE Counterpoise Ledger + CBS Extrapolation"
+version: "3.0"
+
+status: sample
+
+domain: chemistry
+subdomain: "quantum_chemistry_noncovalent_interactions"
+
+source:
+  paper: "Boys & Bernardi (1970) counterpoise correction; Helgaker et al. (1997) correlation-consistent CBS extrapolation. The shared-alpha reference-channel fit is a benchmark convention, not a literal Helgaker prescription."
+  repo: null
+
+difficulty:
+  estimated_lines: 360-560
+  estimated_time_minutes: 75-150
+  requires_gpu: false
+  requires_network: false
+
+tags:
+  - bsse
+  - counterpoise
+  - cbs_extrapolation
+  - hf
+  - mp2
+  - interaction_energy
+  - weak_dimer
+  - energy_ledger
+  - synthetic_precomputed_ledger
+  - anonymized_contract
+  - latent_role_recovery
+  - paired_row_recovery
+  - shared_alpha_fit
+  - auxiliary_diagnostics
+
+runtime:
+  python: ">=3.11"
+  packages: []
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: case_index.csv
+      type: data
+      description: "Per-case generic geometry index with a distance axis in atomic units."
+    - name: ladder_spec.json
+      type: data
+      description: "Generic ladder metadata with anonymous channel-column names and level_index defined as simulated correlation-consistent basis cardinal number X=2,3,4,5."
+    - name: channel_ledger.csv
+      type: data
+      description: "Synthetic precomputed energy ledger modeled after HF/reference and correlated total basis-set convergence for five anonymous row codes across the four-level ladder."
+
+output:
+  files:
+    - name: analysis.py
+      type: code
+      description: "Agent-generated analysis script."
+    - name: results/path_scan.csv
+      type: data
+      description: "Per-case two-path scan for the reference-like and total channels across the ladder."
+    - name: results/pair_shift_scan.csv
+      type: data
+      description: "Per-case sorted within-family stabilization shifts for the reference-like and total channels."
+    - name: results/asymptotic_summary.csv
+      type: data
+      description: "Per-case asymptotic reference, residual, and total summaries."
+    - name: results/convergence_plot.png
+      type: figure
+      description: "Plot showing path_0 vs path_1 convergence across ladder levels."
+
+evaluation:
+  gates:
+    - scorer: file_match
+      severity: hard
+      config:
+        checks:
+          - {file: analysis.py}
+          - {file: results/path_scan.csv}
+          - {file: results/pair_shift_scan.csv}
+          - {file: results/asymptotic_summary.csv}
+          - {file: results/convergence_plot.png}
+
+    - scorer: bsse_output_sanity
+      severity: hard
+      config:
+        scan_file: results/path_scan.csv
+        shift_file: results/pair_shift_scan.csv
+        summary_file: results/asymptotic_summary.csv
+        expected_case_count: 4
+        expected_level_labels: ["level_02", "level_03", "level_04", "level_05"]
+
+  scoring:
+    - scorer: bsse_scan_score
+      weight: 40
+      config:
+        scan_file: results/path_scan.csv
+        reference_file: path_scan_ref.csv
+        path0_scale: 0.05
+        path1_scale: 0.05
+        gap_scale: 0.03
+
+    - scorer: bsse_shift_score
+      weight: 35
+      config:
+        shift_file: results/pair_shift_scan.csv
+        reference_file: pair_shift_scan_ref.csv
+        scan_file: results/path_scan.csv
+        shift_small_scale: 0.02
+        shift_large_scale: 0.02
+        sum_consistency_scale: 0.01
+
+    - scorer: bsse_asymptotic_score
+      weight: 25
+      config:
+        summary_file: results/asymptotic_summary.csv
+        reference_file: asymptotic_summary_ref.csv
+        scan_file: results/path_scan.csv
+        scan_reference_file: path_scan_ref.csv
+        shift_file: results/pair_shift_scan.csv
+        shift_reference_file: pair_shift_scan_ref.csv
+        reference_scale: 0.03
+        delta_scale: 0.035
+        total_scale: 0.04
+        scan_path0_scale: 0.05
+        scan_path1_scale: 0.05
+        scan_gap_scale: 0.03
+        shift_small_scale: 0.02
+        shift_large_scale: 0.02
+
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  seed: true

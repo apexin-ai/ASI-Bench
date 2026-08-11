@@ -276,18 +276,29 @@ For official benchmark tasks, the GitHub catalog contains metadata only.
 Prompts and input data come from Hugging Face, while reference answers and
 scorers remain on the private scoring service.
 
-The framework-level `tasks/_template/` directory is the only public authoring
-scaffold with local generator and scoring configuration. Formal benchmark task
-directories contain `task_meta.yaml` only.
+Five opt-in `sample` tasks are fully public examples. Their B1–B4 prompts,
+ground-truth generators, and scorer implementations or configurations are
+available under `tasks/`:
+
+- `robotics.minimum_snap_trajectory_conditioning`
+- `chemistry.bsse_counterpoise_cbs_extrapolation`
+- `materials.phonon_dispersion`
+- `medicine.ethics_disclosure_diagnosis_1670`
+- `medicine.jama_id0014_malignant_an`
+
+The examples were synchronized from
+[`apexin-ai/Agent-AI4Sci-Bench`](https://github.com/apexin-ai/Agent-AI4Sci-Bench/tree/2ba9258442bf53ad6c4911957234e03e767476ad/tasks)
+at revision `2ba9258442bf53ad6c4911957234e03e767476ad`.
 
 ### Dataset layout
 
 | Item | Contract |
 |---|---|
 | Official tasks | 60 `final` task definitions shared by both fixed-seed datasets |
-| Author scaffold | `tasks/_template/` with local starter files |
+| Public examples | 5 opt-in `sample` tasks with complete prompts and scoring assets |
 | Instance layout | `<output-dir>/<instance-id>/` after `asibench task pull` |
-| Default selection | Unfiltered runs use the official `final` task catalog |
+| Default selection | Unfiltered official runs exclude `sample` tasks |
+| Including samples | Use `--include-sample` or name a sample explicitly with `--tasks` |
 
 Pull the two fixed-seed datasets separately:
 

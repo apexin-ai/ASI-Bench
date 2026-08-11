@@ -9,8 +9,10 @@
 
 ## ASI-Bench 公开边界
 
-- 正式任务目录 `tasks/<domain>/<name>/` 只保留公开
+- 正式任务目录 `tasks/<domain>/<name>/` 默认只保留公开
   `task_meta.yaml`，不跟踪 benchmark prompts、生成器、评分配置或参考答案。
+- `config/public_examples.json` 明确列出的五个公开示例任务是唯一例外，可保留
+  B1–B4 prompts、GT 生成器、评分配置和 reference specs；不得扩展到其他任务。
 - `tasks/_template/` 是框架级任务作者脚手架，不属于正式 benchmark 任务。
 
 ## 任务生命周期

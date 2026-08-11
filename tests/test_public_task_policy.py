@@ -44,6 +44,34 @@ PROTECTED_PREFIXES = (
 )
 EXPECTED_EXAMPLES = {
     "_template",
+    "chemistry.bsse_counterpoise_cbs_extrapolation",
+    "materials.phonon_dispersion",
+    "medicine.ethics_disclosure_diagnosis_1670",
+    "medicine.jama_id0014_malignant_an",
+    "robotics.minimum_snap_trajectory_conditioning",
+}
+
+EXPECTED_FULL_EXAMPLE_FILES = {
+    "chemistry.bsse_counterpoise_cbs_extrapolation": {
+        "task.yaml", "prompt_b1.md", "prompt_b2.md", "prompt_b3.md", "prompt_b4.md",
+        "generate_gt.py", "custom_scorer.py", "reference_specs.md",
+    },
+    "materials.phonon_dispersion": {
+        "task.yaml", "prompt_b1.md", "prompt_b2.md", "prompt_b3.md", "prompt_b4.md",
+        "generate_gt.py", "reference_specs.md",
+    },
+    "medicine.ethics_disclosure_diagnosis_1670": {
+        "task.yaml", "prompt_b1.md", "prompt_b2.md", "prompt_b3.md", "prompt_b4.md",
+        "generate_gt.py", "custom_scorer.py",
+    },
+    "medicine.jama_id0014_malignant_an": {
+        "task.yaml", "prompt_b1.md", "prompt_b2.md", "prompt_b3.md", "prompt_b4.md",
+        "generate_gt.py", "custom_scorer.py",
+    },
+    "robotics.minimum_snap_trajectory_conditioning": {
+        "task.yaml", "prompt_b1.md", "prompt_b2.md", "prompt_b3.md", "prompt_b4.md",
+        "generate_gt.py", "custom_scorer.py", "reference_specs.md",
+    },
 }
 
 SEED42_RESTORED_TASKS = {
@@ -64,7 +92,13 @@ SEED42_RESTORED_TASKS = {
     "robotics.rnea_inverse_dynamics_dh",
 }
 
-EXPECTED_SAMPLE_TASKS = set()
+EXPECTED_SAMPLE_TASKS = {
+    "chemistry.bsse_counterpoise_cbs_extrapolation",
+    "materials.phonon_dispersion",
+    "medicine.ethics_disclosure_diagnosis_1670",
+    "medicine.jama_id0014_malignant_an",
+    "robotics.minimum_snap_trajectory_conditioning",
+}
 
 SENSITIVE_CONTENT_PATTERNS = {
     "private key": re.compile(
@@ -225,7 +259,8 @@ def test_example_allowlist_is_exact_and_references_existing_files():
     assert len(entries) == len(policy["examples"])
     assert set(entries) == EXPECTED_EXAMPLES
     assert sum(entry["kind"] == "reference_only" for entry in entries.values()) == 0
-    assert sum(entry["kind"] == "full" for entry in entries.values()) == 0
+    assert sum(entry["kind"] == "full" for entry in entries.values()) == 5
+    assert policy["source_revision"] == "2ba9258442bf53ad6c4911957234e03e767476ad"
 
     for task_id, entry in entries.items():
         assert entry["kind"] in {"reference_only", "full", "template"}
@@ -236,6 +271,12 @@ def test_example_allowlist_is_exact_and_references_existing_files():
         for relative_path in allowed:
             target = task_dir / relative_path
             assert target.is_file() and not target.is_symlink(), (task_id, relative_path)
+
+    for task_id, expected_files in EXPECTED_FULL_EXAMPLE_FILES.items():
+        assert {
+            path.name for path in _task_dir(task_id).iterdir() if path.is_file()
+        } == expected_files
+
 
 def test_seed42_restored_tasks_have_public_metadata_and_prompt_mapping():
     """Every formerly unmatched seed42 instance has a local public contract."""
@@ -283,7 +324,7 @@ def test_final_task_metadata_contains_only_the_public_contract_surface():
             assert {"shape", "dtype"}.isdisjoint(output), (descriptor, output["name"])
 
 
-def test_public_catalog_has_exact_final_statuses():
+def test_public_catalog_has_exact_final_and_sample_statuses():
     statuses: dict[str, str] = {}
     stale_abandoned_reasons: list[str] = []
     for task_dir in sorted(TASKS.glob("*/*")):
@@ -302,8 +343,8 @@ def test_public_catalog_has_exact_final_statuses():
 
     assert sample_ids == EXPECTED_SAMPLE_TASKS
     assert len(final_ids) == 60
-    assert set(statuses.values()) == {"final"}
-    assert len(statuses) == 60
+    assert set(statuses.values()) == {"final", "sample"}
+    assert len(statuses) == 65
     assert stale_abandoned_reasons == []
 
 
