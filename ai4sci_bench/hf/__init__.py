@@ -2,11 +2,11 @@
 
 The CLI exposes this as ``asibench task pull``.
 
-GitHub stores code/config; HuggingFace stores instance-level data. This package
-only *reads* public/private instance data (prompts + input data, and for the
-self-contained demo repo also reference answers). It never carries the private
-scoring rules (``task_eval.yaml`` / ``evaluation``) — those stay in the private
-scoring service and are used only after submission to the ASI-Bench website.
+GitHub stores catalog metadata and public scoring logic; HuggingFace stores
+instance-level prompts and input data. This package only reads instance data.
+Ground-truth generators, generation settings, reference specifications,
+reference answers, and private solver assets remain on the scoring service and
+are used only after submission to the ASI-Bench website.
 """
 
 from ai4sci_bench.hf.pull import (

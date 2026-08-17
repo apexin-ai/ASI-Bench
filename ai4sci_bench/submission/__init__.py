@@ -1,9 +1,10 @@
 """Package a produce-only run into a submission bundle for official scoring.
 
-The public ``benchmark`` repo ships only the task 题面 (prompt + data); the
-scoring rules and reference answers stay in the private website scoring service.
-External runners therefore: ``pull`` → ``run`` (produce output) → authenticated
-``submit`` → confirm the draft on ``https://asibench.apexin.ai/`` for scoring.
+The public repository exposes task contracts and scoring logic, while prompts
+and inputs are pulled separately. Ground-truth generators, generation settings,
+and reference answers stay in the website scoring service. External runners
+therefore: ``pull`` → ``run`` (produce output) → authenticated ``submit`` →
+confirm the draft on ``https://asibench.apexin.ai/`` for scoring.
 
 ``build_submission`` collects the public result JSON (identity, resolved params,
 provenance) and the agent's actual output artifacts. It preserves a

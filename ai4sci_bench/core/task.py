@@ -26,8 +26,9 @@ def resolve_task_sources(task_dir: Path) -> tuple[Path, Path | None]:
 
     * **Legacy** — a single monolithic ``task.yaml`` → ``(task.yaml, None)``.
     * **Split** — ``task_meta.yaml`` (public) plus an optional
-      ``task_eval.yaml`` (private) → ``(task_meta.yaml, task_eval.yaml | None)``.
-      A public/HF tree may ship only ``task_meta.yaml``.
+      ``task_eval.yaml`` (scorer-internal) → ``(task_meta.yaml, task_eval.yaml | None)``.
+      A minimal/HF tree may ship only ``task_meta.yaml``; the public GitHub
+      catalog also ships scoring-only ``task_eval.yaml`` files.
 
     When both ``task.yaml`` and ``task_meta.yaml`` exist (e.g. mid-migration),
     the legacy ``task.yaml`` wins so behaviour is unchanged until a task is

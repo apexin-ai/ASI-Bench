@@ -41,14 +41,15 @@ generates all starter files directly and does not install that repository direct
 | `task_meta.yaml` | Public metadata: id, name, domain, difficulty, runtime, and the **names/types** of inputs and outputs | Public |
 | `prompt_b1.md … prompt_b4.md` | The difficulty ladder — B1 gives the full method, B4 gives almost nothing | Public |
 | `generate_gt.py` | Deterministic generator: given params + seed, writes the input data **and** the reference answer | Private |
-| `task_eval.yaml` | How the output is scored: gates + scorers + tolerances | Private |
-| `custom_scorer.py` *(optional)* | A bespoke scorer, if the generic scorers are not enough | Private |
+| `task_eval.yaml` | During authoring: scoring and generation settings. After acceptance: only the scoring contract is published | Split on acceptance |
+| `custom_scorer.py` *(optional)* | A bespoke scorer, if the generic scorers are not enough | Public after acceptance |
 | `reference_specs.md` | A short description of what a correct answer looks like | Private |
 
-You author all of these files. When your task is accepted, the **public metadata +
-prompts + input data** are published so runners can attempt it, while the
-**reference answers and scoring config stay private** — that is what keeps the
-benchmark meaningful. You do not manage this split yourself; the portal and
+You author all of these files. When your task is accepted, the **metadata,
+prompts, input data, scoring-only configuration, and scorer implementation** are
+published so runners can attempt and audit it. The **GT generator, generation
+settings, reference specifications, reference answers, and private solver
+assets stay private**. You do not manage this split yourself; the portal and
 maintainers handle it.
 
 ### The difficulty ladder (B1–B4)

@@ -9,8 +9,13 @@
 
 ## ASI-Bench 公开边界
 
-- 正式任务目录 `tasks/<domain>/<name>/` 默认只保留公开
-  `task_meta.yaml`，不跟踪 benchmark prompts、生成器、评分配置或参考答案。
+- 正式任务目录 `tasks/<domain>/<name>/` 公开 `task_meta.yaml`、只含
+  评分/输出契约的 `task_eval.yaml` 以及可选 `custom_scorer.py`；不跟踪
+  benchmark prompts、`generation` 配置、GT 生成器、reference specs、参考
+  答案或私有求解器资产。
+- `config/public_scorers.json` 是正式任务公开评分器的精确 allowlist 和来源
+  revision；正式任务严禁出现 `generate_gt.py`、`precompute_gt.py`、
+  `reference_specs.md`、reference/ground-truth 目录或 `private_assets` / `reference_solver`。
 - `config/public_examples.json` 明确列出的五个公开示例任务是唯一例外，可保留
   B1–B4 prompts、GT 生成器、评分配置和 reference specs；不得扩展到其他任务。
 - `tasks/_template/` 是框架级任务作者脚手架，不属于正式 benchmark 任务。

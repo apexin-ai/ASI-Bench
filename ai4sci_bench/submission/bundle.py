@@ -22,10 +22,11 @@ Output bundle layout::
                 outputs/<declared outputs...>
 
 The bundle is what the ASI-Bench website scores against its private instance
-metadata, ``task_eval``, and reference answers. A public run must carry the
-agent's declared outputs (bytes, not just paths), result identity, resolved
-params, and provenance; it does not need ``framework_task_info.json``. No
-scoring rules or reference answers ever enter a public produce-only bundle.
+metadata and reference answers, using the published scoring contract. A public
+run must carry the agent's declared outputs (bytes, not just paths), result
+identity, resolved params, and provenance; it does not need
+``framework_task_info.json``. No GT-generation material or reference answers
+ever enter a public produce-only bundle.
 """
 
 from __future__ import annotations

@@ -10,7 +10,8 @@ submitted to `https://asibench.apexin.ai/` for scoring.
 |---|---|---|
 | Framework — runner, sandboxes, output collection and submission | **Public** | The machinery for executing agents and packaging their outputs. |
 | Task **metadata + prompts + input data** | **Public** | What an agent needs to attempt a task. |
-| Task **reference answers, `generate_gt.py`, `task_eval.yaml`, custom scorers** | **Private** | The answer key and the exact scoring rules for each graded task. |
+| Task **scoring/output contract + custom scorers** | **Public** | Auditable gates, weights, tolerances, and scorer implementation, without generation or reference content. |
+| Task **reference answers, `generate_gt.py`, generation settings, reference specs, private solver assets** | **Private** | The answer key and everything needed to create it. |
 
 The ASI-Bench website owns the official evaluation workflow and uses private
 reference material that is not distributed with this repository.
@@ -29,10 +30,10 @@ after scoring through the ASI-Bench website.
 
 ## Why produce-only for external runners
 
-External runners do not have the reference answers or scoring config for graded
-tasks, so they cannot compute an official score locally — that is intentional. You
-produce outputs and submit them to the website. This prevents gaming the benchmark
-by reading or reverse-engineering the answers.
+External runners can inspect scoring logic but do not have the reference answers
+or GT-generation material for graded tasks, so they cannot compute an official
+score locally — that is intentional. You produce outputs and submit them to the
+website. Public scoring rules improve auditability without exposing answers.
 
 ## Reproducibility
 

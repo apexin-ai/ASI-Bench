@@ -1,6 +1,7 @@
 # task_meta.yaml (PUBLIC) — copy this directory to tasks/<domain>/<task_name>/ and fill in
 # Or use: asibench task create --domain <domain> --name <task_name>
-# Public metadata only. Scoring / generation / output shape+dtype live in task_eval.yaml.
+# Public metadata only. During authoring, scoring, generation, and output
+# shape/dtype live in task_eval.yaml; accepted formal tasks publish scoring only.
 
 id: DOMAIN.TASK_NAME           # e.g., physics.example_task
 name: "Human-readable task name"

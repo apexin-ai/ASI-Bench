@@ -1,4 +1,6 @@
-# task_eval.yaml (PRIVATE) — scoring + generation config. NEVER goes to the public repo.
+# task_eval.yaml — scoring + generation config used while authoring.
+# Accepted formal tasks publish only scoring/output fields from this file;
+# generation settings and generate_gt.py always remain private.
 # Pairs with task_meta.yaml in the same directory (matched by task_id).
 
 task_id: DOMAIN.TASK_NAME      # must equal id in task_meta.yaml

@@ -231,9 +231,9 @@ asibench task create --domain physics --name my_new_task
 
 # 2. Edit the generated files in tasks/physics/my_new_task/:
 #    - task_meta.yaml   — task metadata (public)
-#    - task_eval.yaml   — evaluation config: scoring rules, parameter space (private)
+#    - task_eval.yaml   — evaluation and generation config during authoring
 #    - generate_gt.py   — ground-truth generator (private)
-#    - custom_scorer.py — custom scoring logic, if needed (private)
+#    - custom_scorer.py — custom scoring logic, if needed
 #    - prompt_b1.md … prompt_b4.md — local starter prompts for the guidance gradient
 
 # 3. Required pre-submit validation
@@ -296,9 +296,13 @@ asibench run \
 asibench submit --results-dir example_results/
 ```
 
-For official benchmark tasks, the GitHub catalog contains metadata only.
-Prompts and input data come from Hugging Face, while reference answers and
-scorers remain on the private scoring service.
+For official benchmark tasks, GitHub publishes the catalog metadata, scoring
+configuration, and scorer implementations for auditability. Prompts and input
+data come from Hugging Face. Ground-truth generators, generator settings,
+reference specifications, reference answers, and private solver assets remain
+exclusively on the scoring service and are not present in this repository.
+Public scorer code does not make local results official: the hidden references
+needed to execute scoring remain server-side.
 
 Five opt-in `sample` tasks are fully public examples. Their B1–B4 prompts,
 ground-truth generators, and scorer implementations or configurations are
@@ -334,8 +338,10 @@ asibench task pull --repo seed31415 --output-dir hf_instances_seed31415/
 `seed42` and `seed31415` are the only official Hugging Face contracts, and
 `--repo` is required. They share task schemas and declared outputs but contain
 different generated inputs. Matching schemas live in
-`tasks/**/task_meta.yaml`; private manifests, references, and scorers stay on
-the scoring side.
+`tasks/**/task_meta.yaml`; matching public scoring contracts live in
+`task_eval.yaml` and optional `custom_scorer.py` files. Private manifests,
+ground-truth generators, generator settings, references, and solver assets stay
+on the scoring side.
 
 The task workflow uses the grouped `asibench task create`, `task pull`, and
 `task submit` commands. See [Contribute a Task](docs/guide/authoring-a-task.md)
@@ -345,6 +351,8 @@ for the complete authoring guide.
 
 - **Public execution framework:** agent adapters, sandboxes, instance loading,
   output collection, and submission packaging are auditable in this repository.
+- **Public scoring logic:** formal tasks publish their scoring configuration and
+  custom scorer code, but never their GT generators or reference answers.
 - **Centralized official scoring:** `asibench login` identifies the submitter,
   and `asibench submit` sends a draft for confirmation and scoring. Self-reported
   scores are not accepted.

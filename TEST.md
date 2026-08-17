@@ -125,13 +125,16 @@ uv run pytest -q \
 
 ## Public task catalog policy
 
-When replacing published task examples, validate the exact allowlist and scan
-the public tree for private scoring files, undeclared artifacts, repository
-identifiers, and secret-like content. The policy locks five full public sample
-tasks to their exact prompt, generator, scorer/configuration, and reference-spec
-file sets, as well as locking the catalog to 60 `final` and five exact `sample`
-task IDs. Lifecycle/CLI tests verify that sample tasks are accepted and opt-in
-runnable:
+When updating formal-task scorers or published examples, validate both exact
+allowlists and scan the public tree for GT generators, references, private
+solver assets, undeclared artifacts, repository identifiers, and secret-like
+content. `config/public_scorers.json` locks all 60 formal scoring contracts, 57
+custom scorers, their single approved helper, and the private source revision.
+Formal `task_eval.yaml` files may contain only scoring/output contracts and must
+never contain `generation`. The separate Example policy locks five full public
+sample tasks to their exact prompt, generator, scorer/configuration, and
+reference-spec file sets. Lifecycle/CLI tests verify that sample tasks remain
+accepted and opt-in runnable:
 
 ```bash
 uv run pytest -q \

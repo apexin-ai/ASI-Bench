@@ -1593,7 +1593,10 @@ def new_task(domain: str, name: str, tasks_dir: str):
 
     click.echo(f"Created task scaffold: {target_dir}")
     click.echo("Next steps:")
-    click.echo(f"  1. Edit {target_dir}/task_meta.yaml (public) + task_eval.yaml (private)")
+    click.echo(
+        f"  1. Edit {target_dir}/task_meta.yaml + task_eval.yaml "
+        "(generation remains private after acceptance)"
+    )
     click.echo(f"  2. Write prompts (prompt_b1.md, prompt_b2.md, prompt_b3.md, prompt_b4.md)")
     click.echo(f"  3. Implement generate_gt.py")
     click.echo(f"  4. Run: asibench validate --task {domain}.{name}")
@@ -1936,7 +1939,8 @@ output:
   files: []
 """)
 
-    (target_dir / "task_eval.yaml").write_text(f"""# task_eval.yaml (PRIVATE) — scoring + generation; NEVER goes public
+    (target_dir / "task_eval.yaml").write_text(f"""# task_eval.yaml — scoring + generation during authoring.
+# Accepted formal tasks publish scoring/output fields only; generation stays private.
 task_id: {task_id}
 
 evaluation:

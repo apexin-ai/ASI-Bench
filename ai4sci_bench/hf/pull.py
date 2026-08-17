@@ -18,10 +18,10 @@ directory into ``<output_dir>/<instance_id>/`` so the result can be fed straight
 to ``asibench run --instances-dir`` (whose loader globs
 ``<instances_dir>/<task_id>__*``).
 
-Security: this module only reads instance *data*. It never fetches or writes the
-private scoring rules. The HF token is read from the ``token`` argument or the
-``HF_TOKEN`` / ``HUGGINGFACE_HUB_TOKEN`` environment variables — never hardcoded.
-Public repos need no token.
+Security: this module only reads instance *data*. It never fetches or writes GT
+generators, generation settings, or reference answers. The HF token is read from
+the ``token`` argument or the ``HF_TOKEN`` / ``HUGGINGFACE_HUB_TOKEN``
+environment variables — never hardcoded. Public repos need no token.
 """
 
 from __future__ import annotations

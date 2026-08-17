@@ -52,7 +52,7 @@ DEFAULT_PULL_DIR = "hf_instances/"
 # ── Submission / official scoring ───────────────────────────────────────────
 # `asibench submit` packages a produce-only run into a self-contained bundle
 # and uploads it to the official ASI-Bench website for scoring. The bundle
-# carries the agent's outputs + provenance, never private scoring rules.
+# carries the agent's outputs + provenance, never GT or reference answers.
 SUBMIT_ENDPOINT_ENV_SUFFIX = "SUBMIT_ENDPOINT"
 SUBMIT_TOKEN_ENV_SUFFIX = "SUBMIT_TOKEN"
 DEFAULT_SUBMISSION_DIR = "submissions/"
