@@ -1,8 +1,8 @@
 <div align="center">
 
-# ASI-Bench: AI Scientist’s Last Exam
+# ASI-Bench: At the Dawn of Artificial Superintelligence
 
-### A Project-Level Benchmark for Evaluating LLM Agents on AI for Science
+### Evaluating General Intelligence, Innovation, and Autonomous Execution in Scientific Research
 
 <p>
   <a href="https://asibench.apexin.ai/"><img src="https://img.shields.io/badge/Website-ASI--Bench-2563EB?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white" alt="Website"></a>&nbsp;
@@ -14,22 +14,23 @@
 
 <p><sub>
   <strong>Core Authors</strong> &nbsp;
-  Junwei Zhou<sup>3,†</sup>, Zhen Sun<sup>1,2,†</sup>, Binyu Li<sup>1,2</sup>, Jiangyu Zhou<sup>1,2</sup>, Yuexi Pan<sup>1,2</sup>, Hengyu Wang<sup>1,2</sup>, Honghe Ren<sup>1</sup>, Xiaohan Jia<sup>1,2</sup>, Xueyang Zhou<sup>1,2</sup>, Yongchao Chen<sup>1,2,*</sup><br>
+  Junwei Zhou<sup>5,†</sup>, Zhen Sun<sup>1,†</sup>, Binyu Li<sup>1</sup>, Jiangyu Zhou<sup>1</sup>, Yuexi Pan<sup>1</sup>, Hengyu Wang<sup>1</sup>, Honghe Ren<sup>1</sup>, Xiaohan Jia<sup>1</sup>, Xueyang Zhou<sup>1</sup>, Xiaoyu Cao<sup>1</sup>, Yongchao Chen<sup>1,*</sup><br>
   <sup>†</sup> Equal contribution &nbsp;·&nbsp; <sup>*</sup> Corresponding author<br>
   <strong>Contributors</strong> &nbsp;
-  Yuanning Feng<sup>1,2</sup>, Junhao Wu<sup>1,2</sup>, Xiaoyu Cao<sup>1,2</sup>, Cheng Zhang<sup>3</sup>, Sijia Chen<sup>5</sup>, Haoyu Xue<sup>1,2</sup>, Chengsong You<sup>1,2</sup>, Huan Wang<sup>1,2</sup>, Peigan Gao<sup>4</sup>, Jiakun Wu<sup>1</sup>, Koutian Wu<sup>3</sup>, Wenzhe Li<sup>1</sup>, Ergan Shang<sup>6</sup>, Jingjing Zhou<sup>1</sup>, Ruixuan Jia<sup>1,2</sup>, Qingyuan Zheng<sup>1</sup>, Yan Xu<sup>7</sup>, Hongrui Zhang<sup>8</sup>, Xiao-Han Ma<sup>4</sup>, Zhengxiang Cheng<sup>1,2</sup>, Yuexing Hao<sup>7</sup>, Liting Mai<sup>9</sup>, Xianglin Ji<sup>7</sup>, Wenjun Zhang<sup>10</sup>, Zhuofan Chen<sup>1,2</sup>, Yixiao Huang<sup>1</sup>, Chi Wang<sup>11</sup>, Wenyue Hua<sup>12</sup>, Yilun Hao<sup>7</sup>, Yuantao Zhai<sup>2</sup><br>
+  Yuanning Feng<sup>1</sup>, Junhao Wu<sup>1</sup>, Cheng Zhang<sup>13</sup>, Sijia Chen<sup>10</sup>, Haoyu Xue<sup>1</sup>, Chengsong You<sup>1</sup>, Huan Wang<sup>1</sup>, Peigan Gao<sup>9</sup>, Jiakun Wu<sup>1</sup>, Koutian Wu<sup>13</sup>, Wenzhe Li<sup>1</sup>, Ergan Shang<sup>4</sup>, Jingjing Zhou<sup>1</sup>, Ruixuan Jia<sup>1</sup>, Qingyuan Zheng<sup>1</sup>, Yan Xu<sup>2</sup>, Hongrui Zhang<sup>7</sup>, Xiao-Han Ma<sup>9</sup>, Zhengxiang Cheng<sup>1</sup>, Yuexing Hao<sup>2</sup>, Liting Mai<sup>6</sup>, Xianglin Ji<sup>2</sup>, Wenjun Zhang<sup>8</sup>, Zhuofan Chen<sup>1</sup>, Yixiao Huang<sup>1</sup>, Chi Wang<sup>12</sup>, Wenyue Hua<sup>11</sup>, Yilun Hao<sup>2</sup>, Yuantao Zhai<sup>1</sup>, Jingyan Xie<sup>3</sup><br>
   <sup>1</sup> Tsinghua University &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>2</sup> Apex Intelligence &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>3</sup> Independent Researcher &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>4</sup> University of Science and Technology of China &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>5</sup> Flatiron Institute &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>6</sup> Carnegie Mellon University &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>7</sup> Massachusetts Institute of Technology &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>8</sup> Boston University &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>9</sup> University of Illinois Urbana–Champaign &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>10</sup> University of Queensland &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>11</sup> AG2 AI &nbsp;&nbsp;·&nbsp;&nbsp;
-  <sup>12</sup> Microsoft Research
+  <sup>2</sup> Massachusetts Institute of Technology &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>3</sup> Harvard University &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>4</sup> Carnegie Mellon University &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>5</sup> University of Michigan &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>6</sup> University of Illinois Urbana–Champaign &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>7</sup> Boston University &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>8</sup> University of Queensland &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>9</sup> University of Science and Technology of China &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>10</sup> Flatiron Institute &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>11</sup> Microsoft Research &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>12</sup> AG2 AI &nbsp;&nbsp;·&nbsp;&nbsp;
+  <sup>13</sup> Independent Researcher
 </sub></p>
 
 </div>
@@ -38,27 +39,50 @@
   <img src="docs/assets/asi-bench-overview.png" alt="ASI-Bench overview: 60 project-level tasks across scientific domains and benchmark results across difficulty levels" width="100%">
 </p>
 
-<p align="center"><em><strong>Figure 1:</strong> Overview of ASI-Bench. Left: B3 performance across agents. Right: scores from B1 to B4.</em></p>
+<p align="center"><em><strong>Figure 1:</strong> Overview of ASI-Bench. Left: B3 performance across agents. Right: scores from B1 to B4, where B1 provides full methods, B2 only the method name, B3 only the research goal and data, and B4 further adds distractors.</em></p>
 
 ## Overview
 
-ASI-Bench evaluates **scientific autonomy**: whether an AI agent can translate a
-scientific objective into an executable and independently validated workflow,
-rather than merely follow prescribed procedures.
+ASI-Bench is the first benchmark to jointly evaluate **general intelligence,
+innovation, and autonomous execution**, and the first to progressively withdraw
+human methodological guidance within the same research project. It tests how
+far an AI agent can independently select methods, conduct end-to-end research,
+and produce verifiable scientific results instead of merely following a
+human-specified procedure.
 
 | Benchmark scope | Description |
 |---|---|
 | Tasks | 60 project-level tasks |
 | Scientific coverage | 11 domains |
-| Information levels | B1–B4, with progressively less methodological guidance |
-| Evaluation | Expert cross-review, execution testing, and reliable scoring |
+| Information levels | B1: full procedure; B2: method only; B3: objective and data only; B4: B3 plus distractors |
+| Evaluation | Expert cross-review, AI-assisted auditing, sandbox execution, and scorer validation |
 | Evaluated systems | 18 agent–model configurations |
 
-Across all evaluated systems, the average scores are **50.92 at B1**, **29.64 at
-B2**, **27.17 at B3**, and **27.33 at B4** as concrete procedural guidance is
-progressively removed. The sharp drop after B1 and persistently lower scores at
-B2–B4 show that strong workflow execution does not yet imply independent
-scientific problem-solving.
+The benchmark was distilled from more than 1,300 candidate research ideas
+through five review rounds, over 1,100 review assignments, more than 2,000 task
+revisions, and over 1,500 sandbox runs. Its construction and validation involved
+more than 31,000 human-hours.
+
+### Main findings
+
+Across all evaluated systems, the average score falls from **50.91 at B1** to
+**29.10 at B2**, **26.62 at B3**, and **26.99 at B4**. Removing the detailed
+procedure while retaining the method causes a 21.82-point drop from B1 to B2;
+removing the method itself causes only a further 2.48-point drop from B2 to B3.
+This asymmetry identifies turning a scientific method into a complete executable
+workflow—rather than selecting the method or resisting distraction—as the main
+bottleneck for current systems.
+
+The strongest evaluated autonomous-research result is **51.60 at B3**, achieved
+by Codex with GPT-5.6 Sol (ultra). Harness choice also matters: the same backbone
+model can produce substantially different scores under different agent
+harnesses, so ASI-Bench evaluates the complete agent–model system.
+
+Reduced guidance also increases computational cost. B1 averages 4.35 million
+tokens and 37.8 minutes per task, while B2 is the most expensive condition at
+6.91 million tokens and 49.7 minutes per task. B3 and B4 use 25% and 30% more
+tokens than B1, respectively. Detailed procedures therefore improve both
+scientific performance and execution efficiency.
 
 ### Resources
 
