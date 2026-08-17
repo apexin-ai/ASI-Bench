@@ -201,3 +201,23 @@
 - Verification: focused policy/lifecycle tests passed `27 passed`; the complete
   default offline suite passed `2087 passed / 2 skipped / 22 deselected`.
 - Implementation commit: `989808e`
+
+## CLI Task Draft upload with browser confirmation
+
+- Problem: `asibench task submit` only opened a blank Portal form, forcing
+  authors to select the same files and re-enter evidence they already prepared
+  locally.
+- Resolution: authenticate with a manually created Portal PAT, exact-sync the
+  complete Task-relative file snapshot into an owner-only Draft, and open that
+  Draft for file/field review while keeping final submission browser-only.
+  `task_submission.yaml` carries private author evidence without entering Task
+  repository exports.
+- Prevention: CLI tests cover safe file collection, hidden token validation,
+  credential reuse, Draft-only behavior, exact snapshot reconciliation, and
+  headless failure; Portal tests enforce strict manifest validation and the
+  export exclusion.
+- Verification: public suite `2099 passed / 2 skipped / 22 deselected`; Portal
+  backend `379 passed`; Portal frontend `63 passed` plus production build; local
+  HTTP E2E reached 100% completeness, froze only after browser confirmation,
+  and excluded the Portal-only manifest from export.
+- Implementation commit: `6f69c93`
