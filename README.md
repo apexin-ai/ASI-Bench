@@ -17,7 +17,7 @@
   Junwei Zhou<sup>5,†</sup>, Zhen Sun<sup>1,†</sup>, Binyu Li<sup>1</sup>, Jiangyu Zhou<sup>1</sup>, Yuexi Pan<sup>1</sup>, Hengyu Wang<sup>1</sup>, Honghe Ren<sup>1</sup>, Xiaohan Jia<sup>1</sup>, Xueyang Zhou<sup>1</sup>, Xiaoyu Cao<sup>1</sup>, Yongchao Chen<sup>1,*</sup><br>
   <sup>†</sup> Equal contribution &nbsp;·&nbsp; <sup>*</sup> Corresponding author<br>
   <strong>Contributors</strong> &nbsp;
-  Yuanning Feng<sup>1</sup>, Junhao Wu<sup>1</sup>, Cheng Zhang<sup>13</sup>, Sijia Chen<sup>10</sup>, Haoyu Xue<sup>1</sup>, Chengsong You<sup>1</sup>, Huan Wang<sup>1</sup>, Peigan Gao<sup>9</sup>, Jiakun Wu<sup>1</sup>, Koutian Wu<sup>13</sup>, Wenzhe Li<sup>1</sup>, Ergan Shang<sup>4</sup>, Jingjing Zhou<sup>1</sup>, Ruixuan Jia<sup>1</sup>, Qingyuan Zheng<sup>1</sup>, Yan Xu<sup>2</sup>, Hongrui Zhang<sup>7</sup>, Xiao-Han Ma<sup>9</sup>, Zhengxiang Cheng<sup>1</sup>, Yuexing Hao<sup>2</sup>, Liting Mai<sup>6</sup>, Xianglin Ji<sup>2</sup>, Wenjun Zhang<sup>8</sup>, Zhuofan Chen<sup>1</sup>, Yixiao Huang<sup>1</sup>, Chi Wang<sup>12</sup>, Wenyue Hua<sup>11</sup>, Yilun Hao<sup>2</sup>, Yuantao Zhai<sup>1</sup>, Jingyan Xie<sup>3</sup><br>
+  Yuanning Feng<sup>1</sup>, Junhao Wu<sup>1</sup>, Cheng Zhang<sup>13</sup>, Sijia Chen<sup>10</sup>, Haoyu Xue<sup>1</sup>, Chengsong You<sup>1</sup>, Huan Wang<sup>1</sup>, Koutian Wu<sup>13</sup>, Peigan Gao<sup>9</sup>, Jiakun Wu<sup>1</sup>, Wenzhe Li<sup>1</sup>, Ergan Shang<sup>4</sup>, Qingyuan Zheng<sup>1</sup>, Jingjing Zhou<sup>1</sup>, Ruixuan Jia<sup>1</sup>, Yan Xu<sup>2</sup>, Hongrui Zhang<sup>7</sup>, Xiao-Han Ma<sup>9</sup>, Zhengxiang Cheng<sup>1</sup>, Yuexing Hao<sup>2</sup>, Liting Mai<sup>6</sup>, Xianglin Ji<sup>2</sup>, Wenjun Zhang<sup>8</sup>, Zhuofan Chen<sup>1</sup>, Yixiao Huang<sup>1</sup>, Chi Wang<sup>12</sup>, Wenyue Hua<sup>11</sup>, Yilun Hao<sup>2</sup>, Yuantao Zhai<sup>1</sup>, Ziyan Zhao<sup>1</sup>, Jingyan Xie<sup>3</sup><br>
   <sup>1</sup> Tsinghua University &nbsp;&nbsp;·&nbsp;&nbsp;
   <sup>2</sup> Massachusetts Institute of Technology &nbsp;&nbsp;·&nbsp;&nbsp;
   <sup>3</sup> Harvard University &nbsp;&nbsp;·&nbsp;&nbsp;
@@ -54,9 +54,23 @@ human-specified procedure.
 |---|---|
 | Tasks | 60 project-level tasks |
 | Scientific coverage | 11 domains |
-| Information levels | B1: full procedure; B2: method only; B3: objective and data only; B4: B3 plus distractors |
+| Information levels | Four matched B1–B4 conditions with progressively less methodological guidance |
 | Evaluation | Expert cross-review, AI-assisted auditing, sandbox execution, and scorer validation |
 | Evaluated systems | 18 agent–model configurations |
+
+The scientific objective, input data, required artifacts, and scoring criteria
+remain fixed across four matched guidance conditions:
+
+| Level | Information provided | What the agent must do |
+|---|---|---|
+| B1 | Scientific background, method, equations, and full procedure | Implement and execute the prescribed approach |
+| B2 | Intended method and relevant constraints, without the full procedure | Turn the method into a working research workflow |
+| B3 | Objective, data, constraints, and required outputs only | Select the method and construct and validate the workflow independently |
+| B4 | B3 plus factually correct but non-essential information | Conduct the same autonomous research while resisting distraction |
+
+These are long-horizon investigations rather than isolated questions. Across
+the 60 tasks, complete research trajectories involve more than 2,600 interaction
+turns and 2,400 execution steps, spanning over 35 hours of agent execution.
 
 The benchmark was distilled from more than 1,300 candidate research ideas
 through five review rounds, over 1,100 review assignments, more than 2,000 task
@@ -220,7 +234,7 @@ asibench task create --domain physics --name my_new_task
 #    - task_eval.yaml   — evaluation config: scoring rules, parameter space (private)
 #    - generate_gt.py   — ground-truth generator (private)
 #    - custom_scorer.py — custom scoring logic, if needed (private)
-#    - prompt_b1.md … prompt_b4.md — difficulty-ladder prompts (public)
+#    - prompt_b1.md … prompt_b4.md — local starter prompts for the guidance gradient
 
 # 3. Required pre-submit validation
 asibench validate --pre-submit tasks/physics/my_new_task/
@@ -234,6 +248,10 @@ asibench task submit
 
 ### Submission requirements
 
+- A complete task package must define the scientific objective, B1–B4 prompts,
+  agent-visible inputs and required artifacts, reproducible reference generation,
+  evaluation gates and weighted scorers, runtime dependencies, and local-testing
+  evidence.
 - Complete `validate --pre-submit` and a same-model `difficulty-check` across
   B1–B4 before submission.
 - Use lowercase letters, digits, and underscores for task IDs. The canonical
@@ -246,7 +264,8 @@ asibench task submit
 - Authors do not create repository pull requests. Administrators publish
   accepted tasks after review.
 
-The default submission form is
+The default submission form provides a 15-step Guided Flow for constructing and
+validating the task:
 [asibench.apexin.ai/submit/proposals/new](https://asibench.apexin.ai/submit/proposals/new).
 Use `--endpoint` or `ASIBENCH_SUBMIT_ENDPOINT` to select another Portal.
 
