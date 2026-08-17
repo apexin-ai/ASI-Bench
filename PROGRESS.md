@@ -127,6 +127,21 @@
   / 22 deselected`; `uv version --short` reports `0.1.2`.
 - Implementation commit: `eee5c47`
 
+## PyPI 0.1.3 release
+
+- Problem: PyPI `0.1.2` did not include the current public documentation and the
+  fixes that preserve pulled instance directories and distinguish unscored
+  submissions from zero scores.
+- Resolution: synchronize all public framework version fields at `0.1.3` and
+  publish the matching `main` commit through the GitHub Release workflow.
+- Prevention: require a clean locked test suite, strict wheel/sdist validation,
+  an archive scan for benchmark-only files, and a clean-wheel smoke test of
+  both CLI names plus a public Hugging Face pull before publishing.
+- Verification: `2090 passed / 4 skipped / 22 deselected`; both distributions
+  passed `twine check --strict`, contained no task prompts, generators, scorers,
+  or references, and the clean Python 3.11 wheel pull from seed42 succeeded.
+- Implementation commit: `d732b85`
+
 ## Clean public repository migration
 
 - Problem: exporting the latest private-repository tree verbatim would have
