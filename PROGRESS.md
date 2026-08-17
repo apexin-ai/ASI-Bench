@@ -1,5 +1,20 @@
 # Progress
 
+## Latest-paper README alignment
+
+- Problem: the README contributor list lagged the latest paper, and its compact
+  B1–B4 description omitted the matched-condition controls and precise
+  information boundaries used to measure scientific autonomy.
+- Resolution: synchronize the front-page contributor order and new contributor,
+  document the four guidance conditions, add the paper's long-horizon execution
+  scale, and align task-submission requirements with the 15-step Guided Flow.
+- Prevention: compare future README revisions directly against the paper's title
+  page, benchmark-design section, author appendix, and contribution appendix;
+  retain the user's decision not to include a separate main-findings section.
+- Verification: default suite `2090 passed / 4 skipped / 22 deselected`; wheel
+  and sdist both passed `twine check --strict` with the updated README metadata.
+- Implementation commit: `7f793b5`
+
 ## Model versus agent-harness extension contract
 
 - Problem: user documentation listed configurable adapters but did not explain
