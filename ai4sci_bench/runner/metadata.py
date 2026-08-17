@@ -19,7 +19,7 @@ from ai4sci_bench.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-FRAMEWORK_VERSION = "0.1.2"
+FRAMEWORK_VERSION = "0.1.3"
 
 
 def collect_run_metadata(

@@ -190,7 +190,7 @@ def _build_agent_metadata(
 
 
 @click.group()
-@click.version_option(version="0.1.2")
+@click.version_option(version="0.1.3")
 def cli():
     """ASI-Bench: LLM Agent benchmark for AI for Science."""
     pass
