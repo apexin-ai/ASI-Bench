@@ -232,6 +232,7 @@ asibench task create --domain physics --name my_new_task
 # 2. Edit the generated files in tasks/physics/my_new_task/:
 #    - task_meta.yaml   — task metadata (public)
 #    - task_eval.yaml   — evaluation and generation config during authoring
+#    - task_submission.yaml — Portal-only author evidence (private; never exported)
 #    - generate_gt.py   — ground-truth generator (private)
 #    - custom_scorer.py — custom scoring logic, if needed
 #    - prompt_b1.md … prompt_b4.md — local starter prompts for the guidance gradient
@@ -242,8 +243,8 @@ asibench validate --pre-submit tasks/physics/my_new_task/
 # 4. Required same-model trial across B1, B2, B3, and B4
 asibench difficulty-check --task physics.my_new_task
 
-# 5. Open the Portal task-submission form
-asibench task submit
+# 5. Upload an exact Draft snapshot, then review and submit it in the Portal
+asibench task submit --task-dir tasks/physics/my_new_task/
 ```
 
 ### Submission requirements
@@ -256,16 +257,21 @@ asibench task submit
   B1–B4 before submission.
 - Use lowercase letters, digits, and underscores for task IDs. The canonical
   form is `domain.task_name`.
-- `asibench task submit` opens the Portal form; files are uploaded and reviewed
-  in the browser, not from the terminal.
-- Set `ASIBENCH_NO_BROWSER=1` to print the form URL without opening a browser.
+- `asibench task submit --task-dir ...` exact-syncs the local files to an
+  owner-only Portal Draft. It never sends the Draft for review by itself.
+- On first use, `asibench login` opens **Settings → CLI tokens**. Create a PAT,
+  copy it, and paste it into the hidden prompt; the CLI validates and saves it
+  in `~/.asibench/credentials` with mode `0600`. Later submissions reuse it.
+- Set `ASIBENCH_NO_BROWSER=1` to print URLs without opening a browser. For CI,
+  set `ASIBENCH_SUBMIT_TOKEN`; tokens are intentionally not accepted as command
+  arguments so they do not enter shell history.
 - The Portal requires `local_testing_done` and one finite score for each level
   before freezing a revision.
 - Authors do not create repository pull requests. Administrators publish
   accepted tasks after review.
 
-The default submission form provides a 15-step Guided Flow for constructing and
-validating the task:
+The Portal also provides a 15-step Guided Flow for constructing a Task entirely
+in the browser:
 [asibench.apexin.ai/submit/proposals/new](https://asibench.apexin.ai/submit/proposals/new).
 Use `--endpoint` or `ASIBENCH_SUBMIT_ENDPOINT` to select another Portal.
 

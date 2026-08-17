@@ -6,6 +6,7 @@
   "private_like_filenames": [
     "task.yaml",
     "task_eval.yaml",
+    "task_submission.yaml",
     "generate_gt.py",
     "precompute_gt.py",
     "custom_scorer.py",
@@ -13,7 +14,7 @@
   ],
   "private_like_directories": ["reference"],
   "examples": [
-    {"task_id": "_template", "kind": "template", "allowed_private_like_files": ["generate_gt.py", "reference_specs.md", "task_eval.yaml"]},
+    {"task_id": "_template", "kind": "template", "allowed_private_like_files": ["generate_gt.py", "reference_specs.md", "task_eval.yaml", "task_submission.yaml"]},
     {"task_id": "chemistry.bsse_counterpoise_cbs_extrapolation", "kind": "full", "allowed_private_like_files": ["task.yaml", "generate_gt.py", "custom_scorer.py", "reference_specs.md"]},
     {"task_id": "materials.phonon_dispersion", "kind": "full", "allowed_private_like_files": ["task.yaml", "generate_gt.py", "reference_specs.md"]},
     {"task_id": "medicine.ethics_disclosure_diagnosis_1670", "kind": "full", "allowed_private_like_files": ["task.yaml", "generate_gt.py", "custom_scorer.py"]},

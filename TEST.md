@@ -42,14 +42,16 @@ uv run pytest -q -m integration
 uv run pytest -q -m e2e
 ```
 
-## Web-only task submission
+## CLI Task Draft upload and browser confirmation
 
-Task submission tests cover the default official Portal, Portal URL overrides and
-normalization, browser opening, headless URL output, removal of CLI upload options,
-and absence of the retired task-upload module from the public package:
+Task submission tests cover manual PAT validation and storage, endpoint
+normalization, safe Task-relative file collection, exact Draft synchronization,
+snapshot reconciliation, browser opening, headless/CI behavior, and the rule
+that the CLI never performs the final Proposal submit:
 
 ```bash
-uv run pytest -q tests/test_cli_task_submit.py tests/test_endpoints.py
+uv run pytest -q tests/test_cli_task_submit.py tests/test_token_login.py \
+  tests/test_device_login_cli.py tests/test_endpoints.py
 ```
 
 ## Pull filtering and custom pre-submit paths

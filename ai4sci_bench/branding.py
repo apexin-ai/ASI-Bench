@@ -58,7 +58,7 @@ SUBMIT_TOKEN_ENV_SUFFIX = "SUBMIT_TOKEN"
 DEFAULT_SUBMISSION_DIR = "submissions/"
 DEFAULT_SUBMISSION_ENDPOINT = "https://asibench.apexin.ai"
 
-# Default for the separate web-only task-authoring launcher.
+# Portal web base used by Task Draft upload and browser confirmation.
 DEFAULT_TASK_SUBMISSION_ENDPOINT = "https://asibench.apexin.ai/submit"
 
 

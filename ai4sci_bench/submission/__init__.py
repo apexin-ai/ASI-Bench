@@ -21,6 +21,11 @@ from ai4sci_bench.submission.bundle import (
     build_submission,
 )
 from ai4sci_bench.submission.upload import UploadResult, upload_bundle
+from ai4sci_bench.submission.task_submit import (
+    TaskSubmitResult,
+    collect_task_files,
+    submit_task,
+)
 
 __all__ = [
     "SUBMISSION_SCHEMA_VERSION",
@@ -28,4 +33,7 @@ __all__ = [
     "build_submission",
     "UploadResult",
     "upload_bundle",
+    "TaskSubmitResult",
+    "collect_task_files",
+    "submit_task",
 ]

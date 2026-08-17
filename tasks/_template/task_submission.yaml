@@ -1,0 +1,44 @@
+# task_submission.yaml (PRIVATE, PORTAL-ONLY)
+# This file lets `asibench task submit --task-dir ...` prefill the author-only
+# Portal evidence. It is reviewed with the Draft and never exported as a Task file.
+
+schema_version: 1
+
+scientific_goal: ""
+core_method: ""
+why_difficult: ""
+difficulty_assessment: ""
+
+# Author expectations; these are not platform verification.
+feasibility_checklist:
+  version: 2
+  items:
+    - {id: deterministic_ground_truth, status: unsure}
+    - {id: runtime_budget, status: unsure}
+    - {id: offline_runtime, status: unsure}
+    - {id: self_contained_inputs, status: unsure}
+    - {id: machine_checkable_scoring, status: unsure}
+
+# Set true only after one approved model has completed the same B1-B4 run.
+local_testing_done: false
+local_test_results: []
+
+# Completed example:
+# local_test_results:
+#   - provider: GPT
+#     family: "5.6"
+#     version: base
+#     results:
+#       - {prompt_level: b1, score: 90}
+#       - {prompt_level: b2, score: 75}
+#       - {prompt_level: b3, score: 45}
+#       - {prompt_level: b4, score: 40}
+#     runtime_evidence:
+#       generation_seconds: 1.2
+#       agent_execution_seconds: 30.0
+#       scoring_seconds: 0.8
+#       environment: "Ubuntu 24.04, Python 3.12"
+#     scorer_replay:
+#       first_score: 45
+#       second_score: 45
+#       tolerance: 0

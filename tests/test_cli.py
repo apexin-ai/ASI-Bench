@@ -1100,6 +1100,7 @@ class TestCLINewTask:
         task_dir = tasks_dir / "physics" / "my_test"
         assert (task_dir / "task_meta.yaml").exists()
         assert (task_dir / "task_eval.yaml").exists()
+        assert (task_dir / "task_submission.yaml").exists()
         assert (task_dir / "prompt_b1.md").exists()
         assert (task_dir / "prompt_b2.md").exists()
         assert (task_dir / "prompt_b3.md").exists()

@@ -111,35 +111,37 @@ requirement, not an optional note.
 
 ---
 
-## 4. Submit through the Portal
+## 4. Upload a Draft, then confirm it in the Portal
 
-Task submission is completed only in the Portal web form. The CLI provides a
-convenience launcher but does not upload task files or create a draft.
+The CLI can exact-sync a local Task directory into an owner-only Portal Draft.
+It deliberately cannot make the final submission: the author must inspect the
+exact file list and imported fields in the browser and click **Submit** there.
 
-### Open the web form from the CLI
-
-The command defaults to the official Portal. Pass a different Portal URL directly
-or configure `ASIBENCH_SUBMIT_ENDPOINT` to override it:
+The command defaults to the official Portal. Pass a different Portal URL or set
+`ASIBENCH_SUBMIT_ENDPOINT` to override it:
 
 ```bash
-asibench task submit
+asibench task submit --task-dir tasks/physics/my_new_task/
 ```
 
-This opens `https://asibench.apexin.ai/submit/proposals/new` and prints
-the URL. It intentionally has no
-`--task-dir`, `--token`, `--submit`, or file-synchronization options. This keeps
-the detailed metadata, file review, local-test evidence, scoring information,
-and author confirmations in one guided web flow. On a headless machine, set
-`ASIBENCH_NO_BROWSER=1` and open the printed URL elsewhere.
+On first use, run `asibench login` (or let `task submit` prompt). The CLI opens
+Portal Settings, where you manually create and copy a PAT. Paste it into the
+hidden terminal prompt; it is validated with the Portal and saved locally with
+file mode `0600`. If the clipboard changed, validation fails without saving and
+you can paste again. Later runs reuse the saved token. For CI/headless use,
+provide `ASIBENCH_SUBMIT_TOKEN`; there is no token command-line flag.
+
+The Task directory must include `task_submission.yaml` for Portal-only author
+evidence and local-test results. That file is uploaded and frozen for review but
+is never exported to the benchmark Task repository. After exact synchronization,
+the CLI opens `/submit/proposals/<id>`. Set `ASIBENCH_NO_BROWSER=1` to print the
+URL instead.
 
 ### Complete the submission in the browser
 
-1. Open the **submission Portal** and sign in.
-2. Start **"Propose a Task"** and complete the guided fields.
-3. Upload the four prompts, generator, evaluation config, and optional scorer.
-4. Review the completeness summary and the full file list.
-5. Record the model identity and all four B1–B4 local-test scores.
-6. Click **Submit** to freeze the revision for review.
+1. Review the completeness summary and the exact synchronized file list.
+2. Inspect and, if necessary, edit the imported metadata and evidence.
+3. Click **Submit** to freeze the revision for review.
 
 Files uploaded through the form are private to the author, assigned reviewers,
 and administrators.

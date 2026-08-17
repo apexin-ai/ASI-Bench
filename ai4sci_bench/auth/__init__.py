@@ -17,6 +17,7 @@ from ai4sci_bench.auth.credentials import (
 )
 from ai4sci_bench.auth.device_login import DeviceLoginError, device_login
 from ai4sci_bench.auth.resolve import resolve_token
+from ai4sci_bench.auth.token_login import TokenLoginError, validate_portal_token
 
 __all__ = [
     "clear_credential",
@@ -25,4 +26,6 @@ __all__ = [
     "DeviceLoginError",
     "device_login",
     "resolve_token",
+    "TokenLoginError",
+    "validate_portal_token",
 ]

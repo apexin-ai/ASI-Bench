@@ -80,17 +80,33 @@ def bundle_upload_url(endpoint: str) -> tuple[str, str | None]:
 
 
 def task_submission_url(endpoint: str) -> str | None:
-    """Return the Portal page used to author and submit a new task.
-
-    Task submission is intentionally web-only: unlike run-bundle upload, it
-    requires guided metadata, local-test evidence, file review, and explicit
-    author confirmations. Return ``None`` when *endpoint* cannot safely be
-    identified as the ASI-Bench Portal.
-    """
+    """Return the Portal page used to author a new Task entirely in-browser."""
     api = portal_api_base(endpoint)
     if api is None:
         return None
     parts = urlsplit(api)
     return urlunsplit(
         (parts.scheme, parts.netloc, "/submit/proposals/new", "", "")
+    )
+
+
+def task_proposal_url(endpoint: str, proposal_id: str) -> str | None:
+    """Return the owner-only Draft inspection page after a CLI upload."""
+    api = portal_api_base(endpoint)
+    if api is None:
+        return None
+    parts = urlsplit(api)
+    return urlunsplit(
+        (parts.scheme, parts.netloc, f"/submit/proposals/{proposal_id}", "", "")
+    )
+
+
+def token_settings_url(endpoint: str) -> str | None:
+    """Return the Portal page where a signed-in user creates/revokes CLI PATs."""
+    api = portal_api_base(endpoint)
+    if api is None:
+        return None
+    parts = urlsplit(api)
+    return urlunsplit(
+        (parts.scheme, parts.netloc, "/submit/settings", "", "cli-tokens")
     )

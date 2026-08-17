@@ -13,7 +13,9 @@ POLICY_PATH = ROOT / "config" / "public_examples.json"
 SCORER_POLICY_PATH = ROOT / "config" / "public_scorers.json"
 PROTECTED_FILENAMES = frozenset({
     "task.yaml",
-    "task_eval.yaml",
+            "task_eval.yaml",
+            "task_submission.yaml",
+    "task_submission.yaml",
     "generate_gt.py",
     "precompute_gt.py",
     "custom_scorer.py",
@@ -282,6 +284,7 @@ def test_example_allowlist_is_exact_and_references_existing_files():
         "precompute_gt.py",
         "custom_scorer.py",
         "reference_specs.md",
+        "task_submission.yaml",
     }
     assert set(policy["private_like_directories"]) == {"reference"}
     entries = {entry["task_id"]: entry for entry in policy["examples"]}

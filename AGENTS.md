@@ -19,6 +19,12 @@
 - `config/public_examples.json` 明确列出的五个公开示例任务是唯一例外，可保留
   B1–B4 prompts、GT 生成器、评分配置和 reference specs；不得扩展到其他任务。
 - `tasks/_template/` 是框架级任务作者脚手架，不属于正式 benchmark 任务。
+- `asibench task submit --task-dir ...` 使用本地 PAT 将 Task 精确同步为 Portal Draft，
+  然后打开 owner-only 页面供作者核对文件和字段；CLI 不执行最终 submit。首次登录由
+  用户在 Portal Settings 手动创建/复制 PAT，CLI 隐藏输入、在线校验并以 0600 保存；
+  CI 使用 `ASIBENCH_SUBMIT_TOKEN`，不得提供 token 命令行参数。
+- `task_submission.yaml` 保存 Portal-only 作者证据，随 Revision 冻结供审核，但不得
+  导出进 benchmark Task 仓库；正式任务目录仍不得公开该文件，只有 `_template` 可包含。
 - `--instances-dir` 是只读输入；运行专属的 `framework_task_info.json` 必须写入
   output 目录，不得新增或覆盖 Hugging Face 拉取目录中的文件。
 - produce-only 的数值零只是序列化占位符；报告不得将未评分结果显示为

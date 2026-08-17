@@ -669,27 +669,24 @@ def _resolve_api_base(endpoint: str | None) -> str:
 @cli.command("login")
 @click.option("--endpoint", default=None,
               help="Portal URL (default: $ASIBENCH_SUBMIT_ENDPOINT, then official site)")
-@click.option("--token", default=None,
-              help="Save this PAT directly instead of the browser flow")
-def login_cmd(endpoint: str | None, token: str | None):
-    """Sign in once from this machine (browser device flow, like `gh auth login`).
+@click.option("--device", is_flag=True, default=False,
+              help="Use the optional browser device-code flow instead of pasting a PAT")
+def login_cmd(endpoint: str | None, device: bool):
+    """Save a Portal login for future Task and Run submissions.
 
-    Prints a short code and a portal URL; approve it in any browser (even on a
-    different machine) and the CLI stores the credential in ~/.asibench/credentials.
-    Afterwards `asibench submit` can use the saved credential. Task authoring
-    and submission are completed in the Portal web interface.
+    By default the CLI opens Portal Settings and securely prompts for the PAT
+    shown there. The token is validated before it is stored and is never put in
+    shell history. ``--device`` retains the optional no-copy authorization flow.
     """
-    from ai4sci_bench.auth import save_credential
     from ai4sci_bench.auth.device_login import DeviceLoginError, device_login
 
     api = _resolve_api_base(endpoint)
-    if token:
-        path = save_credential(api, token)
-        click.echo(click.style(f"✅ Credential saved to {path}", fg="green"))
+    if not device:
+        _prompt_and_save_portal_token(api)
         return
     if not _stdio_interactive():
         raise click.ClickException(
-            "login needs an interactive terminal (or pass --token <PAT>).")
+            "login needs an interactive terminal; in CI set ASIBENCH_SUBMIT_TOKEN.")
     try:
         grant = device_login(api, echo=click.echo,
                              open_browser=not os.environ.get("ASIBENCH_NO_BROWSER"))
@@ -700,6 +697,51 @@ def login_cmd(endpoint: str | None, token: str | None):
     who = user.get("email") or user.get("display_name") or "you"
     click.echo(click.style(f"✅ Signed in as {who} — credential saved to {path}",
                            fg="green"))
+
+
+def _prompt_and_save_portal_token(api_base: str, *, attempts: int = 3) -> str:
+    """Prompt without echo, validate, then save a manually-created Portal PAT."""
+    import webbrowser
+
+    from ai4sci_bench.auth import (
+        TokenLoginError,
+        save_credential,
+        validate_portal_token,
+    )
+    from ai4sci_bench.submission.endpoints import token_settings_url
+
+    settings_url = token_settings_url(api_base)
+    if not settings_url:
+        raise click.ClickException("Could not derive the Portal token settings URL.")
+    click.echo("No saved ASI-Bench login was found.")
+    click.echo("Sign in, create a CLI token, and copy it from:\n"
+               f"  {settings_url}\n")
+    if not os.environ.get("ASIBENCH_NO_BROWSER"):
+        try:
+            webbrowser.open(settings_url, new=2)
+        except Exception:
+            pass
+    last_error = "Token validation failed."
+    for _ in range(attempts):
+        token = click.prompt("Paste token", hide_input=True).strip()
+        try:
+            user = validate_portal_token(api_base, token)
+        except TokenLoginError as exc:
+            last_error = str(exc)
+            click.echo(click.style(
+                f"Token not saved: {last_error}\n"
+                "The clipboard may have changed; copy the full token and try again.",
+                fg="yellow",
+            ))
+            continue
+        path = save_credential(api_base, token, user)
+        who = user.get("primary_email") or user.get("email") \
+            or user.get("display_name") or user.get("id")
+        click.echo(click.style(
+            f"✅ Signed in as {who} — credential saved to {path}", fg="green",
+        ))
+        return token
+    raise click.ClickException(last_error)
 
 
 @cli.command("logout")
@@ -733,60 +775,90 @@ def auth_status_cmd():
         click.echo("Not logged in — run `asibench login`, or set ASIBENCH_SUBMIT_TOKEN.")
         return
     for ep, entry in saved.items():
-        who = entry["user"].get("email") or entry["user"].get("display_name") or "?"
+        who = entry["user"].get("primary_email") or entry["user"].get("email") \
+            or entry["user"].get("display_name") or "?"
         click.echo(f"stored {ep}  as {who}  ({entry['token_prefix']}, "
                    f"saved {entry.get('created_at') or '?'})")
 
 
 @task_group.command("submit")
+@click.option(
+    "--task-dir",
+    required=True,
+    type=click.Path(path_type=Path, file_okay=False, exists=True),
+    help="Local Task root containing task_meta.yaml",
+)
 @click.option("--endpoint", default=None,
               help="Portal URL (default: $ASIBENCH_SUBMIT_ENDPOINT, then official Portal)")
-def task_submit_cmd(endpoint):
-    """Open the Portal page for authoring and submitting a task.
-
-    \b
-    Task submission is web-only because its guided form requires careful review
-    of task files, local-test evidence, scoring details, and author confirmations.
-    This command opens that form and never uploads task files from the CLI.
-
-    \b
-    Examples:
-      asibench task submit
-      ASIBENCH_SUBMIT_ENDPOINT=https://portal.example/api/v1 asibench task submit
-      asibench task submit --endpoint https://portal.example/submit
-    """
+@click.option(
+    "--force-file-sync",
+    is_flag=True,
+    default=False,
+    help="Replace conflicting server files after reviewing the Draft",
+)
+def task_submit_cmd(task_dir: Path, endpoint: str | None, force_file_sync: bool):
+    """Upload a local Task as a Draft, then open Portal for final confirmation."""
     import webbrowser
 
-    from ai4sci_bench.branding import (
-        DEFAULT_TASK_SUBMISSION_ENDPOINT,
-        submit_endpoint,
-    )
-    from ai4sci_bench.submission.endpoints import task_submission_url
+    from ai4sci_bench.auth import clear_credential
+    from ai4sci_bench.auth.resolve import resolve_token
+    from ai4sci_bench.branding import submit_endpoint
+    from ai4sci_bench.submission.endpoints import token_settings_url
+    from ai4sci_bench.submission.task_submit import submit_task
 
-    resolved = submit_endpoint(endpoint) or DEFAULT_TASK_SUBMISSION_ENDPOINT
-    web_url = task_submission_url(resolved)
-    if web_url is None:
+    resolved = submit_endpoint(endpoint)
+    api = _resolve_api_base(resolved)
+    token, source = resolve_token(api, None, interactive=False, echo=click.echo)
+    if not token:
+        if not _stdio_interactive():
+            settings_url = token_settings_url(api) or "the Portal Settings page"
+            raise click.ClickException(
+                "No saved ASI-Bench token is available in this non-interactive "
+                "environment. Create one at " + settings_url + " and set "
+                "ASIBENCH_SUBMIT_TOKEN, or run `asibench login` in a terminal."
+            )
+        token = _prompt_and_save_portal_token(api)
+        source = "pasted"
+
+    click.echo(f"Validating and uploading Task from {task_dir} ...")
+    result = submit_task(
+        task_dir, resolved, token, force_file_sync=force_file_sync,
+    )
+    if result.status_code == 401 and source == "stored" and _stdio_interactive():
+        clear_credential(api)
+        click.echo("The saved token is no longer valid; paste a new Portal token.")
+        token = _prompt_and_save_portal_token(api)
+        result = submit_task(
+            task_dir, resolved, token, force_file_sync=force_file_sync,
+        )
+    if not result.ok:
+        raise click.ClickException(result.error or "Task Draft upload failed")
+    if not result.files_ok:
         raise click.ClickException(
-            "The configured endpoint is not a recognized ASI-Bench Portal URL."
+            "The Draft was created, but exact file synchronization failed: "
+            + (result.file_error or "unknown error")
+            + (f"\nReview the recoverable Draft: {result.web_url}" if result.web_url else "")
         )
 
-    click.echo(
-        "Task submission is available only in the web portal because it "
-        "requires careful review of task files, local-test evidence, scoring "
-        "details, and author confirmations."
-    )
-    click.echo(f"Opening the task submission page:\n  {web_url}")
-
-    if os.environ.get("ASIBENCH_NO_BROWSER"):
-        click.echo("Automatic browser opening is disabled. Open the URL above in a browser.")
+    click.echo(click.style(
+        f"\nDRAFT UPLOAD COMPLETE — {len(result.uploaded)} files synchronized.",
+        fg="green",
+    ))
+    click.echo("The Task has not entered review; final confirmation is still required.")
+    if result.completeness_percent is not None:
+        click.echo(f"Portal completeness: {result.completeness_percent}%")
+    if result.missing:
+        click.echo(click.style("Missing: " + ", ".join(result.missing), fg="yellow"))
+    if result.web_url:
+        click.echo("Review the exact file list and imported fields, then submit:\n"
+                   f"  {result.web_url}")
+    if not result.web_url or os.environ.get("ASIBENCH_NO_BROWSER"):
         return
     try:
-        opened = webbrowser.open(web_url, new=2)
-    except Exception:  # noqa: BLE001 — headless systems still receive the URL
+        opened = webbrowser.open(result.web_url, new=2)
+    except Exception:
         opened = False
-    if opened:
-        click.echo("The task submission page was opened in your browser.")
-    else:
+    if not opened:
         click.echo("A browser could not be opened automatically. Open the URL above manually.")
 
 
@@ -1597,9 +1669,10 @@ def new_task(domain: str, name: str, tasks_dir: str):
         f"  1. Edit {target_dir}/task_meta.yaml + task_eval.yaml "
         "(generation remains private after acceptance)"
     )
-    click.echo(f"  2. Write prompts (prompt_b1.md, prompt_b2.md, prompt_b3.md, prompt_b4.md)")
-    click.echo(f"  3. Implement generate_gt.py")
-    click.echo(f"  4. Run: asibench validate --task {domain}.{name}")
+    click.echo(f"  2. Complete {target_dir}/task_submission.yaml (private Portal evidence)")
+    click.echo(f"  3. Write prompts (prompt_b1.md, prompt_b2.md, prompt_b3.md, prompt_b4.md)")
+    click.echo(f"  4. Implement generate_gt.py")
+    click.echo(f"  5. Run: asibench validate --task {domain}.{name}")
 
 
 @cli.command("analyze")
@@ -1958,6 +2031,24 @@ generation:
   #   - {{id: s1, param1: val1}}
   #   - {{id: s2, param1: val2}}
   timeout_seconds: 300
+""")
+
+    (target_dir / "task_submission.yaml").write_text("""# task_submission.yaml (PRIVATE, PORTAL-ONLY)
+schema_version: 1
+scientific_goal: ""
+core_method: ""
+why_difficult: ""
+difficulty_assessment: ""
+feasibility_checklist:
+  version: 2
+  items:
+    - {id: deterministic_ground_truth, status: unsure}
+    - {id: runtime_budget, status: unsure}
+    - {id: offline_runtime, status: unsure}
+    - {id: self_contained_inputs, status: unsure}
+    - {id: machine_checkable_scoring, status: unsure}
+local_testing_done: false
+local_test_results: []
 """)
 
     for level in ["b1", "b2", "b3", "b4"]:

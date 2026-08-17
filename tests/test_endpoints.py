@@ -12,7 +12,9 @@ from ai4sci_bench.branding import submit_endpoint
 from ai4sci_bench.submission.endpoints import (
     bundle_upload_url,
     portal_api_base,
+    task_proposal_url,
     task_submission_url,
+    token_settings_url,
 )
 
 STAGING = "https://staging.portal.example.org"
@@ -111,3 +113,11 @@ class TestTaskSubmissionUrl:
 
     def test_unrecognized_endpoint_has_no_safe_web_target(self):
         assert task_submission_url("https://receiver.example/upload") is None
+
+    def test_cli_draft_and_token_settings_urls_keep_portal_base_path(self):
+        assert task_proposal_url(STAGING, "proposal-1") == (
+            f"{STAGING}/submit/proposals/proposal-1"
+        )
+        assert token_settings_url(STAGING) == (
+            f"{STAGING}/submit/settings#cli-tokens"
+        )

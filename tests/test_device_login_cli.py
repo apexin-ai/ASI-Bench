@@ -178,19 +178,31 @@ class TestResolveOrder:
 
 
 class TestAuthCommands:
-    def test_login_with_explicit_token_and_status_and_logout(self):
-        r = CliRunner().invoke(cli, ["login", "--endpoint", "http://h/api/v1",
-                                     "--token", "asi_pat_direct"])
+    def test_login_with_pasted_token_and_status_and_logout(self, monkeypatch):
+        monkeypatch.setattr(
+            "ai4sci_bench.auth.validate_portal_token",
+            lambda api, token: {
+                "id": "user-1", "primary_email": "alice@example.org",
+            },
+        )
+        monkeypatch.setattr("webbrowser.open", lambda *args, **kwargs: True)
+        r = CliRunner().invoke(
+            cli,
+            ["login", "--endpoint", "http://h/api/v1"],
+            input="asi_pat_test\n",
+        )
         assert r.exit_code == 0 and "saved" in r.output
         r = CliRunner().invoke(cli, ["auth", "status"])
-        assert "http://h/api/v1" in r.output and "asi_pat_dire" in r.output
+        assert "http://h/api/v1" in r.output and "asi_pat_test" in r.output
+        assert "alice@example.org" in r.output
         r = CliRunner().invoke(cli, ["logout", "--endpoint", "http://h/api/v1"])
         assert r.exit_code == 0 and "Signed out" in r.output
         r = CliRunner().invoke(cli, ["auth", "status"])
         assert "Not logged in" in r.output
 
     def test_login_device_flow_e2e(self, portal_ok):
-        r = CliRunner().invoke(cli, ["login", "--endpoint", portal_ok.api])
+        r = CliRunner().invoke(
+            cli, ["login", "--device", "--endpoint", portal_ok.api])
         # CliRunner stdin/stdout are not TTYs → login must refuse, not hang.
         assert r.exit_code != 0 and "interactive" in r.output
 
@@ -200,8 +212,20 @@ class TestAuthCommands:
         r = CliRunner().invoke(cli, ["logout", "--all"])
         assert r.exit_code == 0 and creds.list_credentials() == {}
 
-    def test_login_defaults_to_official_portal(self):
-        r = CliRunner().invoke(cli, ["login", "--token", "asi_pat_official"])
+    def test_login_defaults_to_official_portal(self, monkeypatch):
+        monkeypatch.setattr(
+            "ai4sci_bench.auth.validate_portal_token",
+            lambda api, token: {"id": "user-1"},
+        )
+        monkeypatch.setattr("webbrowser.open", lambda *args, **kwargs: True)
+        r = CliRunner().invoke(
+            cli, ["login"], input="asi_pat_test\n")
         assert r.exit_code == 0 and "saved" in r.output
         saved = creds.load_credential("https://asibench.apexin.ai/api/v1")
-        assert saved and saved["token"] == "asi_pat_official"
+        assert saved and saved["token"] == "asi_pat_test"
+
+    def test_login_help_does_not_accept_token_in_process_arguments(self):
+        r = CliRunner().invoke(cli, ["login", "--help"])
+        assert r.exit_code == 0
+        assert "--token" not in r.output
+        assert "--device" in r.output

@@ -52,12 +52,13 @@ something. See [How scoring works](how-scoring-works.md).
 
 ## The submission portal (website)
 
-Two things happen on the web rather than in the CLI:
+Two final confirmations happen on the web:
 
 - **Submitting a run** — after `asibench submit`, you confirm your run in the
   browser to enter the scoring queue (see [Getting started](getting-started.md)).
-- **Proposing a task** — new tasks are submitted through a guided flow on the portal
-  (see [Contribute a task](authoring-a-task.md)).
+- **Proposing a task** — the CLI may upload an exact Draft snapshot, but the
+  author reviews its files and imported fields and submits the frozen revision
+  in the Portal (see [Contribute a task](authoring-a-task.md)).
 
 ## In one picture
 
