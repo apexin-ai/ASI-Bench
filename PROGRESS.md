@@ -1,5 +1,22 @@
 # Progress
 
+## Public formal-task scorers without GT disclosure
+
+- Problem: formal task scoring logic was not auditable in the public repository,
+  while publishing the private task tree directly would also expose GT
+  generators, generation settings, references, and private solver assets.
+- Resolution: import scoring-only contracts for all 60 formal tasks, 57 custom
+  scorers, and one required scorer helper from source revision `f7d41c97`; strip
+  every `generation` block and exclude every generator/reference asset.
+- Prevention: `config/public_scorers.json` is the exact scorer allowlist and new
+  fail-closed policy tests require scoring-only YAML, compile every custom
+  scorer, and reject formal-task GT generators, reference specs, protected
+  directories, undeclared files, secrets, and symlinks.
+- Verification: source audit matched all 60 evaluation configs and normalized
+  scorer blobs; default suite `2093 passed / 4 skipped / 22 deselected`; wheel
+  and sdist passed `twine check --strict` and contained zero task files.
+- Implementation commit: `af3c525`
+
 ## Latest-paper README alignment
 
 - Problem: the README contributor list lagged the latest paper, and its compact
