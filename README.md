@@ -63,27 +63,6 @@ through five review rounds, over 1,100 review assignments, more than 2,000 task
 revisions, and over 1,500 sandbox runs. Its construction and validation involved
 more than 31,000 human-hours.
 
-### Main findings
-
-Across all evaluated systems, the average score falls from **50.91 at B1** to
-**29.10 at B2**, **26.62 at B3**, and **26.99 at B4**. Removing the detailed
-procedure while retaining the method causes a 21.82-point drop from B1 to B2;
-removing the method itself causes only a further 2.48-point drop from B2 to B3.
-This asymmetry identifies turning a scientific method into a complete executable
-workflow—rather than selecting the method or resisting distraction—as the main
-bottleneck for current systems.
-
-The strongest evaluated autonomous-research result is **51.60 at B3**, achieved
-by Codex with GPT-5.6 Sol (ultra). Harness choice also matters: the same backbone
-model can produce substantially different scores under different agent
-harnesses, so ASI-Bench evaluates the complete agent–model system.
-
-Reduced guidance also increases computational cost. B1 averages 4.35 million
-tokens and 37.8 minutes per task, while B2 is the most expensive condition at
-6.91 million tokens and 49.7 minutes per task. B3 and B4 use 25% and 30% more
-tokens than B1, respectively. Detailed procedures therefore improve both
-scientific performance and execution efficiency.
-
 ### Resources
 
 | Resource | Link |
