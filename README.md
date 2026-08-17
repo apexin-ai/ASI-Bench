@@ -137,8 +137,10 @@ Local benchmark runs do not calculate official scores.
 | Setting | Behavior |
 |---|---|
 | Dataset seed | `seed42` and `seed31415` are separate runs; use distinct instance and output directories |
+| Downloaded instances | `--instances-dir` is read-only; run-specific framework metadata is written under the output directory |
 | Prompt levels | All four levels run by default; select a subset with `--prompt-levels` |
 | Timeout | `--timeout` defaults to 10,800 seconds and applies uniformly to every task |
+| Produce-only reports | Unscored placeholders are never displayed as `0.0`; all-unscored per-task score tables are omitted |
 | Submission | `submit` uploads a draft by default; `--no-upload` creates a local bundle only |
 | Custom agents | `--agent-cmd` supports the `none` and `linux_ns` sandboxes |
 | Built-in agents | Use `--agent` with `--agent-config`; compatible adapters can use Docker-based `os` isolation |

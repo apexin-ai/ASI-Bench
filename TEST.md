@@ -95,13 +95,26 @@ uv run pytest -q \
   tests/test_hf_pull.py::TestUnscoredSubmissionReporting
 ```
 
+Produce-only numeric zeros are serialization placeholders, not scores.
+Per-task reports must omit an all-unscored score table and render unscored
+levels as `N/A` when mixed with scored results. Pre-generated
+`--instances-dir` trees are immutable inputs: framework metadata belongs under
+the run output directory. Cover both contracts with:
+
+```bash
+uv run pytest -q \
+  tests/test_reporting.py::TestAggregation \
+  tests/test_runner.py::TestInstancesDirWorkspaceIsolation
+```
+
 ## Authenticated website submission
 
 Result submission defaults to `https://asibench.apexin.ai/`, requires a submitter
 identity, uploads a draft, and directs the user to the website confirmation page.
-Public fixed-seed runs intentionally have no `framework_task_info.json`; bundle
-tests lock that this private scoring-side file remains optional. The tests mock
-the upload and never create a real online submission:
+Public fixed-seed submission bundles do not require
+`framework_task_info.json`; bundle tests lock that this framework-only file
+remains optional. The tests mock the upload and never create a real online
+submission:
 
 ```bash
 uv run pytest -q \

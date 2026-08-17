@@ -654,6 +654,9 @@ class BenchmarkOrchestrator:
                 task,
                 params,
                 effective_timeout_seconds=effective_timeout_seconds,
+                framework_task_info_dir=(
+                    self.output_dir / "instances" / instance_dir.name
+                ),
             )
 
             instances.append(TaskInstance(

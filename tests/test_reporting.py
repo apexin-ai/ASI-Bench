@@ -48,6 +48,22 @@ def _make_result(task_id, score, prompt_level="b2", error_cat=None, soft_gate_fa
     )
 
 
+def _make_unscored_result(task_id, prompt_level="b2"):
+    result = _make_result(task_id, 0.0, prompt_level)
+    result.gates_passed = True
+    result.hard_gates_passed = True
+    result.score_results = [
+        ScoreDetail(
+            scorer_name="unscored_submission",
+            score=0.0,
+            max_score=0.0,
+            passed=True,
+            details={"unscored_submission": True},
+        )
+    ]
+    return result
+
+
 class TestResultDiscovery:
     def test_prunes_non_result_directories_before_descent(self, tmp_path, monkeypatch):
         from ai4sci_bench.reporting import result_loader
@@ -193,6 +209,29 @@ class TestAggregation:
         assert "75.0" in summary  # mean of 85 and 65
         assert "Outcome Breakdown" in summary
         assert "Hard gate failures" in summary
+
+    def test_format_task_table_hidden_when_all_results_are_unscored(self):
+        report = aggregate_results([
+            _make_unscored_result("physics.a", "b1"),
+            _make_unscored_result("physics.a", "b2"),
+        ])
+
+        assert report.format_task_table() == ""
+
+    def test_format_task_table_uses_na_for_unscored_levels_in_mixed_report(self):
+        report = aggregate_results([
+            _make_unscored_result("physics.a", "b1"),
+            _make_result("physics.a", 80.0, "b2"),
+        ])
+
+        table = report.format_task_table()
+
+        assert "B1" in table
+        assert "B2" in table
+        assert "N/A" in table
+        assert "80.0" in table
+        assert "40.0" not in table
+        assert report.overall_mean_score == 80.0
 
     def test_format_summary_includes_low_score_reasons(self):
         low = _make_result("physics.a", 10.0, "b2")

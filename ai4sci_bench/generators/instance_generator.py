@@ -550,8 +550,14 @@ class InstanceGenerator:
         params: dict[str, Any],
         *,
         effective_timeout_seconds: int | None = None,
+        framework_task_info_dir: Path | None = None,
     ) -> None:
-        """Prepare the agent workspace directory."""
+        """Prepare the agent workspace and framework-only metadata.
+
+        instance_dir may be a shared, downloaded --instances-dir and must
+        therefore remain read-only. Callers loading pre-generated instances
+        provide a run-owned framework_task_info_dir.
+        """
         import shutil
         import sys
 
@@ -606,7 +612,9 @@ class InstanceGenerator:
         (workspace_dir / AGENT_TASK_INFO_FILENAME).write_text(
             json.dumps(task_info, indent=2), encoding="utf-8"
         )
-        (instance_dir / FRAMEWORK_TASK_INFO_FILENAME).write_text(
+        framework_info_dir = framework_task_info_dir or instance_dir
+        framework_info_dir.mkdir(parents=True, exist_ok=True)
+        (framework_info_dir / FRAMEWORK_TASK_INFO_FILENAME).write_text(
             json.dumps(framework_task_info, indent=2), encoding="utf-8"
         )
 

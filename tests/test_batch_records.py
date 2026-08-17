@@ -95,6 +95,20 @@ class TestBatchRecords:
         assert {"agent_name", "adapter_class", "model_name", "method_group"} <= set(overview_rows[0])
         assert overview_rows[0]["b1"] == ""
         assert overview_rows[0]["b2"] == overview_rows[0]["overall_mean_score"]
+        assert overview_rows[0]["overall_mean_score"] == ""
+
+        with scoreboard_path.open(newline="", encoding="utf-8") as handle:
+            scoreboard_rows = list(csv.DictReader(handle))
+        assert len(scoreboard_rows) == 1
+        assert scoreboard_rows[0]["mean_score"] == ""
+        assert scoreboard_rows[0]["min_score"] == ""
+        assert scoreboard_rows[0]["max_score"] == ""
+
+        with task_level_long_path.open(newline="", encoding="utf-8") as handle:
+            level_rows = list(csv.DictReader(handle))
+        assert len(level_rows) == 1
+        assert level_rows[0]["mean_score"] == ""
+        assert level_rows[0]["gates_pass_rate"] == ""
 
     def test_run_rejects_batch_records_root_without_flag(self, sample_task_dir, tmp_dir):
         tasks_dir = sample_task_dir.parent.parent

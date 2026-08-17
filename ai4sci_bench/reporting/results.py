@@ -347,26 +347,98 @@ class RunReport:
         """Format a per-task score table for terminal display."""
         if not self.by_task:
             return ""
-        levels = sorted({
-            lv for ts in self.by_task for lv in ts.scores_by_level
-        })
+
+        # Produce-only records use a numeric zero as a serialization
+        # placeholder, not as a scientific score. Never render that placeholder
+        # as 0.0. When every result is unscored the summary already explains how
+        # to submit for official scoring, so the score table is omitted.
+        scored_results = [
+            result for result in self.results
+            if not is_unscored_submission(result)
+        ]
+        if self.results and not scored_results:
+            return ""
+
+        if self.results:
+            levels = sorted({
+                result.prompt_level.value for result in self.results
+            })
+        else:
+            levels = sorted({
+                lv for ts in self.by_task for lv in ts.scores_by_level
+            })
+
         header = f"  {'Task':<50s}" + "".join(f" {lv.upper():>6s}" for lv in levels) + "   Mean"
         sep = "  " + "-" * (50 + 7 * len(levels) + 7)
         lines = ["", "  Per-Task Scores:", header, sep]
         for ts in sorted(self.by_task, key=lambda t: t.task_id):
             row = f"  {ts.task_id:<50s}"
             for lv in levels:
-                s = ts.scores_by_level.get(lv)
-                row += f" {s:6.1f}" if s is not None else "      -"
-            row += f"  {ts.mean_score:5.1f}"
+                if self.results:
+                    level_results = [
+                        result for result in scored_results
+                        if result.task_id == ts.task_id
+                        and result.prompt_level.value == lv
+                    ]
+                    has_unscored = any(
+                        result.task_id == ts.task_id
+                        and result.prompt_level.value == lv
+                        and is_unscored_submission(result)
+                        for result in self.results
+                    )
+                    if level_results:
+                        score = sum(
+                            result.final_score for result in level_results
+                        ) / len(level_results)
+                        row += f" {score:6.1f}"
+                    elif has_unscored:
+                        row += f" {'N/A':>6s}"
+                    else:
+                        row += "      -"
+                else:
+                    score = ts.scores_by_level.get(lv)
+                    row += f" {score:6.1f}" if score is not None else "      -"
+
+            if self.results:
+                task_results = [
+                    result for result in scored_results
+                    if result.task_id == ts.task_id
+                ]
+                if task_results:
+                    task_mean = sum(
+                        result.final_score for result in task_results
+                    ) / len(task_results)
+                    row += f"  {task_mean:5.1f}"
+                else:
+                    row += f"  {'N/A':>5s}"
+            else:
+                row += f"  {ts.mean_score:5.1f}"
             lines.append(row)
         lines.append(sep)
-        lines.append(
-            f"  {'OVERALL':<50s}"
-            + "".join(
+
+        overall_row = f"  {'OVERALL':<50s}"
+        if self.results:
+            for lv in levels:
+                level_results = [
+                    result for result in scored_results
+                    if result.prompt_level.value == lv
+                ]
+                if level_results:
+                    score = sum(
+                        result.final_score for result in level_results
+                    ) / len(level_results)
+                    overall_row += f" {score:6.1f}"
+                else:
+                    overall_row += f" {'N/A':>6s}"
+            overall_mean = sum(
+                result.final_score for result in scored_results
+            ) / len(scored_results)
+            overall_row += f"  {overall_mean:5.1f}"
+        else:
+            overall_row += "".join(
                 f" {self.by_prompt_level.get(lv, 0):6.1f}" for lv in levels
             )
-            + f"  {self.overall_mean_score:5.1f}"
-        )
+            overall_row += f"  {self.overall_mean_score:5.1f}"
+        lines.append(overall_row)
         lines.append("")
         return "\n".join(lines)

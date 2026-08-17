@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from ai4sci_bench.reporting.aggregator import aggregate_results
 from ai4sci_bench.reporting.result_loader import AgentProvenance, load_grouped_results
+from ai4sci_bench.reporting.results import is_unscored_submission
 
 PROMPT_LEVELS = ("b1", "b2", "b3", "b4")
 
@@ -33,6 +34,10 @@ def refresh_batch_records(results_root: Path) -> list[Path]:
         run_report = aggregate_results(group.results)
         run_report.agent_name = group.label
         provenance = group.provenance
+        has_scored_results = any(
+            not is_unscored_submission(result)
+            for result in group.results
+        )
         overview_rows.append({
             "agent_label": provenance.agent_label,
             "agent_name": provenance.agent_name,
@@ -41,7 +46,10 @@ def refresh_batch_records(results_root: Path) -> list[Path]:
             "method_group": provenance.method_group,
             "n_tasks": run_report.n_tasks,
             "n_instances": run_report.n_instances,
-            "overall_mean_score": f"{run_report.overall_mean_score:.1f}",
+            "overall_mean_score": (
+                f"{run_report.overall_mean_score:.1f}"
+                if has_scored_results else ""
+            ),
             "hard_gate_failures": run_report.gate_failed_instances,
             "soft_gate_warnings": run_report.soft_gate_warning_instances,
             "results_root": str(group.group_root or results_root / group.label),
@@ -49,6 +57,11 @@ def refresh_batch_records(results_root: Path) -> list[Path]:
             **_format_level_columns(run_report.by_prompt_level),
         })
         for task_summary in run_report.by_task:
+            task_has_scored_results = any(
+                result.task_id == task_summary.task_id
+                and not is_unscored_submission(result)
+                for result in group.results
+            )
             task_rows.append({
                 "agent_label": provenance.agent_label,
                 "agent_name": provenance.agent_name,
@@ -57,11 +70,26 @@ def refresh_batch_records(results_root: Path) -> list[Path]:
                 "method_group": provenance.method_group,
                 "task_id": task_summary.task_id,
                 "n_instances": task_summary.n_instances,
-                "mean_score": f"{task_summary.mean_score:.1f}",
-                "min_score": f"{task_summary.min_score:.1f}",
-                "max_score": f"{task_summary.max_score:.1f}",
-                "std_score": f"{task_summary.std_score:.1f}",
-                "gates_pass_rate": f"{task_summary.gates_pass_rate:.3f}",
+                "mean_score": (
+                    f"{task_summary.mean_score:.1f}"
+                    if task_has_scored_results else ""
+                ),
+                "min_score": (
+                    f"{task_summary.min_score:.1f}"
+                    if task_has_scored_results else ""
+                ),
+                "max_score": (
+                    f"{task_summary.max_score:.1f}"
+                    if task_has_scored_results else ""
+                ),
+                "std_score": (
+                    f"{task_summary.std_score:.1f}"
+                    if task_has_scored_results else ""
+                ),
+                "gates_pass_rate": (
+                    f"{task_summary.gates_pass_rate:.3f}"
+                    if task_has_scored_results else ""
+                ),
                 "generated_at": generated_at,
                 **_format_level_columns(task_summary.scores_by_level),
             })
@@ -272,8 +300,22 @@ def _build_task_level_rows(
     rows: list[dict[str, object]] = []
     for (task_id, prompt_level), level_results in sorted(grouped.items()):
         n_instances = len(level_results)
-        mean_score = sum(r.final_score for r in level_results) / n_instances
-        gates_pass_rate = sum(1 for r in level_results if r.gates_passed) / n_instances
+        scored_level_results = [
+            result for result in level_results
+            if not is_unscored_submission(result)
+        ]
+        if scored_level_results:
+            mean_score = (
+                sum(result.final_score for result in scored_level_results)
+                / len(scored_level_results)
+            )
+            gates_pass_rate = (
+                sum(1 for result in scored_level_results if result.gates_passed)
+                / len(scored_level_results)
+            )
+        else:
+            mean_score = None
+            gates_pass_rate = None
         rows.append({
             "agent_label": provenance.agent_label,
             "agent_name": provenance.agent_name,
@@ -283,8 +325,11 @@ def _build_task_level_rows(
             "task_id": task_id,
             "prompt_level": prompt_level,
             "n_instances": n_instances,
-            "mean_score": f"{mean_score:.1f}",
-            "gates_pass_rate": f"{gates_pass_rate:.3f}",
+            "mean_score": f"{mean_score:.1f}" if mean_score is not None else "",
+            "gates_pass_rate": (
+                f"{gates_pass_rate:.3f}"
+                if gates_pass_rate is not None else ""
+            ),
             "generated_at": generated_at,
         })
     return rows

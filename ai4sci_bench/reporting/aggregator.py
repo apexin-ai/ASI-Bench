@@ -26,6 +26,10 @@ def aggregate_results(results: list[EvalResult], config: Any = None) -> RunRepor
         )
 
     agent_name = results[0].agent_name
+    scored_results = [
+        result for result in results
+        if not is_unscored_submission(result)
+    ]
 
     # Group by task
     by_task: dict[str, list[EvalResult]] = {}
@@ -33,16 +37,23 @@ def aggregate_results(results: list[EvalResult], config: Any = None) -> RunRepor
         by_task.setdefault(r.task_id, []).append(r)
 
     task_summaries = []
+    scored_task_ids: set[str] = set()
     for task_id, task_results in sorted(by_task.items()):
-        scores = [r.final_score for r in task_results]
+        scored_task_results = [
+            result for result in task_results
+            if not is_unscored_submission(result)
+        ]
+        scores = [r.final_score for r in scored_task_results]
         n = len(scores)
-        mean = sum(scores) / n
+        mean = sum(scores) / n if n else 0.0
         std = math.sqrt(sum((s - mean) ** 2 for s in scores) / n) if n > 1 else 0.0
-        gates_passed = sum(1 for r in task_results if r.gates_passed)
+        gates_passed = sum(1 for r in scored_task_results if r.gates_passed)
+        if scored_task_results:
+            scored_task_ids.add(task_id)
 
         # By prompt level
         by_level: dict[str, list[float]] = {}
-        for r in task_results:
+        for r in scored_task_results:
             by_level.setdefault(r.prompt_level.value, []).append(r.final_score)
         scores_by_level = {
             level: sum(s) / len(s) for level, s in by_level.items()
@@ -50,18 +61,20 @@ def aggregate_results(results: list[EvalResult], config: Any = None) -> RunRepor
 
         task_summaries.append(TaskSummary(
             task_id=task_id,
-            n_instances=n,
+            n_instances=len(task_results),
             mean_score=mean,
-            min_score=min(scores),
-            max_score=max(scores),
+            min_score=min(scores) if scores else 0.0,
+            max_score=max(scores) if scores else 0.0,
             std_score=std,
-            gates_pass_rate=gates_passed / n,
+            gates_pass_rate=gates_passed / n if n else 0.0,
             scores_by_level=scores_by_level,
         ))
 
     # Group by domain
     by_domain: dict[str, list[TaskSummary]] = {}
     for ts in task_summaries:
+        if ts.task_id not in scored_task_ids:
+            continue
         domain = ts.task_id.split(".")[0] if "." in ts.task_id else "unknown"
         by_domain.setdefault(domain, []).append(ts)
 
@@ -77,7 +90,7 @@ def aggregate_results(results: list[EvalResult], config: Any = None) -> RunRepor
 
     # By prompt level (overall)
     by_level_overall: dict[str, list[float]] = {}
-    for r in results:
+    for r in scored_results:
         by_level_overall.setdefault(r.prompt_level.value, []).append(r.final_score)
     prompt_level_scores = {
         level: sum(s) / len(s) for level, s in by_level_overall.items()
@@ -90,7 +103,7 @@ def aggregate_results(results: list[EvalResult], config: Any = None) -> RunRepor
             cat = r.error_analysis.error_category
             error_dist[cat] = error_dist.get(cat, 0) + 1
 
-    all_scores = [r.final_score for r in results]
+    all_scores = [r.final_score for r in scored_results]
     total_time = sum(r.execution_time_seconds for r in results)
     unscored_submission_instances = sum(is_unscored_submission(r) for r in results)
     gate_failed_instances = sum(
@@ -121,7 +134,7 @@ def aggregate_results(results: list[EvalResult], config: Any = None) -> RunRepor
         agent_name=agent_name,
         n_tasks=len(by_task),
         n_instances=len(results),
-        overall_mean_score=sum(all_scores) / len(all_scores),
+        overall_mean_score=sum(all_scores) / len(all_scores) if all_scores else 0.0,
         by_task=task_summaries,
         by_domain=domain_summaries,
         by_prompt_level=prompt_level_scores,

@@ -1208,6 +1208,60 @@ class TestInstancesDirWorkspaceIsolation:
         # inside the shared instances dir.
         assert not (shared_dir / "_workspaces").exists()
 
+    @pytest.mark.parametrize("existing_framework_info", [False, True])
+    def test_prepare_instances_keeps_shared_source_tree_byte_identical(
+        self, sample_task_dir, tmp_dir, existing_framework_info
+    ):
+        shared_dir, metadata, tasks_dir = self._build_instances_dir(
+            sample_task_dir, tmp_dir
+        )
+        if (shared_dir / "_workspaces").exists():
+            import shutil
+            shutil.rmtree(shared_dir / "_workspaces")
+
+        instance_dir = next(
+            path for path in shared_dir.iterdir() if path.is_dir()
+        )
+        framework_info = instance_dir / "framework_task_info.json"
+        if not existing_framework_info:
+            framework_info.unlink()
+
+        before = {
+            path.relative_to(shared_dir): path.read_bytes()
+            for path in shared_dir.rglob("*")
+            if path.is_file()
+        }
+
+        output_dir = tmp_dir / "run_read_only"
+        config = RunConfig(
+            agent=DummyAgent(),
+            tasks=["physics.test_task"],
+            prompt_levels=["b1"],
+            instances_dir=str(shared_dir),
+            tasks_dir=str(tasks_dir),
+            output_dir=str(output_dir),
+        )
+        orch = BenchmarkOrchestrator(config)
+        instances = orch._prepare_instances([metadata])
+
+        after = {
+            path.relative_to(shared_dir): path.read_bytes()
+            for path in shared_dir.rglob("*")
+            if path.is_file()
+        }
+        assert after == before
+
+        run_framework_info = (
+            output_dir
+            / "instances"
+            / instances[0].instance_id
+            / "framework_task_info.json"
+        )
+        assert run_framework_info.is_file()
+        run_info = json.loads(run_framework_info.read_text(encoding="utf-8"))
+        assert run_info["instance_id"] == instances[0].instance_id
+        assert run_info["prompt_level"] == "b1"
+
     def test_second_run_does_not_delete_first_runs_workspace(
         self, sample_task_dir, tmp_dir
     ):

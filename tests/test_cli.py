@@ -1848,6 +1848,38 @@ class TestCLIAnalyze:
 
 
 class TestCLIReport:
+    def test_report_per_task_hides_all_unscored_score_table(self, tmp_dir):
+        results_dir = tmp_dir / "results"
+        task_dir = results_dir / "physics.test_task"
+        task_dir.mkdir(parents=True)
+        result_data = _make_eval_result_json(
+            final_score=0.0,
+            max_possible_score=0.0,
+            score_results=[{
+                "scorer_name": "unscored_submission",
+                "score": 0.0,
+                "max_score": 0.0,
+                "passed": True,
+                "details": {"unscored_submission": True},
+                "message": "Submit for official scoring.",
+            }],
+        )
+        (task_dir / "inst1__b1.json").write_text(
+            json.dumps(result_data), encoding="utf-8"
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "report",
+            "--results-dir", str(results_dir),
+            "--per-task",
+        ])
+
+        assert result.exit_code == 0
+        assert "ASI-Bench Produce-Only Summary" in result.output
+        assert "Unscored submissions (submit mode): 1" in result.output
+        assert "Per-Task Scores" not in result.output
+
     def test_report_ignores_task_info_json(self, tmp_dir):
         results_dir = tmp_dir / "results"
         task_dir = results_dir / "physics.test_task"
