@@ -216,8 +216,10 @@
   credential reuse, Draft-only behavior, exact snapshot reconciliation, and
   headless failure; Portal tests enforce strict manifest validation and the
   export exclusion.
-- Verification: public suite `2099 passed / 2 skipped / 22 deselected`; Portal
-  backend `379 passed`; Portal frontend `63 passed` plus production build; local
-  HTTP E2E reached 100% completeness, froze only after browser confirmation,
+- Verification: after rebasing onto the public-scoring release, the public suite
+  passed `2102 passed / 2 skipped / 22 deselected`; Portal CLI-sync tests passed
+  `76 passed`; Portal frontend passed `63` contract tests, `2` WebKit tests, and
+  the production build. A live CLI-to-WebKit E2E reached 100% completeness,
+  verified ten exact files, clicked the browser-only final submit, froze R1,
   and excluded the Portal-only manifest from export.
-- Implementation commit: `6f69c93`
+- Implementation commit: `9161998`

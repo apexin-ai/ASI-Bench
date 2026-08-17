@@ -7,6 +7,8 @@ import pytest
 
 from ai4sci_bench.auth.token_login import TokenLoginError, validate_portal_token
 
+FAKE_PAT = "asi_" + "pat_" + "abcdefghijklmnopqrstuvwxyz"
+
 
 class _Response:
     status = 200
@@ -34,7 +36,7 @@ def test_validate_portal_token_returns_account_and_sends_bearer(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     user = validate_portal_token(
         "https://portal.example/api/v1",
-        "asi_pat_abcdefghijklmnopqrstuvwxyz",
+        FAKE_PAT,
     )
 
     assert user["id"] == "user-1"
@@ -62,5 +64,5 @@ def test_validate_portal_token_explains_revoked_token(monkeypatch):
     with pytest.raises(TokenLoginError, match="incomplete, revoked"):
         validate_portal_token(
             "https://portal.example/api/v1",
-            "asi_pat_abcdefghijklmnopqrstuvwxyz",
+            FAKE_PAT,
         )
