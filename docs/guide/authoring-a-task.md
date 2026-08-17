@@ -135,7 +135,9 @@ The Task directory must include `task_submission.yaml` for Portal-only author
 evidence and local-test results. That file is uploaded and frozen for review but
 is never exported to the benchmark Task repository. After exact synchronization,
 the CLI opens `/submit/proposals/<id>`. Set `ASIBENCH_NO_BROWSER=1` to print the
-URL instead.
+URL instead. The CLI verifies both the complete relative-path set and every
+SHA-256 hash returned by the Portal; if synchronization fails after Draft
+creation, the error includes that Draft's recovery URL.
 
 ### Complete the submission in the browser
 

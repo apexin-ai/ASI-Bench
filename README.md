@@ -258,7 +258,9 @@ asibench task submit --task-dir tasks/physics/my_new_task/
 - Use lowercase letters, digits, and underscores for task IDs. The canonical
   form is `domain.task_name`.
 - `asibench task submit --task-dir ...` exact-syncs the local files to an
-  owner-only Portal Draft. It never sends the Draft for review by itself.
+  owner-only Portal Draft. It verifies the returned relative paths and SHA-256
+  hashes, and prints the recoverable Draft URL if synchronization fails. It
+  never sends the Draft for review by itself.
 - On first use, `asibench login` opens **Settings → CLI tokens**. Create a PAT,
   copy it, and paste it into the hidden prompt; the CLI validates and saves it
   in `~/.asibench/credentials` with mode `0600`. Later submissions reuse it.

@@ -832,7 +832,10 @@ def task_submit_cmd(task_dir: Path, endpoint: str | None, force_file_sync: bool)
             task_dir, resolved, token, force_file_sync=force_file_sync,
         )
     if not result.ok:
-        raise click.ClickException(result.error or "Task Draft upload failed")
+        message = result.error or "Task Draft upload failed"
+        if result.web_url:
+            message += f"\nA recoverable Draft may exist here: {result.web_url}"
+        raise click.ClickException(message)
     if not result.files_ok:
         raise click.ClickException(
             "The Draft was created, but exact file synchronization failed: "

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import mimetypes
 import re
 import unicodedata
@@ -135,20 +136,23 @@ def _upload_files(
     base_snapshot: str,
     force_file_sync: bool = False,
     timeout: float = 300.0,
-) -> int:
+) -> tuple[int, dict[str, str]]:
     boundary = "----asibench" + uuid.uuid4().hex
     chunks: list[bytes] = []
+    uploaded_hashes: dict[str, str] = {}
     for path in files:
         name = task_relative_name(task_dir, path)
         quoted = name.replace("\\", "\\\\").replace('"', '\\"')
         content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        data = path.read_bytes()
+        uploaded_hashes[name] = hashlib.sha256(data).hexdigest()
         chunks.extend([
             f"--{boundary}\r\n".encode(),
             (
                 f'Content-Disposition: form-data; name="files"; filename="{quoted}"\r\n'
                 f"Content-Type: {content_type}\r\n\r\n"
             ).encode(),
-            path.read_bytes(),
+            data,
             b"\r\n",
         ])
     chunks.append(f"--{boundary}--\r\n".encode())
@@ -168,7 +172,7 @@ def _upload_files(
         method="PUT",
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.status
+        return response.status, uploaded_hashes
 
 
 def _error_detail(exc: urllib.error.HTTPError) -> str:
@@ -224,6 +228,8 @@ def submit_task(
     if api is None:
         return TaskSubmitResult(ok=False, error="The endpoint is not a recognized ASI-Bench Portal URL")
 
+    proposal_id: str | None = None
+    web_url: str | None = None
     try:
         status, response = _request(
             "POST",
@@ -244,13 +250,14 @@ def submit_task(
                 ok=False, status_code=status,
                 error=f"Portal did not return a Draft id: {response}",
             )
+        web_url = task_proposal_url(endpoint, proposal_id)
         _, before = _request(
             "GET", f"{api}/proposals/{proposal_id}/file-snapshot", token,
         )
         snapshot = before.get("snapshot") if isinstance(before, dict) else None
         if not isinstance(snapshot, str) or len(snapshot) != 64:
             raise ValueError("Portal returned an invalid file snapshot token")
-        _upload_files(
+        _, uploaded_hashes = _upload_files(
             api, proposal_id, token, files,
             task_dir=root,
             base_snapshot=snapshot,
@@ -259,13 +266,18 @@ def submit_task(
         _, after = _request(
             "GET", f"{api}/proposals/{proposal_id}/file-snapshot", token,
         )
-        stored = {
-            str(item.get("file_name"))
+        stored_hashes = {
+            str(item.get("file_name")): str(item.get("content_hash") or "")
             for item in (after.get("files") or [])
             if isinstance(item, dict) and item.get("file_name")
         }
         expected = {task_relative_name(root, path) for path in files}
-        if stored != expected:
+        stored = set(stored_hashes)
+        mismatched = sorted(
+            name for name in expected & stored
+            if stored_hashes[name] != uploaded_hashes.get(name)
+        )
+        if stored != expected or mismatched:
             missing = sorted(expected - stored)
             unexpected = sorted(stored - expected)
             details = []
@@ -273,11 +285,13 @@ def submit_task(
                 details.append("missing: " + ", ".join(missing))
             if unexpected:
                 details.append("unexpected: " + ", ".join(unexpected))
+            if mismatched:
+                details.append("content mismatch: " + ", ".join(mismatched))
             return TaskSubmitResult(
                 ok=True, proposal_id=proposal_id, status_code=status,
                 files_ok=False, file_error="Portal snapshot differs (" + "; ".join(details) + ")",
                 reused=bool(response.get("reused")),
-                web_url=task_proposal_url(endpoint, proposal_id),
+                web_url=web_url,
             )
         _, refreshed = _request("GET", f"{api}/proposals/{proposal_id}", token)
         completeness = refreshed.get("completeness") or {}
@@ -289,12 +303,16 @@ def submit_task(
             reused=bool(response.get("reused")),
             completeness_percent=completeness.get("percent"),
             missing=list(completeness.get("missing") or []),
-            web_url=task_proposal_url(endpoint, proposal_id),
+            web_url=web_url,
         )
     except urllib.error.HTTPError as exc:
         return TaskSubmitResult(
-            ok=False, status_code=exc.code,
+            ok=False, proposal_id=proposal_id, web_url=web_url,
+            status_code=exc.code,
             error=f"HTTP {exc.code}: {_error_detail(exc)}",
         )
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-        return TaskSubmitResult(ok=False, error=f"{type(exc).__name__}: {exc}")
+        return TaskSubmitResult(
+            ok=False, proposal_id=proposal_id, web_url=web_url,
+            error=f"{type(exc).__name__}: {exc}",
+        )
