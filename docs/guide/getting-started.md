@@ -1,8 +1,8 @@
 # Getting Started
 
-ASI-Bench runs LLM agents on real scientific tasks. This repository is
-produce-only: it collects outputs and submits them to
-`https://asibench.apexin.ai/` for official scoring.
+ASI-Bench runs LLM agents on real scientific tasks. Runs are produce-only;
+afterward, seed31415 can be scored locally with public references while seed42
+must be submitted to `https://asibench.apexin.ai/` for private scoring.
 
 ## Install
 
@@ -15,6 +15,9 @@ Python 3.11+. `asibench` is the canonical command in all user documentation.
 The legacy `ai4sci-bench` entry point remains available only as a
 backwards-compatibility alias.
 
+Install `asibench[full]` for agent execution and seed31415 local scoring; the
+lightweight default install supports pulling instances and submission tooling.
+
 ## Run the benchmark with your agent
 
 ```bash
@@ -22,22 +25,29 @@ backwards-compatibility alias.
 asibench task pull --repo seed42 --output-dir hf_instances_seed42/
 asibench task pull --repo seed31415 --output-dir hf_instances_seed31415/
 
-# 2. Run your agent and collect its outputs — no local scoring
+# 2. Run your agent and collect its outputs
 asibench run \
-  --instances-dir hf_instances_seed42/ \
+  --instances-dir hf_instances_seed31415/ \
   --agent-cmd 'python my_agent.py --workspace {workspace}' \
   --sandbox linux_ns \
-  --output-dir out_seed42/
+  --output-dir out_seed31415/
 
-# 3. Sign in so the website can identify the submitter
+# 3a. Score seed31415 locally (requires this GitHub checkout's tasks/ tree)
+asibench score --repo seed31415 \
+  --results-dir out_seed31415/ \
+  --instances-dir hf_instances_seed31415/ \
+  --tasks-dir /path/to/ASI-Bench/tasks/
+
+# 3b. Run seed42 separately, then sign in for private-reference scoring
+# (use --instances-dir hf_instances_seed42/ and --output-dir out_seed42/)
 asibench login
 
-# 4. Upload a draft to the website for official scoring
+# 4. Upload a seed42 draft to the website for scoring
 asibench submit --results-dir out_seed42/
 ```
 
-Repeat steps 2–3 with `hf_instances_seed31415/` and a distinct output directory
-to run the seed31415 set.
+Repeat the run with `hf_instances_seed42/` and a distinct `out_seed42/`
+directory before submitting seed42.
 
 `asibench run` evaluates `b1,b2,b3,b4` by default. Use `--prompt-levels` only
 when you intentionally want a subset.
@@ -94,6 +104,16 @@ missing host capabilities produce a non-zero command exit.
 defaults to 10800 seconds. A task cannot override it through `task.yaml` or
 `task_meta.yaml`; timeout fields added to task metadata are ignored.
 
+## Local versus website scoring
+
+`asibench score --repo seed31415` uses the public `reference/` directories from
+the seed31415 Hugging Face dataset and the public scoring contracts in a GitHub
+checkout. It writes `local_score_seed31415.json` separately and does not modify
+the produce-only result. These scores are non-official.
+
+`asibench score --repo seed42` always fails: seed42 references are private.
+Use `asibench submit` for seed42.
+
 ## Submit for scoring
 
 `asibench submit` builds a bundle of your declared outputs with checksums and
@@ -105,8 +125,9 @@ prints a **confirm link**:
 3. Click **Confirm** to enter the scoring queue.
 
 Uploading alone is not enough — your run is a **draft** until you confirm. The
-website then scores it against private reference answers and can publish it to the
-leaderboard. Self-reported scores are never used.
+website then scores seed42 against private reference answers and can publish it
+to the leaderboard. Self-reported or seed31415 local scores are never treated as
+official leaderboard scores.
 
 Use `--no-upload` when you intentionally want to build a local bundle without
 submitting it to the website.

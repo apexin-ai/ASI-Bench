@@ -130,6 +130,35 @@ class TestFlattenFlatLayout:
         assert (out / "astronomy.example_task__seed478163327").is_dir()
         assert not (out / "physics.example_task__grid255_seed42").exists()
 
+    @pytest.mark.parametrize(
+        ("repo", "reference_expected"),
+        [("seed42", False), ("seed31415", True)],
+    )
+    def test_reference_policy_is_enforced_during_copy(
+        self, tmp_path, monkeypatch, repo, reference_expected
+    ):
+        snap = self._fake_snapshot(tmp_path)
+        for instance in (snap / "tasks").iterdir():
+            reference = instance / "reference"
+            reference.mkdir()
+            (reference / "answer.json").write_text("{}", encoding="utf-8")
+        captured = {}
+
+        def fake_download(**kwargs):
+            captured.update(kwargs)
+            return str(snap)
+
+        monkeypatch.setattr("huggingface_hub.snapshot_download", fake_download)
+        out = tmp_path / "out"
+        pull_instances(repo, output_dir=out)
+
+        copied = out / "astronomy.example_task__seed478163327" / "reference"
+        assert copied.exists() is reference_expected
+        if repo == "seed42":
+            assert "**/reference/**" in captured["ignore_patterns"]
+        else:
+            assert captured["ignore_patterns"] is None
+
 
 class TestRootFlatLayout:
     """Only the public tasks/<instance-id>/ dataset contract is accepted."""

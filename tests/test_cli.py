@@ -1166,6 +1166,7 @@ class TestCLITaskPull:
         assert captured["repo"] == "seed42"
         assert captured["output_dir"] == str(out)
         assert "instances: 1" in result.output
+        assert "references: private" in result.output
 
     def test_task_pull_empty_result_explains_required_layout(self, tmp_dir, monkeypatch):
         from ai4sci_bench.hf.pull import PullResult
@@ -1183,6 +1184,7 @@ class TestCLITaskPull:
         assert result.exit_code == 0
         assert "expected tasks/<instance-id>/" in result.output
         assert "root-level" not in result.output
+        assert "references: public" in result.output
 
     def test_task_pull_requires_explicit_official_seed(self):
         result = CliRunner().invoke(cli, ["task", "pull"])

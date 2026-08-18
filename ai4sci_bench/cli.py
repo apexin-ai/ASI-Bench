@@ -485,6 +485,10 @@ def pull(repo: str | None, tasks: str | None, output_dir: str, token: str | None
     click.echo(f"Pulled from {result.repo_id} (rev {revision})")
     click.echo(f"  tasks:     {len(result.task_ids)}")
     click.echo(f"  instances: {len(result.instance_ids)} → {result.output_dir}/")
+    if repo == "seed31415":
+        click.echo("  references: public (local scoring enabled)")
+    else:
+        click.echo("  references: private (excluded; use submit for scoring)")
     if result.skipped:
         click.echo(f"  skipped (already present, use --overwrite): {len(result.skipped)}")
     if not result.instance_ids and not result.skipped:
@@ -501,6 +505,71 @@ def _format_file_size(size_bytes: int) -> str:
     if size_bytes < 1024 * 1024:
         return f"{size_bytes / 1024:.1f} KiB"
     return f"{size_bytes / (1024 * 1024):.1f} MiB"
+
+
+@cli.command("score")
+@click.option(
+    "--repo",
+    required=True,
+    type=click.Choice(OFFICIAL_HF_REPO_ALIASES, case_sensitive=True),
+    metavar="seed42|seed31415",
+    help="Dataset contract. Only seed31415 supports public local scoring.",
+)
+@click.option("--results-dir", required=True,
+              help="Produce-only run directory from `asibench run`")
+@click.option("--instances-dir", required=True,
+              help="Pulled seed31415 instances containing public reference/")
+@click.option("--tasks-dir", default="tasks/", show_default=True,
+              help="GitHub task catalog containing task_eval.yaml and scorers")
+@click.option("--output", "output_path", default=None,
+              help="Local score report JSON (default: <results-dir>/local_score_seed31415.json)")
+def score_cmd(repo: str, results_dir: str, instances_dir: str,
+              tasks_dir: str, output_path: str | None):
+    """Score seed31415 locally with its public references and GitHub scorers.
+
+    \b
+    seed31415 publishes its GT and supports reproducible local scores. These
+    scores are explicitly non-official and do not alter the source run.
+    seed42 GT stays private; use `asibench submit` for seed42 scoring.
+    """
+    from ai4sci_bench.local_scoring import (
+        LocalScoringError,
+        PRIVATE_SCORING_REPO,
+        score_seed31415_results,
+    )
+
+    if repo == PRIVATE_SCORING_REPO:
+        raise click.ClickException(
+            "seed42 references are private and local scoring is not available. "
+            "Use `asibench submit --results-dir ...` for official scoring."
+        )
+    try:
+        report, destination = score_seed31415_results(
+            results_dir,
+            instances_dir,
+            tasks_dir,
+            output_path=output_path,
+        )
+    except LocalScoringError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo("ASI-Bench public local scoring (seed31415; non-official)")
+    for item in report["results"]:
+        click.echo(
+            f"  {item['instance_id']} {item['prompt_level']}: "
+            f"{item['final_score']:.2f} / {item['max_score']:.2f}"
+        )
+    click.echo(
+        f"Total: {report['total_score']:.2f} / "
+        f"{report['total_max_score']:.2f} "
+        f"({report['mean_percent']:.2f}%)"
+    )
+    click.echo(f"Report: {destination}")
+    if report["scorer_error_count"]:
+        raise click.ClickException(
+            f"{report['scorer_error_count']} instance(s) had internal scorer errors; "
+            f"inspect {destination}."
+        )
 
 
 @cli.command("submit")

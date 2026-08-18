@@ -61,7 +61,9 @@ Regression coverage verifies that the shared seed42 and seed31415
 directories are ignored, grouped `task pull` /
 `task create` CLI commands work, retired top-level aliases stay absent, and a
 task-filtered pull ignores unrelated
-directories retained in a reused Hugging Face snapshot. It also verifies that
+directories retained in a reused Hugging Face snapshot. It also locks the
+reference split: seed31415 preserves public `reference/` directories, while
+seed42 filters them both from downloads and reused caches. It verifies that
 `validate --pre-submit <task-dir>` infers a non-default tasks root when
 `--tasks-dir` is omitted. The CLI contract requires an explicit `--repo seed42`
 or `--repo seed31415`; omitting the option and using retired, demo, or arbitrary
@@ -80,18 +82,20 @@ uv run pytest -q \
   tests/test_public_task_policy.py
 ```
 
-## Retired internal surfaces
+## Public local scoring and retired internal surfaces
 
 The public distribution intentionally excludes the former internal orchestration
 commands (`batch-run`, `eval`, `quickeval`, `fullrun`, `rerun-flagged`, and
-`pipeline`), the local benchmark scoring flags/API, and the old GitHub task-PR
-automation. Benchmark `run` is always produce-only and reports its results as
-awaiting authenticated submission to the ASI-Bench website for scoring. Keep
-that boundary covered with:
+`pipeline`), scoring flags on `run`, private submission scoring modules, and the
+old GitHub task-PR automation. Benchmark `run` remains produce-only. The separate
+`score --repo seed31415` command uses public HF references and GitHub scorers,
+writes a non-official report without rewriting run results, and rejects seed42
+before path access. Keep both boundaries covered with:
 
 ```bash
 uv run pytest -q \
   tests/test_retired_features.py \
+  tests/test_local_scoring.py \
   tests/test_no_local_scoring.py \
   tests/test_review.py \
   tests/test_hf_pull.py::TestUnscoredSubmissionReporting
@@ -128,12 +132,13 @@ uv run pytest -q \
 ## Public task catalog policy
 
 When updating formal-task scorers or published examples, validate both exact
-allowlists and scan the public tree for GT generators, references, private
+allowlists and scan the public GitHub tree for GT generators, references, private
 solver assets, undeclared artifacts, repository identifiers, and secret-like
 content. `config/public_scorers.json` locks all 60 formal scoring contracts, 57
 custom scorers, their single approved helper, and the private source revision.
 Formal `task_eval.yaml` files may contain only scoring/output contracts and must
-never contain `generation`. The separate Example policy locks five full public
+never contain `generation`. seed31415 references live on Hugging Face, not in
+formal GitHub task directories. The separate Example policy locks five full public
 sample tasks to their exact prompt, generator, scorer/configuration, and
 reference-spec file sets. Lifecycle/CLI tests verify that sample tasks remain
 accepted and opt-in runnable:

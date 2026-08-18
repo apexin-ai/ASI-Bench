@@ -46,7 +46,7 @@ HF_TOKEN_ENV_VARS: tuple[str, ...] = (
 )
 
 # Default local dir that `asibench task pull` writes into and `run --instances-dir`
-# reads from. Gitignored (demo repo carries reference answers).
+# reads from. Gitignored (seed31415 and demo carry public reference answers).
 DEFAULT_PULL_DIR = "hf_instances/"
 
 # ── Submission / official scoring ───────────────────────────────────────────

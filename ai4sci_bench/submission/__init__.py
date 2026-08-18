@@ -1,10 +1,10 @@
 """Package a produce-only run into a submission bundle for official scoring.
 
 The public repository exposes task contracts and scoring logic, while prompts
-and inputs are pulled separately. Ground-truth generators, generation settings,
-and reference answers stay in the website scoring service. External runners
-therefore: ``pull`` → ``run`` (produce output) → authenticated ``submit`` →
-confirm the draft on ``https://asibench.apexin.ai/`` for scoring.
+and inputs are pulled separately. Submission bundles never contain references:
+the website joins seed42 outputs to private references. External runners use
+``pull`` → ``run`` → authenticated ``submit`` → browser confirmation for
+seed42. seed31415 may instead use the separate public local-scoring command.
 
 ``build_submission`` collects the public result JSON (identity, resolved params,
 provenance) and the agent's actual output artifacts. It preserves a

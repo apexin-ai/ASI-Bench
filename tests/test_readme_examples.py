@@ -30,6 +30,15 @@ def test_readme_uses_produce_only_flow_for_official_tasks():
     assert "asibench submit --results-dir example_results/" in README
 
 
+def test_docs_distinguish_public_and_private_seed_scoring():
+    for text in (README, GETTING_STARTED):
+        assert "asibench score" in text
+        assert "--repo seed31415" in text
+        assert "seed42" in text
+        assert "asibench submit" in text
+        assert "non-official" in text
+
+
 def test_task_author_docs_keep_local_b1_b4_submission_gate():
     for text in (README, AUTHOR_GUIDE):
         assert "asibench validate --pre-submit" in text

@@ -19,6 +19,11 @@
 - `config/public_examples.json` 明确列出的五个公开示例任务是唯一例外，可保留
   B1–B4 prompts、GT 生成器、评分配置和 reference specs；不得扩展到其他任务。
 - `tasks/_template/` 是框架级任务作者脚手架，不属于正式 benchmark 任务。
+- seed31415 在 Hugging Face 公开 `reference/`，允许用 GitHub 的
+  `task_eval.yaml` / `custom_scorer.py` 通过 `asibench score` 本地评分；
+  本地报告必须标记 non-official 且不得覆盖 produce-only 结果。
+- seed42 不公开 reference/GT；`task pull` 必须在下载和缓存复制两层
+  过滤 `reference/`，`asibench score --repo seed42` 必须拒绝并引导 `submit`。
 - `asibench task submit --task-dir ...` 使用本地 PAT 将 Task 精确同步为 Portal Draft，
   然后打开 owner-only 页面供作者核对文件和字段；CLI 不执行最终 submit。首次登录由
   用户在 Portal Settings 手动创建/复制 PAT，CLI 隐藏输入、在线校验并以 0600 保存；

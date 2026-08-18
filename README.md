@@ -110,52 +110,73 @@ pip install 'asibench[full]'
 
 ### 2. Download a benchmark set
 
-Each fixed-seed dataset contains its own prompts and input data. Choose one seed
-for each run:
+Each fixed-seed dataset contains its own prompts and input data. `seed31415`
+also publishes references for local scoring; `seed42` keeps references private.
+Choose one seed for each run:
 
 ```bash
 mkdir asi-bench-run
 cd asi-bench-run
 
 asibench task pull \
-  --repo seed42 \
-  --output-dir hf_instances_seed42/
+  --repo seed31415 \
+  --output-dir hf_instances_seed31415/
 ```
 
 ### 3. Run an agent
 
 ```bash
 asibench run \
-  --instances-dir hf_instances_seed42/ \
+  --instances-dir hf_instances_seed31415/ \
   --agent-cmd 'python my_agent.py --workspace {workspace}' \
   --sandbox linux_ns \
-  --output-dir out_seed42/
+  --output-dir out_seed31415/
 ```
 
 The command above evaluates all four prompt levels (`b1,b2,b3,b4`). Use
 `--prompt-levels` only when intentionally running a subset.
 
-### 4. Submit for official scoring
+### 4. Score locally or submit
+
+`seed31415` can be scored locally with its public references and the scoring
+contracts in this GitHub checkout:
+
+```bash
+asibench score \
+  --repo seed31415 \
+  --results-dir out_seed31415/ \
+  --instances-dir hf_instances_seed31415/ \
+  --tasks-dir /path/to/ASI-Bench/tasks/
+```
+
+The command writes a separate `local_score_seed31415.json` and never overwrites
+the produce-only result. Local scores are reproducible but non-official.
+
+For `seed42`, repeat the pull and run with separate directories, then submit for
+private-reference scoring:
 
 ```bash
 asibench login
-asibench submit --results-dir out_seed42/
+asibench submit --results-dir out_seed42/ \
+  --benchmark-repo Apexintelligence-AI/ASI-Bench-seed42
 ```
 
 `submit` creates an authenticated draft on the ASI-Bench website. Review the
 completeness summary and confirm the draft to enter the official scoring queue.
-Local benchmark runs do not calculate official scores.
+`asibench score --repo seed42` is rejected before reading local inputs because
+seed42 GT is not public. Local benchmark runs never calculate official scores.
 
 ### Run configuration
 
 | Setting | Behavior |
 |---|---|
-| Dataset seed | `seed42` and `seed31415` are separate runs; use distinct instance and output directories |
+| Dataset seed | `seed31415` supports public local scoring; `seed42` is private-reference and Portal-scored |
 | Downloaded instances | `--instances-dir` is read-only; run-specific framework metadata is written under the output directory |
 | Prompt levels | All four levels run by default; select a subset with `--prompt-levels` |
 | Timeout | `--timeout` defaults to 10,800 seconds and applies uniformly to every task |
 | Produce-only reports | Unscored placeholders are never displayed as `0.0`; all-unscored per-task score tables are omitted |
 | Submission | `submit` uploads a draft by default; `--no-upload` creates a local bundle only |
+| Local scoring | `score --repo seed31415` writes a separate non-official JSON report; seed42 is rejected |
 | Custom agents | `--agent-cmd` supports the `none` and `linux_ns` sandboxes |
 | Built-in agents | Use `--agent` with `--agent-config`; compatible adapters can use Docker-based `os` isolation |
 
@@ -307,10 +328,11 @@ asibench submit --results-dir example_results/
 For official benchmark tasks, GitHub publishes the catalog metadata, scoring
 configuration, and scorer implementations for auditability. Prompts and input
 data come from Hugging Face. Ground-truth generators, generator settings,
-reference specifications, reference answers, and private solver assets remain
-exclusively on the scoring service and are not present in this repository.
-Public scorer code does not make local results official: the hidden references
-needed to execute scoring remain server-side.
+reference specifications, and private solver assets remain exclusively on the
+scoring service and are not present in this repository. seed42 reference
+answers are private. seed31415 reference answers are intentionally public on
+Hugging Face, so its GitHub scorers can produce reproducible local,
+non-official scores.
 
 Five opt-in `sample` tasks are fully public examples. Their B1–B4 prompts,
 ground-truth generators, and scorer implementations or configurations are
@@ -347,9 +369,10 @@ asibench task pull --repo seed31415 --output-dir hf_instances_seed31415/
 `--repo` is required. They share task schemas and declared outputs but contain
 different generated inputs. Matching schemas live in
 `tasks/**/task_meta.yaml`; matching public scoring contracts live in
-`task_eval.yaml` and optional `custom_scorer.py` files. Private manifests,
-ground-truth generators, generator settings, references, and solver assets stay
-on the scoring side.
+`task_eval.yaml` and optional `custom_scorer.py` files. seed31415 additionally
+contains public `reference/` directories. Private manifests, ground-truth
+generators, generator settings, seed42 references, and solver assets stay on
+the scoring side.
 
 The task workflow uses the grouped `asibench task create`, `task pull`, and
 `task submit` commands. See [Contribute a Task](docs/guide/authoring-a-task.md)
@@ -359,11 +382,12 @@ for the complete authoring guide.
 
 - **Public execution framework:** agent adapters, sandboxes, instance loading,
   output collection, and submission packaging are auditable in this repository.
-- **Public scoring logic:** formal tasks publish their scoring configuration and
-  custom scorer code, but never their GT generators or reference answers.
-- **Centralized official scoring:** `asibench login` identifies the submitter,
-  and `asibench submit` sends a draft for confirmation and scoring. Self-reported
-  scores are not accepted.
+- **Public local scoring:** seed31415 publishes references on Hugging Face and
+  uses the GitHub scoring configuration/custom scorers through `asibench score`.
+- **Private official scoring:** seed42 never publishes references;
+  `asibench submit` sends outputs to the website for authenticated scoring.
+- **Score status:** seed31415 local reports are explicitly non-official;
+  self-reported scores are not accepted as leaderboard results.
 
 ## Sandboxing & reproducibility
 

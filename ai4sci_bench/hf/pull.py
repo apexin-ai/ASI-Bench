@@ -6,9 +6,9 @@ Supported layouts on HF::
         prompt_b*.md
         data/...
         task_info.json
-        framework_task_info.json  # optional; private scoring datasets only
+        framework_task_info.json  # optional framework identity snapshot
         instance_meta.json      # demo only (carries params_used)
-        reference/...           # demo only (self-contained)
+        reference/...           # seed31415/demo only (public local scoring)
 
 where ``<instance_id>`` is ``"<domain>.<name>__<params/seed>"`` — the same flat
 directory name the run-side loaders expect.
@@ -18,10 +18,11 @@ directory into ``<output_dir>/<instance_id>/`` so the result can be fed straight
 to ``asibench run --instances-dir`` (whose loader globs
 ``<instances_dir>/<task_id>__*``).
 
-Security: this module only reads instance *data*. It never fetches or writes GT
-generators, generation settings, or reference answers. The HF token is read from
-the ``token`` argument or the ``HF_TOKEN`` / ``HUGGINGFACE_HUB_TOKEN``
-environment variables — never hardcoded. Public repos need no token.
+Security: seed31415 intentionally carries public references for reproducible
+local scoring. seed42 references remain private and are excluded both while
+downloading and while copying cached snapshots. This module never fetches GT
+generators or generation settings. The HF token is read from the ``token``
+argument or environment variables — never hardcoded.
 """
 
 from __future__ import annotations
@@ -128,6 +129,7 @@ def pull_instances(
     from huggingface_hub import snapshot_download
 
     repo_id = resolve_repo_id(repo)
+    include_reference = repo_id != REPO_ALIASES["seed42"]
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -138,6 +140,15 @@ def pull_instances(
             revision=revision,
             token=resolve_token(token),
             allow_patterns=_allow_patterns_for_tasks(tasks),
+            ignore_patterns=(
+                None
+                if include_reference
+                else [
+                    "tasks/*/reference/*",
+                    "tasks/*/reference/**",
+                    "**/reference/**",
+                ]
+            ),
         )
     )
 
@@ -173,7 +184,8 @@ def pull_instances(
             shutil.rmtree(dest)
         # snapshot files are symlinks into the HF cache, so follow them and
         # materialize real files in output_dir.
-        shutil.copytree(inst_dir, dest, symlinks=False)
+        copy_ignore = None if include_reference else shutil.ignore_patterns("reference")
+        shutil.copytree(inst_dir, dest, symlinks=False, ignore=copy_ignore)
         result.instance_ids.append(instance_id)
         seen_tasks.add(task_id)
 

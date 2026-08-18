@@ -3,10 +3,10 @@
 The CLI exposes this as ``asibench task pull``.
 
 GitHub stores catalog metadata and public scoring logic; HuggingFace stores
-instance-level prompts and input data. This package only reads instance data.
-Ground-truth generators, generation settings, reference specifications,
-reference answers, and private solver assets remain on the scoring service and
-are used only after submission to the ASI-Bench website.
+instance-level prompts and input data. seed31415 additionally stores public
+references for local scoring. seed42 references, all ground-truth generators,
+generation settings, reference specifications, and private solver assets remain
+on the scoring service.
 """
 
 from ai4sci_bench.hf.pull import (
