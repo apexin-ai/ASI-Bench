@@ -223,3 +223,21 @@
   verified ten exact files, clicked the browser-only final submit, froze R1,
   and excluded the Portal-only manifest from export.
 - Implementation commit: `9161998`
+
+## Split public seed31415 and private seed42 scoring
+
+- Problem: both fixed seeds were documented and enforced as website-only even
+  though seed31415 intentionally publishes references, while the puller could
+  also copy a cached `reference/` tree for private seed42.
+- Resolution: add a standalone `asibench score --repo seed31415` path that uses
+  GitHub scoring contracts and public HF references without rewriting run
+  results; reject seed42 before path access and filter its references during
+  both snapshot download and cached-tree copying.
+- Prevention: regression tests lock the seed-specific CLI boundary, independent
+  non-official report, source-result immutability, deferred scientific imports,
+  and two-layer seed42 reference exclusion.
+- Verification: a real GPT-5.5 medium seed31415 B1 result passed both hard gates
+  and all four scorers; real HF pulls contained 0 seed42 reference files and 6
+  seed31415 reference files; the full suite passed `2112 passed / 4 skipped /
+  22 deselected`; wheel/sdist strict checks passed and contained no task files.
+- Implementation commit: `573c760`
