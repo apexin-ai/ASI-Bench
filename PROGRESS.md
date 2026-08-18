@@ -241,3 +241,21 @@
   seed31415 reference files; the full suite passed `2112 passed / 4 skipped /
   22 deselected`; wheel/sdist strict checks passed and contained no task files.
 - Implementation commit: `573c760`
+
+## Restrict official result submissions to seed42
+
+- Problem: `asibench submit` documented the private-reference seed42 workflow
+  but accepted seed31415, unknown-seed, and mixed-seed result directories; the
+  optional `--benchmark-repo` value was unvalidated provenance rather than an
+  enforcement boundary.
+- Resolution: validate every result `instance_id` before creating the bundle,
+  reading credentials, or contacting Portal; accept only the seed42 suffix and,
+  when supplied, the seed42 alias or canonical Hugging Face repository ID.
+- Prevention: regression tests cover seed31415, unknown and mixed seeds,
+  repository mismatch, both valid seed42 repository spellings, and failure
+  before authentication or bundle creation.
+- Verification: focused submission/scoring/documentation tests passed `37
+  passed`; the full offline suite passed `2119 passed / 4 skipped / 22
+  deselected`; wheel and sdist passed `twine check --strict` and contained no
+  task or reference files.
+- Implementation commit: `1f3d6bc`
