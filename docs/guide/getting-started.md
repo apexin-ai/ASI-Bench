@@ -117,8 +117,11 @@ Use `asibench submit` for seed42.
 ## Submit for scoring
 
 `asibench submit` builds a bundle of your declared outputs with checksums and
-provenance. By default it uploads the bundle to the ASI-Bench website as a draft and
-prints a **confirm link**:
+provenance. It accepts only seed42 runs: every instance ID is validated before
+bundle creation and authentication, so seed31415, unknown, and mixed-seed
+directories fail locally. A supplied `--benchmark-repo` must also name the
+official seed42 dataset. By default it uploads the valid bundle to the
+ASI-Bench website as a draft and prints a **confirm link**:
 
 1. Open the link in your browser.
 2. Review the completeness / integrity summary the portal parsed from your bundle.

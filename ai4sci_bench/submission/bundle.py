@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import tarfile
 from dataclasses import dataclass, field
@@ -40,8 +41,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ai4sci_bench import __version__ as FRAMEWORK_VERSION
+from ai4sci_bench.branding import HF_REPO_ALIASES
 
 SUBMISSION_SCHEMA_VERSION = 1
+OFFICIAL_SUBMISSION_SEED = "seed42"
+
+_SEED_SUFFIX_RE = re.compile(r"(?:^|_)seed(?P<number>[0-9]+)$")
 
 # Result-directory files that are not per-instance result JSONs.
 _NON_RESULT_JSON = {
@@ -129,6 +134,47 @@ def _find_framework_task_info(results_dir: Path, instance_id: str) -> Path | Non
     return None
 
 
+def _validate_official_submission(
+    records: list[tuple[Path, dict]],
+    benchmark_repo: str | None,
+) -> None:
+    """Reject anything outside the private-reference seed42 contract."""
+    missing_seed: list[str] = []
+    wrong_seed: list[str] = []
+    for _, data in records:
+        instance_id = str(data.get("instance_id") or "")
+        match = _SEED_SUFFIX_RE.search(instance_id)
+        if match is None:
+            missing_seed.append(instance_id or "<missing instance_id>")
+        elif match.group("number") != "42":
+            wrong_seed.append(f"{instance_id} (seed{match.group('number')})")
+
+    if missing_seed:
+        shown = ", ".join(missing_seed[:5])
+        raise ValueError(
+            "Official result submission requires every instance_id to end in an "
+            f"official seed suffix; expected {OFFICIAL_SUBMISSION_SEED}. Invalid: {shown}"
+        )
+    if wrong_seed:
+        shown = ", ".join(wrong_seed[:5])
+        raise ValueError(
+            f"Official result submission only accepts {OFFICIAL_SUBMISSION_SEED}; "
+            f"score seed31415 locally with `asibench score`. Rejected: {shown}"
+        )
+
+    if benchmark_repo is not None:
+        allowed_repos = {
+            OFFICIAL_SUBMISSION_SEED,
+            HF_REPO_ALIASES[OFFICIAL_SUBMISSION_SEED],
+        }
+        if benchmark_repo not in allowed_repos:
+            raise ValueError(
+                "benchmark_repo must identify the official seed42 dataset "
+                f"({HF_REPO_ALIASES[OFFICIAL_SUBMISSION_SEED]}), got "
+                f"{benchmark_repo!r}"
+            )
+
+
 def build_submission(
     results_dir: str | Path,
     *,
@@ -166,6 +212,14 @@ def build_submission(
     if not results_dir.is_dir():
         raise FileNotFoundError(f"Results directory not found: {results_dir}")
 
+    records = list(_iter_result_files(results_dir))
+    if not records:
+        raise ValueError(
+            f"No per-instance result JSON found under {results_dir}. "
+            "Run `asibench run ...` first."
+        )
+    _validate_official_submission(records, benchmark_repo)
+
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     if output_path is not None:
         output_path = Path(output_path)
@@ -185,7 +239,7 @@ def build_submission(
     (bundle_dir / "instances").mkdir(parents=True, exist_ok=True)
 
     entries: list[InstanceEntry] = []
-    for json_file, data in _iter_result_files(results_dir):
+    for json_file, data in records:
         base_name = json_file.stem
         task_dir = json_file.parent
         inst_bundle = bundle_dir / "instances" / base_name
@@ -239,13 +293,6 @@ def build_submission(
             missing_outputs=missing,
             provenance=data.get("provenance", {}),
         ))
-
-    if not entries:
-        shutil.rmtree(bundle_dir, ignore_errors=True)
-        raise ValueError(
-            f"No per-instance result JSON found under {results_dir}. "
-            "Run `asibench run ...` first."
-        )
 
     # Copy run-level metadata verbatim when present.
     run_meta_included = False

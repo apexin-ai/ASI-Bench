@@ -580,7 +580,7 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
                    "Default: <results-dir>/submission_<timestamp>.tar.gz")
 @click.option("--note", default=None, help="Free-form submitter note (team / model)")
 @click.option("--benchmark-repo", default=None,
-              help="HF repo the run was pulled from, recorded for provenance")
+              help="Official seed42 HF repo, recorded for provenance")
 @click.option("--endpoint", default=None,
               help="ASI-Bench website URL (default: $ASIBENCH_SUBMIT_ENDPOINT, then official site)")
 @click.option("--token", default=None,
@@ -591,7 +591,7 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
               help="Keep the bundle directory; skip the .tar.gz (implies --no-upload)")
 def submit(results_dir, output_path, note, benchmark_repo, endpoint, token,
            no_upload, no_archive):
-    """Submit a produce-only run to the ASI-Bench website for official scoring.
+    """Submit a seed42 produce-only run for official website scoring.
 
     \b
     The bundle carries everything the website scoring service needs — each
@@ -599,6 +599,10 @@ def submit(results_dir, output_path, note, benchmark_repo, endpoint, token,
     actual output artifacts. A framework_task_info snapshot is included only
     when present; public fixed-seed runs do not require it. The authenticated
     website submission enters its private scoring workflow.
+
+    \b
+    Only seed42 results are accepted. Score seed31415 locally with
+    `asibench score --repo seed31415`; it cannot enter official submission.
 
     \b
     Examples:

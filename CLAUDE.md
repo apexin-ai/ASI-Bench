@@ -24,6 +24,9 @@
   本地报告必须标记 non-official 且不得覆盖 produce-only 结果。
 - seed42 不公开 reference/GT；`task pull` 必须在下载和缓存复制两层
   过滤 `reference/`，`asibench score --repo seed42` 必须拒绝并引导 `submit`。
+- `asibench submit` 只接受所有 instance ID 均属于 seed42 的结果；必须在打包、
+  鉴权和联网前拒绝 seed31415、未知或混合 seed，且不得信任 `--benchmark-repo`
+  绕过实例级校验。
 - `asibench task submit --task-dir ...` 使用本地 PAT 将 Task 精确同步为 Portal Draft，
   然后打开 owner-only 页面供作者核对文件和字段；CLI 不执行最终 submit。首次登录由
   用户在 Portal Settings 手动创建/复制 PAT，CLI 隐藏输入、在线校验并以 0600 保存；

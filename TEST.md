@@ -117,6 +117,10 @@ uv run pytest -q \
 
 Result submission defaults to `https://asibench.apexin.ai/`, requires a submitter
 identity, uploads a draft, and directs the user to the website confirmation page.
+Before bundle creation or authentication, it requires every result instance to
+carry the seed42 suffix and rejects seed31415, unknown, and mixed-seed runs. A
+provided benchmark repository must be the seed42 alias or canonical repository
+ID; provenance cannot override the instance-level boundary.
 Public fixed-seed submission bundles do not require
 `framework_task_info.json`; bundle tests lock that this framework-only file
 remains optional. The tests mock the upload and never create a real online

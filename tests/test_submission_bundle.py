@@ -8,6 +8,7 @@ against a throwaway local HTTP server so no external domain is contacted.
 
 import gzip
 import json
+import shutil
 import tarfile
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -27,11 +28,12 @@ def _make_results_dir(
     *,
     produce_all: bool = True,
     include_framework_task_info: bool = True,
+    seed: str = "seed42",
+    task_id: str = "physics.demo_task",
 ) -> Path:
     """Create a fake produce-only `run` output dir with one instance."""
     results = root / "out"
-    task_id = "physics.demo_task"
-    instance_id = f"{task_id}__seed42"
+    instance_id = f"{task_id}__{seed}"
     base = f"{instance_id}__b2"
 
     task_dir = results / task_id
@@ -111,6 +113,23 @@ def test_submit_no_upload_builds_local_bundle(tmp_path, monkeypatch):
     assert "Upload skipped (--no-upload)" in result.output
 
 
+def test_submit_rejects_seed31415_before_upload_or_bundle(tmp_path, monkeypatch):
+    results = _make_results_dir(tmp_path, seed="seed31415")
+    monkeypatch.setattr(
+        "ai4sci_bench.auth.resolve_token",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("authentication must not start")
+        ),
+    )
+
+    result = CliRunner().invoke(cli, ["submit", "--results-dir", str(results)])
+
+    assert result.exit_code != 0
+    assert "only accepts seed42" in result.output
+    assert "seed31415" in result.output
+    assert "Bundle built" not in result.output
+
+
 def test_submit_defaults_to_official_site_and_requires_identity(tmp_path, monkeypatch):
     results = _make_results_dir(tmp_path)
     monkeypatch.delenv("ASIBENCH_SUBMIT_ENDPOINT", raising=False)
@@ -165,6 +184,61 @@ def test_submit_uploads_to_official_site_with_authenticated_identity(
 
 
 class TestBuildSubmission:
+    def test_seed31415_results_are_rejected(self, tmp_path):
+        results = _make_results_dir(tmp_path, seed="seed31415")
+
+        with pytest.raises(ValueError, match="only accepts seed42.*seed31415"):
+            build_submission(results)
+
+    def test_unknown_seed_results_are_rejected(self, tmp_path):
+        results = _make_results_dir(tmp_path, seed="adhoc")
+
+        with pytest.raises(ValueError, match="official seed suffix"):
+            build_submission(results)
+
+    def test_mixed_seed_results_are_rejected(self, tmp_path):
+        results = _make_results_dir(tmp_path, seed="seed42")
+        other_root = tmp_path / "other"
+        other = _make_results_dir(
+            other_root,
+            seed="seed31415",
+            task_id="math.other_task",
+        )
+        source = other / "math.other_task"
+        destination = results / "math.other_task"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(source, destination)
+
+        with pytest.raises(ValueError, match="only accepts seed42.*seed31415"):
+            build_submission(results)
+
+    def test_non_seed42_benchmark_repo_is_rejected(self, tmp_path):
+        results = _make_results_dir(tmp_path)
+
+        with pytest.raises(ValueError, match="benchmark_repo.*seed42"):
+            build_submission(
+                results,
+                benchmark_repo="Apexintelligence-AI/ASI-Bench-seed31415",
+            )
+
+    @pytest.mark.parametrize(
+        "benchmark_repo",
+        ["seed42", "Apexintelligence-AI/ASI-Bench-seed42"],
+    )
+    def test_seed42_benchmark_repo_names_are_accepted(
+        self, tmp_path, benchmark_repo,
+    ):
+        results = _make_results_dir(tmp_path)
+
+        bundle = build_submission(
+            results,
+            benchmark_repo=benchmark_repo,
+            archive=False,
+        )
+
+        manifest = json.loads((bundle.bundle_dir / "manifest.json").read_text())
+        assert manifest["benchmark_repo"] == benchmark_repo
+
     def test_public_run_without_private_framework_info_is_bundleable(self, tmp_path):
         results = _make_results_dir(tmp_path, include_framework_task_info=False)
 

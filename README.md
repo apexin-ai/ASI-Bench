@@ -163,6 +163,10 @@ asibench submit --results-dir out_seed42/ \
 
 `submit` creates an authenticated draft on the ASI-Bench website. Review the
 completeness summary and confirm the draft to enter the official scoring queue.
+Only seed42 result directories are accepted: the CLI checks every instance ID
+before building a bundle or authenticating, and rejects seed31415, unknown, or
+mixed-seed results. If `--benchmark-repo` is supplied, it must identify the
+official seed42 dataset.
 `asibench score --repo seed42` is rejected before reading local inputs because
 seed42 GT is not public. Local benchmark runs never calculate official scores.
 
@@ -385,9 +389,11 @@ for the complete authoring guide.
 - **Public local scoring:** seed31415 publishes references on Hugging Face and
   uses the GitHub scoring configuration/custom scorers through `asibench score`.
 - **Private official scoring:** seed42 never publishes references;
-  `asibench submit` sends outputs to the website for authenticated scoring.
+  `asibench submit` accepts only seed42 outputs and sends them to the website
+  for authenticated scoring.
 - **Score status:** seed31415 local reports are explicitly non-official;
-  self-reported scores are not accepted as leaderboard results.
+  its results cannot be packaged by `asibench submit`, and self-reported scores
+  are not accepted as leaderboard results.
 
 ## Sandboxing & reproducibility
 
