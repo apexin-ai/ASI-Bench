@@ -6,6 +6,7 @@
 
 <p>
   <a href="https://asibench.apexin.ai/"><img src="https://img.shields.io/badge/Website-ASI--Bench-2563EB?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white" alt="Website"></a>&nbsp;
+  <a href="https://arxiv.org/abs/2608.17271"><img src="https://img.shields.io/badge/Paper-arXiv%3A2608.17271-B31B1B?style=for-the-badge&amp;logo=arxiv&amp;logoColor=white" alt="Paper on arXiv"></a>&nbsp;
   <a href="https://github.com/apexin-ai/ASI-Bench"><img src="https://img.shields.io/badge/Code-GitHub-181717?style=for-the-badge&amp;logo=github" alt="GitHub"></a>&nbsp;
   <a href="https://github.com/apexin-ai/ASI-Bench/actions/workflows/ci.yml"><img src="https://github.com/apexin-ai/ASI-Bench/actions/workflows/ci.yml/badge.svg" alt="CI"></a>&nbsp;
   <a href="https://huggingface.co/datasets/Apexintelligence-AI/ASI-Bench-seed42"><img src="https://img.shields.io/badge/Data-Hugging%20Face-FFD21E?style=for-the-badge&amp;logo=huggingface&amp;logoColor=black" alt="Hugging Face"></a>&nbsp;
@@ -34,6 +35,12 @@
 </sub></p>
 
 </div>
+
+## Paper
+
+**ASI-Bench: At the Dawn of Artificial Superintelligence**
+
+[arXiv:2608.17271](https://arxiv.org/abs/2608.17271)
 
 <p align="center">
   <img src="docs/assets/asi-bench-overview.png" alt="ASI-Bench overview: 60 project-level tasks across scientific domains and benchmark results across difficulty levels" width="100%">
@@ -81,6 +88,7 @@ more than 31,000 human-hours.
 
 | Resource | Link |
 |---|---|
+| Paper | [ASI-Bench: At the Dawn of Artificial Superintelligence](https://arxiv.org/abs/2608.17271) |
 | Project homepage & documentation | [asibench.apexin.ai](https://asibench.apexin.ai/) |
 | Source code | [apexin-ai/ASI-Bench](https://github.com/apexin-ai/ASI-Bench) |
 | Leaderboard | [View official results](https://asibench.apexin.ai/leaderboard) |

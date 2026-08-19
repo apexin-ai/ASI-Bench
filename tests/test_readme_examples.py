@@ -23,6 +23,12 @@ def test_readme_uses_canonical_cli():
     assert "ai4sci-bench --help" not in README
 
 
+def test_readme_links_the_arxiv_paper():
+    assert "## Paper" in README
+    assert "**ASI-Bench: At the Dawn of Artificial Superintelligence**" in README
+    assert "https://arxiv.org/abs/2608.17271" in README
+
+
 def test_readme_uses_produce_only_flow_for_official_tasks():
     assert "asibench run \\" in README
     assert "--score" not in README

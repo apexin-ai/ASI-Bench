@@ -27,7 +27,7 @@ uv run pytest -q tests/test_ci_workflow.py
 README regression coverage also keeps the agent extension contract explicit:
 new models for a compatible existing harness are configuration changes, while a
 new harness starts through `--agent-cmd` or needs a new adapter for first-class
-integration:
+integration. The same test module locks the published paper title and arXiv URL:
 
 ```bash
 uv run pytest -q \
