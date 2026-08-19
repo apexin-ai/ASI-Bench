@@ -259,3 +259,14 @@
   deselected`; wheel and sdist passed `twine check --strict` and contained no
   task or reference files.
 - Implementation commit: `1f3d6bc`
+
+## Publish the ASI-Bench arXiv link
+
+- Problem: the README carried the paper title but did not link readers to the
+  published manuscript.
+- Resolution: add the arXiv paper as a header badge, a dedicated Paper section,
+  and a Resources-table entry.
+- Prevention: README regression coverage locks the exact title and arXiv URL.
+- Verification: focused documentation/packaging tests passed `12 passed`; the
+  full offline suite passed `2120 passed / 4 skipped / 22 deselected`.
+- Implementation commit: `c7dbf6e`
