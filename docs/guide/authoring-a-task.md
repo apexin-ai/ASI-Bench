@@ -56,10 +56,10 @@ maintainers handle it.
 
 Every task provides four prompt levels of decreasing guidance:
 
-- **B1** — full background and a complete method description.
-- **B2** — the method with some steps left out.
-- **B3** — minimal hints.
-- **B4** — essentially just the goal.
+- **B1** — scientific background, method, equations, and full procedure.
+- **B2** — the intended method and constraints, without the full procedure.
+- **B3** — objective, data, constraints, and required outputs only.
+- **B4** — B3 plus factually correct but non-essential information.
 
 A good task is one where scores drop meaningfully as the prompt gives less away.
 Make sure a hint that appears at B1 does **not** leak into B3/B4.
@@ -103,6 +103,12 @@ In the Portal's **Local testing** step, confirm that you ran the same model and
 settings for B1–B4, select the provider/model version, and enter all four finite
 scores (0–100). `local_testing_done` plus one score for each level is a submission
 requirement, not an optional note.
+
+The difficulty gate applies only to the low-guidance levels: every B3 and B4
+mean score must be strictly below 40. B1 and B2 are required evidence but have
+no score ceiling. The CLI therefore reports them as `RECORDED`, while B3/B4
+receive `PASS` or `FAIL`. You may lower `--threshold` for a stricter check, but
+the CLI rejects values above 40.
 
 !!! tip "Determinism"
     Run `generate_gt.py` twice with the same seed and confirm the outputs are

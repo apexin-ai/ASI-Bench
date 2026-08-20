@@ -288,6 +288,11 @@ asibench task submit --task-dir tasks/physics/my_new_task/
   evidence.
 - Complete `validate --pre-submit` and a same-model `difficulty-check` across
   B1–B4 before submission.
+- Record all four scores on the 0–100 scale.
+  B1 and B2 have no score ceiling; every B3 and B4 mean score must be strictly
+  below 40. The CLI marks
+  B1/B2 as `RECORDED` and gates the verdict only on B3/B4. `--threshold` may
+  make the B3/B4 ceiling stricter but cannot raise it above 40.
 - Use lowercase letters, digits, and underscores for task IDs. The canonical
   form is `domain.task_name`.
 - `asibench task submit --task-dir ...` exact-syncs the local files to an
@@ -301,7 +306,8 @@ asibench task submit --task-dir tasks/physics/my_new_task/
   set `ASIBENCH_SUBMIT_TOKEN`; tokens are intentionally not accepted as command
   arguments so they do not enter shell history.
 - The Portal requires `local_testing_done` and one finite score for each level
-  before freezing a revision.
+  before freezing a revision; the required difficulty verdict follows the
+  B3/B4-below-40 policy above.
 - Authors do not create repository pull requests. Administrators publish
   accepted tasks after review.
 

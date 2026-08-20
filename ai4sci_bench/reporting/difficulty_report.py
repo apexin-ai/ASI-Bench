@@ -16,8 +16,8 @@ A "verdict detail" row describes one (agent, prompt_level) outcome:
 }
 ```
 
-A task PASSES the difficulty check when every row's ``mean_score`` is strictly
-below the threshold.
+A task PASSES the difficulty check when every gated B3/B4 row's ``mean_score``
+is strictly below the threshold. B1/B2 rows are recorded but not gated.
 """
 
 from __future__ import annotations
@@ -35,6 +35,9 @@ import click
 from ai4sci_bench.core.types import EvalResult
 
 
+DIFFICULTY_GATED_LEVELS = frozenset({"b3", "b4"})
+
+
 @dataclass
 class VerdictRow:
     """One agent × prompt-level outcome."""
@@ -47,6 +50,7 @@ class VerdictRow:
     max_score: float
     min_score: float
     instances: int
+    enforced: bool
     passed: bool
 
     def as_dict(self) -> dict[str, Any]:
@@ -59,6 +63,7 @@ class VerdictRow:
             "max_score": round(self.max_score, 2),
             "min_score": round(self.min_score, 2),
             "instances": self.instances,
+            "enforced": self.enforced,
             "passed": self.passed,
         }
 
@@ -135,8 +140,9 @@ def build_report(
             by_level.setdefault(level, []).append(r.final_score)
         for level, scores in sorted(by_level.items()):
             mean_s = statistics.mean(scores)
-            passed = mean_s < threshold
-            if not passed:
+            enforced = level.lower() in DIFFICULTY_GATED_LEVELS
+            passed = not enforced or mean_s < threshold
+            if enforced and not passed:
                 overall = False
             rows.append(VerdictRow(
                 agent=agent_label,
@@ -147,6 +153,7 @@ def build_report(
                 max_score=max(scores),
                 min_score=min(scores),
                 instances=len(scores),
+                enforced=enforced,
                 passed=passed,
             ))
 
@@ -170,7 +177,8 @@ def format_terminal(report: DifficultyReport, *, use_color: bool = True) -> str:
     lines = [
         title_bar,
         f"  Difficulty Check: {report.task_id}",
-        f"  Threshold: < {report.threshold} (tool_mode={report.tool_mode}, sandbox={report.sandbox})",
+        f"  B3/B4 threshold: < {report.threshold} "
+        f"(B1/B2 recorded only; tool_mode={report.tool_mode}, sandbox={report.sandbox})",
         title_bar,
         "",
     ]
@@ -187,7 +195,9 @@ def format_terminal(report: DifficultyReport, *, use_color: bool = True) -> str:
 
     for row in report.rows:
         verdict_word = "PASS" if row.passed else "FAIL"
-        if use_color:
+        if not row.enforced:
+            verdict_word = "RECORDED"
+        elif use_color:
             verdict_word = click.style(verdict_word, fg="green" if row.passed else "red", bold=True)
         lines.append(
             f"  {row.agent.ljust(agent_w)} | {row.prompt_level.upper():<5} | "
@@ -205,7 +215,7 @@ def format_terminal(report: DifficultyReport, *, use_color: bool = True) -> str:
         lines.append("  This task meets the difficulty requirement.")
         lines.append("  Recommended next step: change status to 'test' and submit PR.")
     else:
-        offenders = [r for r in report.rows if not r.passed]
+        offenders = [r for r in report.rows if r.enforced and not r.passed]
         for r in offenders:
             lines.append(
                 f"  {r.agent} scores {r.mean_score:.1f} on {r.prompt_level.upper()} "
@@ -229,21 +239,22 @@ def format_markdown(report: DifficultyReport) -> str:
     lines = [
         f"## {icon} Difficulty Check: `{report.task_id}`",
         "",
-        f"**Verdict:** {verdict} | **Threshold:** `< {report.threshold}` | "
+        f"**Verdict:** {verdict} | **B3/B4 threshold:** `< {report.threshold}` | "
+        "**B1/B2:** recorded only | "
         f"**Tool mode:** `{report.tool_mode}` | **Sandbox:** `{report.sandbox}`",
         "",
         "| Agent | Level | Mean | Max | Min | Verdict |",
         "|-------|-------|------|-----|-----|---------|",
     ]
     for row in report.rows:
-        v = "PASS" if row.passed else "**FAIL**"
+        v = "RECORDED" if not row.enforced else ("PASS" if row.passed else "**FAIL**")
         lines.append(
             f"| `{row.agent}` | {row.prompt_level.upper()} | "
             f"{row.mean_score:.1f} | {row.max_score:.1f} | {row.min_score:.1f} | {v} |"
         )
     lines.append("")
     if not report.overall_pass:
-        lines.append("> One or more (agent, level) combinations scored at or above the threshold.")
+        lines.append("> One or more gated (agent, B3/B4) combinations scored at or above the threshold.")
         lines.append("> Consider hardening the task before promoting to `final`.")
         lines.append("")
     return "\n".join(lines)
@@ -300,7 +311,8 @@ def format_batch_csv(reports: Sequence[DifficultyReport]) -> str:
     """Render batch difficulty-check reports as a CSV string.
 
     One row per (task, agent, prompt_level). `overall_verdict` is the per-task
-    pass/fail; `row_verdict` is the per-row pass/fail.
+    pass/fail; `row_verdict` is pass/fail for gated B3/B4 rows and `recorded`
+    for ungated B1/B2 rows.
     """
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=BATCH_CSV_FIELDS, lineterminator="\n")
@@ -320,7 +332,10 @@ def format_batch_csv(reports: Sequence[DifficultyReport]) -> str:
                 "min_score": round(row.min_score, 2),
                 "instances": row.instances,
                 "threshold": report.threshold,
-                "row_verdict": "pass" if row.passed else "fail",
+                "row_verdict": (
+                    "recorded" if not row.enforced else
+                    ("pass" if row.passed else "fail")
+                ),
                 "overall_verdict": overall,
                 "tool_mode": report.tool_mode,
                 "sandbox": report.sandbox,
@@ -360,7 +375,7 @@ def collect_flagged(reports: Sequence[DifficultyReport]) -> list[FlaggedTaskEntr
     for report in reports:
         if report.overall_pass:
             continue
-        bad_rows = [r for r in report.rows if not r.passed]
+        bad_rows = [r for r in report.rows if r.enforced and not r.passed]
         if not bad_rows:
             continue
         worst = max(bad_rows, key=lambda r: r.mean_score)
@@ -416,7 +431,7 @@ def format_batch_summary(
             flagged_word = click.style(flagged_word, fg="green")
         lines.append(f"  {flagged_word}")
     else:
-        flagged_word = f"{n_flagged} flagged (any score >= {threshold}):"
+        flagged_word = f"{n_flagged} flagged (any B3/B4 score >= {threshold}):"
         if use_color:
             flagged_word = click.style(flagged_word, fg="red", bold=True)
         lines.append(f"  {flagged_word}")

@@ -31,14 +31,14 @@ local_test_results: []
 #     results:
 #       - {prompt_level: b1, score: 90}
 #       - {prompt_level: b2, score: 75}
-#       - {prompt_level: b3, score: 45}
-#       - {prompt_level: b4, score: 40}
+#       - {prompt_level: b3, score: 35}
+#       - {prompt_level: b4, score: 30}
 #     runtime_evidence:
 #       generation_seconds: 1.2
 #       agent_execution_seconds: 30.0
 #       scoring_seconds: 0.8
 #       environment: "Ubuntu 24.04, Python 3.12"
 #     scorer_replay:
-#       first_score: 45
-#       second_score: 45
+#       first_score: 35
+#       second_score: 35
 #       tolerance: 0

@@ -31,6 +31,9 @@
   然后打开 owner-only 页面供作者核对文件和字段；CLI 不执行最终 submit。首次登录由
   用户在 Portal Settings 手动创建/复制 PAT，CLI 隐藏输入、在线校验并以 0600 保存；
   CI 使用 `ASIBENCH_SUBMIT_TOKEN`，不得提供 token 命令行参数。
+- Task 贡献的 `difficulty-check` 必须记录 B1–B4，但只以 B3/B4 平均分严格
+  小于 40 为通过条件；B1/B2 不限分且报告为 `RECORDED`，CLI 不得允许把
+  B3/B4 阈值调高到 40 以上，catalog flagged 也只检查 B3/B4。
 - `task_submission.yaml` 保存 Portal-only 作者证据，随 Revision 冻结供审核，但不得
   导出进 benchmark Task 仓库；正式任务目录仍不得公开该文件，只有 `_template` 可包含。
 - `--instances-dir` 是只读输入；运行专属的 `framework_task_info.json` 必须写入

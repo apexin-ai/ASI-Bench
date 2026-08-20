@@ -152,10 +152,10 @@ def get_all_task_scores(scores_dir: Path | str) -> dict[str, dict]:
 def find_flagged_tasks(
     scores_dir: Path | str,
     tasks_dir: Path | str | None = None,
-    threshold: int = 50,
+    threshold: int = 40,
     only_final: bool = True,
 ) -> list[dict[str, Any]]:
-    """Identify tasks whose latest evaluation has any score >= threshold.
+    """Identify tasks whose latest evaluation has any B3/B4 score >= threshold.
 
     When ``only_final`` is True and ``tasks_dir`` is provided, only tasks whose
     ``task.yaml`` declares ``status: final`` are considered. Tasks without a
@@ -177,6 +177,8 @@ def find_flagged_tasks(
         for agent_block in latest.get("results", []):
             agent_label = agent_block.get("agent_config", {}).get("model") or agent_block.get("agent", "unknown")
             for level, scores in (agent_block.get("scores") or {}).items():
+                if str(level).lower() not in {"b3", "b4"}:
+                    continue
                 mean = _coerce_float(scores.get("mean"))
                 if mean is None:
                     continue

@@ -50,6 +50,9 @@ def test_task_author_docs_keep_local_b1_b4_submission_gate():
         assert "asibench validate --pre-submit" in text
         assert "asibench difficulty-check --task" in text
         assert "B1" in text and "B2" in text and "B3" in text and "B4" in text
+        assert re.search(r"strictly\s+below\s+40", text)
+        assert "B1" in text and "B2" in text
+        assert re.search(r"no\s+score\s+ceiling", text)
     assert "not a hard gate" not in README
     assert "do not gate creation of a draft" not in AUTHOR_GUIDE
     assert "requirement, not an optional note" in AUTHOR_GUIDE

@@ -3475,8 +3475,9 @@ def _parse_agent_config(raw: str) -> dict:
               help="Agent config JSON, one per --agent (matched by position).")
 @click.option("--prompt-levels", default="b1,b2,b3,b4", show_default=True,
               help="Prompt levels to evaluate.")
-@click.option("--threshold", default=50, show_default=True, type=int,
-              help="Difficulty threshold (max score an LLM should get).")
+@click.option("--threshold", default=40, show_default=True,
+              type=click.IntRange(min=1, max=40),
+              help="B3/B4 difficulty threshold (maximum 40); B1/B2 are recorded but not limited.")
 @click.option("--instances-per-task", default=1, type=int, show_default=True)
 @click.option("--seed", default=42, type=int, show_default=True)
 @click.option("--sandbox", default="none", show_default=True,
@@ -3508,8 +3509,9 @@ def difficulty_check(
 ):
     """Check whether a task is hard enough for the benchmark.
 
-    Runs the specified agent(s) without external tools, compares mean scores
-    against the threshold, and prints a pass/fail verdict.
+    Runs the specified agent(s) without external tools, records all requested
+    levels, compares B3/B4 mean scores against the threshold, and prints a
+    pass/fail verdict. B1/B2 scores do not affect the verdict.
 
     Exit codes:
       0 — all tasks passed (hard enough)
@@ -3519,7 +3521,7 @@ def difficulty_check(
           scored, persisted, or reported — the evaluation effectively did
           not happen, so no verdict is implied.
 
-    A task PASSES if EVERY (agent, prompt_level) combination scores strictly
+    A task PASSES if EVERY gated (agent, B3/B4) combination scores strictly
     below the threshold. With --status, runs the check against every task of
     the given status and prints a summary table.
     """
@@ -3992,9 +3994,9 @@ def _format_gaps(
 @click.option("--gaps", is_flag=True, default=False,
               help="List domains with too few final tasks.")
 @click.option("--flagged", is_flag=True, default=False,
-              help="List final tasks whose latest score >= threshold.")
-@click.option("--threshold", default=50, show_default=True, type=int,
-              help="Score threshold for --flagged.")
+              help="List final tasks whose latest B3/B4 score >= threshold.")
+@click.option("--threshold", default=40, show_default=True, type=int,
+              help="B3/B4 score threshold for --flagged.")
 @click.option("--min-final", default=3, show_default=True, type=int,
               help="Minimum final tasks per domain for --gaps; below counts as a gap.")
 @click.option("--include-abandoned", is_flag=True, default=False,
@@ -4024,7 +4026,7 @@ def catalog(
       --summary               Domain coverage table.
       --task <id> [--scores]  Task details with optional difficulty history.
       --gaps                  Domains with fewer than --min-final tasks.
-      --flagged               Final tasks scoring >= --threshold on latest check.
+      --flagged               Final tasks with B3/B4 >= --threshold on latest check.
     """
     from ai4sci_bench.core.task import TaskLoader
     from ai4sci_bench.tracking.difficulty_scores import (

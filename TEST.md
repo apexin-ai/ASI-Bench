@@ -54,6 +54,18 @@ uv run pytest -q tests/test_cli_task_submit.py tests/test_token_login.py \
   tests/test_device_login_cli.py tests/test_endpoints.py
 ```
 
+## Task difficulty gate
+
+Task-author difficulty checks run and record B1–B4, but only B3/B4 control the
+verdict. Their mean scores must be strictly below the default ceiling of 40;
+B1/B2 are serialized as ungated `RECORDED` rows. The CLI rejects a threshold
+above 40, and catalog flagging likewise ignores B1/B2. Cover the terminal,
+JSON, Markdown, CSV, persistence, and catalog contracts with:
+
+```bash
+uv run pytest -q tests/test_difficulty_check.py tests/test_static_validator.py
+```
+
 ## Pull filtering and custom pre-submit paths
 
 Regression coverage verifies that the shared seed42 and seed31415

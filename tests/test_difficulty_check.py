@@ -183,6 +183,27 @@ class TestGetAllTaskScores:
 
 
 class TestFindFlaggedTasks:
+    def test_ignores_high_b1_and_b2_scores(self, tmp_path):
+        scores_dir = tmp_path / "scores"
+        append_evaluation(
+            scores_dir, "physics.guided", "1.0",
+            results=[{
+                "agent": "direct_llm",
+                "scores": {
+                    "b1": {"mean": 100.0},
+                    "b2": {"mean": 100.0},
+                    "b3": {"mean": 39.0},
+                    "b4": {"mean": 0.0},
+                },
+            }],
+            threshold=40,
+            verdict="pass",
+        )
+
+        assert find_flagged_tasks(
+            scores_dir, threshold=40, only_final=False,
+        ) == []
+
     def test_filters_below_threshold(self, tmp_path):
         scores_dir = tmp_path / "scores"
         tasks_dir = tmp_path / "tasks"
@@ -243,16 +264,33 @@ class TestBuildReport:
 
     def test_one_row_failing(self):
         results = [
-            _make_result(task_id="physics.foo", level="b1", score=62.0),
-            _make_result(task_id="physics.foo", level="b3", score=12.0),
+            _make_result(task_id="physics.foo", level="b1", score=100.0),
+            _make_result(task_id="physics.foo", level="b3", score=62.0),
         ]
         grouped = [("claude-opus-4-6", "direct_llm", {}, results)]
         report = build_report("physics.foo", grouped, threshold=50)
         assert report.overall_pass is False
         b1 = next(r for r in report.rows if r.prompt_level == "b1")
-        assert b1.passed is False
+        assert b1.enforced is False
+        assert b1.passed is True
         b3 = next(r for r in report.rows if r.prompt_level == "b3")
-        assert b3.passed is True
+        assert b3.enforced is True
+        assert b3.passed is False
+
+    def test_only_b3_and_b4_are_gated(self):
+        results = [
+            _make_result(task_id="physics.foo", level="b1", score=100.0),
+            _make_result(task_id="physics.foo", level="b2", score=100.0),
+            _make_result(task_id="physics.foo", level="b3", score=39.9),
+            _make_result(task_id="physics.foo", level="b4", score=0.0),
+        ]
+        report = build_report(
+            "physics.foo", [("model", "direct_llm", {}, results)], threshold=40,
+        )
+
+        assert report.overall_pass is True
+        assert {r.prompt_level for r in report.rows if r.enforced} == {"b3", "b4"}
+        assert all(r.passed for r in report.rows)
 
     def test_mean_max_min_aggregation(self):
         results = [
@@ -272,7 +310,7 @@ class TestBuildReport:
 
     def test_threshold_is_strict(self):
         """Equal to threshold should FAIL (not pass)."""
-        results = [_make_result(task_id="x.y", level="b1", score=50.0)]
+        results = [_make_result(task_id="x.y", level="b3", score=50.0)]
         report = build_report("x.y", [("m", "direct_llm", {}, results)], threshold=50)
         assert report.overall_pass is False
         assert report.rows[0].passed is False
@@ -304,7 +342,7 @@ class TestFormatTerminal:
         assert "Recommended next step" in out
 
     def test_failing_report_contains_suggestions(self):
-        results = [_make_result(task_id="x.y", level="b1", score=80.0)]
+        results = [_make_result(task_id="x.y", level="b4", score=80.0)]
         report = build_report("x.y", [("m1", "direct_llm", {}, results)], threshold=50)
         out = format_terminal(report, use_color=False)
         assert "FAIL" in out
@@ -325,7 +363,7 @@ class TestFormatMarkdown:
         assert "PASS" in md
 
     def test_failing_shows_bold_fail(self):
-        results = [_make_result(task_id="x.y", level="b1", score=80.0)]
+        results = [_make_result(task_id="x.y", level="b3", score=80.0)]
         report = build_report("x.y", [("opus", "direct_llm", {}, results)], threshold=50)
         md = format_markdown(report)
         assert "**FAIL**" in md
@@ -401,6 +439,16 @@ class TestDifficultyCheckCLI:
         assert "--threshold" in result.output
         assert "--status" in result.output
         assert "b1,b2,b3,b4" in result.output
+        assert "B3/B4" in result.output
+        assert "40" in result.output
+
+    def test_threshold_above_40_is_rejected(self):
+        result = CliRunner().invoke(cli, [
+            "difficulty-check", "--task", "x.y", "--threshold", "41",
+        ])
+
+        assert result.exit_code != 0
+        assert "not in the range" in result.output
 
     def test_requires_task_or_status(self, tmp_path):
         runner = CliRunner()
@@ -444,7 +492,9 @@ class TestDifficultyCheckCLI:
         scores_dir = tmp_path / "scores"
         _write_task_yaml(tasks_dir, "physics.demo", status="in_development", version="2.3")
 
-        stub_cls = _stub_orchestrator_run({"b1": 30.0, "b3": 10.0})
+        stub_cls = _stub_orchestrator_run({
+            "b1": 100.0, "b2": 100.0, "b3": 39.0, "b4": 39.0,
+        })
 
         runner = CliRunner()
         with patch("ai4sci_bench.cli.BenchmarkOrchestrator", stub_cls, create=True):
@@ -460,8 +510,6 @@ class TestDifficultyCheckCLI:
                 "--task", "physics.demo",
                 "--agent", "direct_llm",
                 "--agent-config", '{"model":"claude-opus-4-6"}',
-                "--prompt-levels", "b1,b3",
-                "--threshold", "50",
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-color",
@@ -469,6 +517,8 @@ class TestDifficultyCheckCLI:
 
         assert result.exit_code == 0, result.output
         assert "PASS" in result.output
+        assert "RECORDED" in result.output
+        assert "B3/B4 threshold: < 40" in result.output
         assert "physics.demo" in result.output
 
         score_path = scores_dir / "physics.demo.json"
@@ -491,7 +541,7 @@ class TestDifficultyCheckCLI:
                 "difficulty-check",
                 "--task", "physics.easy",
                 "--prompt-levels", "b1,b3",
-                "--threshold", "50",
+                "--threshold", "40",
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-color",
@@ -1142,11 +1192,11 @@ class TestBatchCSVWriter:
     def test_csv_marks_per_row_and_overall_verdict(self):
         from ai4sci_bench.reporting.difficulty_report import format_batch_csv
 
-        # one row below threshold, one row above → overall fail
+        # B1 is recorded even above threshold; only B3 controls overall verdict.
         report = _report_for("phys.mixed", {"b1": 80.0, "b3": 10.0}, threshold=50)
         csv_text = format_batch_csv([report])
-        # Both data rows mention the same overall fail verdict
-        assert csv_text.count(",fail\n") + csv_text.count(",fail") >= 2
+        assert ",recorded,pass," in csv_text
+        assert ",pass,pass," in csv_text
 
     def test_csv_handles_multiple_tasks(self):
         from ai4sci_bench.reporting.difficulty_report import format_batch_csv
@@ -1187,7 +1237,7 @@ class TestCollectFlaggedAndBatchSummary:
     def test_collect_flagged_picks_worst_row(self):
         from ai4sci_bench.reporting.difficulty_report import collect_flagged
 
-        # Two failing rows on one task — the higher mean wins.
+        # B1 is ungated, so the failing B3 row is the flagged one.
         results = [
             _result_for("phys.bad", "b1", 80.0),
             _result_for("phys.bad", "b3", 60.0),
@@ -1200,8 +1250,8 @@ class TestCollectFlaggedAndBatchSummary:
         entries = collect_flagged([report])
         assert len(entries) == 1
         assert entries[0].task_id == "phys.bad"
-        assert entries[0].worst_mean == 80.0
-        assert entries[0].worst_level == "b1"
+        assert entries[0].worst_mean == 60.0
+        assert entries[0].worst_level == "b3"
 
     def test_collect_flagged_skips_passing_tasks(self):
         from ai4sci_bench.reporting.difficulty_report import collect_flagged
@@ -1322,7 +1372,7 @@ class TestDifficultyCheckCSVCLI:
         scores_dir = tmp_path / "scores"
         _write_task_yaml(tasks_dir, "physics.fail", status="final")
         _write_task_yaml(tasks_dir, "physics.alsofail", status="final")
-        # Use a stub that scores high → both fail at threshold=50
+        # Use a stub that scores high → both fail at threshold=40
         stub_cls = _stub_orchestrator_run({"b3": 80.0})
 
         runner = CliRunner()
@@ -1331,7 +1381,7 @@ class TestDifficultyCheckCSVCLI:
                 "difficulty-check",
                 "--status", "final",
                 "--prompt-levels", "b3",
-                "--threshold", "50",
+                "--threshold", "40",
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-color",
