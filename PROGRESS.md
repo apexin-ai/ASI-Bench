@@ -270,3 +270,20 @@
 - Verification: focused documentation/packaging tests passed `12 passed`; the
   full offline suite passed `2120 passed / 4 skipped / 22 deselected`.
 - Implementation commit: `c7dbf6e`
+
+## Gate contributed-task difficulty on B3 and B4
+
+- Problem: the difficulty check applied one default ceiling of 50 to every
+  prompt level, although task acceptance should constrain only the low-guidance
+  B3/B4 conditions and leave B1/B2 unrestricted.
+- Resolution: record B1/B2 as `RECORDED`, gate only B3/B4 at a strict mean-score
+  ceiling below 40, reject CLI thresholds above 40, and restrict catalog
+  flagging to B3/B4.
+- Prevention: terminal, JSON, Markdown, CSV, CLI, persistence, catalog, template,
+  and documentation tests cover 100-point B1/B2 acceptance, 39.9-point B3/B4
+  acceptance, the strict 40-point failure boundary, and threshold bypass
+  rejection.
+- Verification: focused policy tests passed `173 passed`; the full offline suite
+  passed `2123 passed / 4 skipped / 22 deselected`; wheel and sdist passed
+  `twine check --strict` and contained no task or reference files.
+- Implementation commit: `d5bd2d6`
