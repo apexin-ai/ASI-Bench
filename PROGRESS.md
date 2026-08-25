@@ -287,3 +287,19 @@
   passed `2123 passed / 4 skipped / 22 deselected`; wheel and sdist passed
   `twine check --strict` and contained no task or reference files.
 - Implementation commit: `d5bd2d6`
+
+## Release evaluator-only scorer runtimes in asibench 0.1.4
+
+- Problem: `asibench==0.1.3` and the corresponding public task tree could not
+  import six advertised seed31415 scoring contracts because their sandbox or
+  task runtime dependencies were absent from the published artifacts.
+- Resolution: release the public submission sandbox and four evaluator-only
+  task runtimes introduced in `f77c6929`, then bump the package and runtime
+  versions from 0.1.3 to 0.1.4 without changing dependency pins.
+- Prevention: public policy tests import all six scorers using only public
+  files, enforce exact helper allowlists, reject `generate_gt` imports, and scan
+  evaluator runtimes for generator and hidden-reference symbols.
+- Verification: the locked Python 3.11 offline suite passed `2128 passed / 2
+  skipped / 22 deselected`; `asibench-0.1.4` wheel and sdist both passed
+  `twine check --strict`.
+- Release preparation commit: `5b172fff`
