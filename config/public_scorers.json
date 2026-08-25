@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source_repository": "apexin-ai/Agent-AI4Sci-Bench",
-  "source_revision": "f7d41c97c968be9fb4ecc3866cb7d11235fb9dc8",
+  "source_revision": "c1f78767c29664de9967b46d32eb4a7733c9050c",
   "formal_tasks": [
     "astronomy.nbody_close_encounters",
     "astronomy.planet_activity_sep",
@@ -126,6 +126,18 @@
   "task_helper_files": {
     "computer_science.euclidean_tsp_tour_optimization": [
       "tsp_common.py"
+    ],
+    "math.levin_context_grid_search": [
+      "lts_eval_runtime.py"
+    ],
+    "math.mpsc_safety_filter": [
+      "mpsc_eval_runtime.py"
+    ],
+    "math.ucb_q_learning_regret": [
+      "ucb_eval_runtime.py"
+    ],
+    "electrical_engineering.cmos_opamp_design": [
+      "cmos_eval_runtime.py"
     ]
   },
   "excluded_private_material": [

@@ -20,7 +20,7 @@ sys.dont_write_bytecode = True
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from mpsc_task_core import (  # noqa: E402
+from mpsc_eval_runtime import (  # noqa: E402
     activate_declared_runtime_dependencies,
     certificate_error,
     call_filter,

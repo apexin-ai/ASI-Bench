@@ -352,6 +352,12 @@ answers are private. seed31415 reference answers are intentionally public on
 Hugging Face, so its GitHub scorers can produce reproducible local,
 non-official scores.
 
+Public scorer code only consumes pre-generated instance/reference bundles. A
+formal task may therefore include an evaluator-only `*_eval_runtime.py` helper,
+but never a GT generator, reference builder, or seed-to-instance entry point.
+The public `submission_sandbox.py` is execution isolation infrastructure and
+contains neither task answers nor generation logic.
+
 Five opt-in `sample` tasks are fully public examples. Their B1–B4 prompts,
 ground-truth generators, and scorer implementations or configurations are
 available under `tasks/`:

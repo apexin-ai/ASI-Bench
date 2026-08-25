@@ -11,6 +11,7 @@ website scoring.
 | Framework — runner, sandboxes, output collection and submission | **Public** | The machinery for executing agents and packaging their outputs. |
 | Task **metadata + prompts + input data** | **Public** | What an agent needs to attempt a task. |
 | Task **scoring/output contract + custom scorers** | **Public** | Auditable gates, weights, tolerances, and scorer implementation, without generation or reference content. |
+| Evaluator-only runtime helpers | **Public when allowlisted** | Shared parsing, simulation, or metric code needed by a scorer; no GT generation, reference builder, hidden reference policy, or seed-to-instance API. |
 | seed31415 reference answers | **Public on Hugging Face** | Reproducible local scoring with GitHub scorers. |
 | seed42 reference answers, all `generate_gt.py`, generation settings, reference specs, private solver assets | **Private** | Website-only answer material and everything needed to create it. |
 
@@ -40,6 +41,13 @@ fully reproducible. seed42 is the protected evaluation split: public scoring
 logic remains auditable, but references are only available to the website.
 Only seed42 can enter `asibench submit`; seed31415 remains local and
 non-official. Neither split publishes GT generators or private solver assets.
+
+The runtime boundary is data-driven: a public scorer receives an already
+materialized instance and reference directory. It cannot accept a seed or call
+`generate_gt.py` to reconstruct either one. Tasks whose original implementation
+mixed evaluation and reference construction expose only the extracted
+evaluator-only runtime. Generic submission sandboxing is also public because it
+isolates submitted code without containing task answers.
 
 ## Reproducibility
 

@@ -1063,7 +1063,7 @@ def _grounded_metric_trust_report(
     trust_cfg: Dict[str, Any],
     subscore_threshold: float,
 ) -> Dict[str, Any]:
-    from tasks.electrical_engineering.cmos_opamp_design import generate_gt as gt
+    from tasks.electrical_engineering.cmos_opamp_design import cmos_eval_runtime as gt
 
     params = _load_json(ref_dir.parent / "data" / "parameters.json") or {}
     results = _load_json(pred_dir / "results.json") or {}

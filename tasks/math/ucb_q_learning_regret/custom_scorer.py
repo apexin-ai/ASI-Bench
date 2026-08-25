@@ -25,7 +25,7 @@ sys.dont_write_bytecode = True
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from generate_gt import (
+from ucb_eval_runtime import (
     evaluate_factory,
     import_submission,
     load_hidden_suite,

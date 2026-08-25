@@ -16,6 +16,10 @@
 - `config/public_scorers.json` 是正式任务公开评分器的精确 allowlist 和来源
   revision；正式任务严禁出现 `generate_gt.py`、`precompute_gt.py`、
   `reference_specs.md`、reference/ground-truth 目录或 `private_assets` / `reference_solver`。
+- 公开 scorer 只消费预生成的 instance/reference bundle，不得接受 seed
+  或重建 GT。`config/public_scorers.json` 可精确列出通用 helper 和
+  evaluator-only `*_eval_runtime.py`；这些 runtime 不得包含 generator、
+  reference builder 或 hidden reference policy。
 - `config/public_examples.json` 明确列出的五个公开示例任务是唯一例外，可保留
   B1–B4 prompts、GT 生成器、评分配置和 reference specs；不得扩展到其他任务。
 - `tasks/_template/` 是框架级任务作者脚手架，不属于正式 benchmark 任务。

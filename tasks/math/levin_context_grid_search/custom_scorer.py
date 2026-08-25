@@ -14,7 +14,13 @@ sys.dont_write_bytecode = True
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from lts_task_core import import_submission, levin_tree_search, make_policy_from_module, read_json, replay_solution
+from lts_eval_runtime import (
+    import_submission,
+    levin_tree_search,
+    make_policy_from_module,
+    read_json,
+    replay_solution,
+)
 
 try:
     from ai4sci_bench.core.scorer import Scorer, register_scorer

@@ -1,8 +1,10 @@
 """Public Task files must follow the scorer and Example disclosure policies."""
 
+import ast
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 
 import yaml
@@ -103,7 +105,7 @@ EXPECTED_SAMPLE_TASKS = {
     "robotics.minimum_snap_trajectory_conditioning",
 }
 
-EXPECTED_SCORER_SOURCE_REVISION = "f7d41c97c968be9fb4ecc3866cb7d11235fb9dc8"
+EXPECTED_SCORER_SOURCE_REVISION = "c1f78767c29664de9967b46d32eb4a7733c9050c"
 
 SENSITIVE_CONTENT_PATTERNS = {
     "private key": re.compile(
@@ -327,7 +329,11 @@ def test_formal_scorer_allowlist_is_exact_and_references_existing_files():
     ) == 57
     assert set(policy["tasks_with_custom_scorers"]) <= final_ids
     assert policy["task_helper_files"] == {
-        "computer_science.euclidean_tsp_tour_optimization": ["tsp_common.py"]
+        "computer_science.euclidean_tsp_tour_optimization": ["tsp_common.py"],
+        "electrical_engineering.cmos_opamp_design": ["cmos_eval_runtime.py"],
+        "math.levin_context_grid_search": ["lts_eval_runtime.py"],
+        "math.mpsc_safety_filter": ["mpsc_eval_runtime.py"],
+        "math.ucb_q_learning_regret": ["ucb_eval_runtime.py"],
     }
 
     for relative in _scorer_public_paths():
@@ -367,6 +373,75 @@ def test_formal_custom_scorers_are_python_and_no_gt_files_are_published():
             ):
                 violations.append(f"{task_id}: {relative}")
     assert violations == []
+
+
+def test_public_evaluator_runtimes_do_not_contain_generation_or_reference_oracles():
+    forbidden_symbols = {
+        "cmos_eval_runtime.py": {
+            "design_reference_opamp", "generate", "write_opamp_netlist",
+        },
+        "lts_eval_runtime.py": {
+            "ReferenceContextPolicy", "markers_for_context_action",
+            "target_action_for_context",
+        },
+        "mpsc_eval_runtime.py": {
+            "design_reference_certificate", "reference_filter_action",
+            "simulate_reference_case",
+        },
+        "ucb_eval_runtime.py": {
+            "build_cases", "evaluate_reference", "generate",
+        },
+    }
+    policy = _load_scorer_policy()
+    for task_id, helpers in policy["task_helper_files"].items():
+        for helper in helpers:
+            forbidden = forbidden_symbols.get(helper)
+            if forbidden is None:
+                continue
+            text = (_task_dir(task_id) / helper).read_text(encoding="utf-8")
+            names = {
+                node.name
+                for node in ast.walk(ast.parse(text))
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            }
+            assert forbidden.isdisjoint(names), (task_id, forbidden & names)
+
+
+def test_public_scorers_never_import_generate_gt():
+    for task_id in _load_scorer_policy()["tasks_with_custom_scorers"]:
+        text = (_task_dir(task_id) / "custom_scorer.py").read_text(encoding="utf-8")
+        assert "from generate_gt import" not in text, task_id
+        assert "import generate_gt" not in text, task_id
+
+
+def test_affected_public_custom_scorers_import_with_only_public_files():
+    task_ids = [
+        "computer_science.euclidean_tsp_tour_optimization",
+        "computer_science.max3sat_assignment_optimization",
+        "math.levin_context_grid_search",
+        "math.mpsc_safety_filter",
+        "math.ucb_q_learning_regret",
+        "electrical_engineering.cmos_opamp_design",
+    ]
+    script = """
+import importlib.util
+import sys
+from pathlib import Path
+path = Path(sys.argv[1]).resolve()
+sys.path.insert(0, str(path.parent))
+spec = importlib.util.spec_from_file_location("public_custom_scorer", path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+"""
+    for task_id in task_ids:
+        scorer = _task_dir(task_id) / "custom_scorer.py"
+        subprocess.run(
+            [sys.executable, "-c", script, str(scorer)],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 def test_seed42_restored_tasks_have_public_metadata_and_prompt_mapping():

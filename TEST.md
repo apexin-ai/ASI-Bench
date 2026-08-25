@@ -151,7 +151,7 @@ When updating formal-task scorers or published examples, validate both exact
 allowlists and scan the public GitHub tree for GT generators, references, private
 solver assets, undeclared artifacts, repository identifiers, and secret-like
 content. `config/public_scorers.json` locks all 60 formal scoring contracts, 57
-custom scorers, their single approved helper, and the private source revision.
+custom scorers, their exact per-task helper allowlists, and the private source revision.
 Formal `task_eval.yaml` files may contain only scoring/output contracts and must
 never contain `generation`. seed31415 references live on Hugging Face, not in
 formal GitHub task directories. The separate Example policy locks five full public
@@ -166,6 +166,12 @@ uv run pytest -q \
   tests/test_cli.py::TestCLIList \
   tests/test_issue33_task_loader_robustness.py::TestIssue33DiscoverTasksRobustness
 ```
+
+The same policy test imports TSP, Max-3-SAT, Levin, MPSC, UCB, and CMOS scorers
+in subprocesses containing only public files. It also scans evaluator runtimes
+for generator/reference-builder symbols and forbids scorers from importing
+`generate_gt`, so seed31415 remains locally scoreable without exposing seed42
+GT through the public scorer API.
 
 ## PyPI packaging
 
