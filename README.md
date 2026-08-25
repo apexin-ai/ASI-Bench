@@ -9,7 +9,7 @@
   <a href="https://arxiv.org/abs/2608.17271"><img src="https://img.shields.io/badge/Paper-arXiv%3A2608.17271-B31B1B?style=for-the-badge&amp;logo=arxiv&amp;logoColor=white" alt="Paper on arXiv"></a>&nbsp;
   <a href="https://github.com/apexin-ai/ASI-Bench"><img src="https://img.shields.io/badge/Code-GitHub-181717?style=for-the-badge&amp;logo=github" alt="GitHub"></a>&nbsp;
   <a href="https://github.com/apexin-ai/ASI-Bench/actions/workflows/ci.yml"><img src="https://github.com/apexin-ai/ASI-Bench/actions/workflows/ci.yml/badge.svg" alt="CI"></a>&nbsp;
-  <a href="https://huggingface.co/datasets/Apexintelligence-AI/ASI-Bench-seed42"><img src="https://img.shields.io/badge/Data-Hugging%20Face-FFD21E?style=for-the-badge&amp;logo=huggingface&amp;logoColor=black" alt="Hugging Face"></a>&nbsp;
+  <a href="https://huggingface.co/datasets/Apexintelligence-AI/ASI-Bench-seed31415"><img src="https://img.shields.io/badge/Data-Hugging%20Face-FFD21E?style=for-the-badge&amp;logo=huggingface&amp;logoColor=black" alt="Hugging Face"></a>&nbsp;
   <a href="https://asibench.apexin.ai/leaderboard"><img src="https://img.shields.io/badge/Leaderboard-View%20Results-7C3AED?style=for-the-badge&amp;logo=googleanalytics&amp;logoColor=white" alt="Leaderboard"></a>
 </p>
 
