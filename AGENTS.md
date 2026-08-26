@@ -44,6 +44,11 @@
   output 目录，不得新增或覆盖 Hugging Face 拉取目录中的文件。
 - produce-only 的数值零只是序列化占位符；报告不得将未评分结果显示为
   `0.0`，全未评分时应隐藏 per-task 分数表。
+- BenchFlow 适配只接受已物化的 seed31415 manifest：必须校验
+  `seed: 31415`、`instance_id` 后缀、现有 `instance_dir/reference/`、prediction artifact
+  目录和 task bundle。`benchflow-score` 不得接受 seed 生成请求、调用
+  `generate_gt.py` 或评分 seed42。输出必须包含固定 schema 的 ScoreDetail、
+  artifact SHA-256、scorer/task revision 和 harness/model/effort provenance。
 
 ## 任务生命周期
 

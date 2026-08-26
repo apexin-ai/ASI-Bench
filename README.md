@@ -358,6 +358,25 @@ but never a GT generator, reference builder, or seed-to-instance entry point.
 The public `submission_sandbox.py` is execution isolation infrastructure and
 contains neither task answers nor generation logic.
 
+### BenchFlow seed31415 scoring
+
+BenchFlow can score one already-materialized seed31415 attempt with the stable
+`benchflow-score` interface. The manifest must point to an existing prediction
+artifact directory, an instance directory containing public `reference/`, and
+the checked-out public task bundle. It must declare `seed: 31415` and an
+instance ID ending in `__seed31415`; the adapter never generates instances or
+accepts seed42 references.
+
+```bash
+asibench benchflow-score \
+  --manifest benchflow_manifest.json \
+  --output benchflow_score.json
+```
+
+The JSON result includes gate and scorer `ScoreDetail` records, the prediction
+artifact SHA-256, scorer/task revisions, framework version, and optional
+harness/model/effort/sandbox provenance. It is a non-official local score.
+
 Five opt-in `sample` tasks are fully public examples. Their B1–B4 prompts,
 ground-truth generators, and scorer implementations or configurations are
 available under `tasks/`:

@@ -572,6 +572,27 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
         )
 
 
+@cli.command("benchflow-score")
+@click.option("--manifest", "manifest_path", required=True, type=click.Path(exists=True, dir_okay=False),
+              help="BenchFlow seed31415 manifest JSON")
+@click.option("--output", "output_path", default=None, type=click.Path(dir_okay=False),
+              help="Stable score result JSON (default: beside manifest)")
+def benchflow_score_cmd(manifest_path: str, output_path: str | None):
+    """Score one materialized seed31415 attempt for BenchFlow.
+
+    This command never generates instances or accepts seed42 references. The
+    manifest must point at an existing prediction directory, instance bundle,
+    and public task bundle.
+    """
+    from ai4sci_bench.benchflow import BenchFlowScoringError, score_manifest_file
+
+    try:
+        destination = score_manifest_file(manifest_path, output_path)
+    except BenchFlowScoringError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"BenchFlow seed31415 score: {destination}")
+
+
 @cli.command("submit")
 @click.option("--results-dir", "results_dir", required=True,
               help="A produce-only run dir (from `asibench run ...`)")

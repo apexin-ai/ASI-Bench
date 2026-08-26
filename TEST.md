@@ -173,6 +173,14 @@ for generator/reference-builder symbols and forbids scorers from importing
 `generate_gt`, so seed31415 remains locally scoreable without exposing seed42
 GT through the public scorer API.
 
+BenchFlow seed31415 adapter regression coverage validates the manifest seed and
+instance boundary, deterministic artifact hashing, public reference usage, and
+stable JSON score output:
+
+```bash
+uv run pytest -q tests/test_benchflow.py
+```
+
 ## PyPI packaging
 
 The packaging contract is covered by `tests/test_packaging.py`: the sole
