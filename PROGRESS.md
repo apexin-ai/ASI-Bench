@@ -303,3 +303,19 @@
   skipped / 22 deselected`; `asibench-0.1.4` wheel and sdist both passed
   `twine check --strict`.
 - Release preparation commit: `5b172fff`
+
+## 2026-08-26 — BenchFlow seed31415 scorer adapter
+
+- Problem: BenchFlow had no stable single-attempt interface for feeding
+  already-materialized seed31415 prediction artifacts into the public scorer,
+  and could not receive machine-readable ScoreDetail/provenance output.
+- Resolution: add `asibench benchflow-score` and the JSON manifest adapter.
+  It validates the seed, instance suffix, reference location, task contract and
+  optional scorer revision; hashes prediction artifacts; and emits gate/scorer
+  details, status, revisions, framework version and harness/model/effort
+  provenance. It never generates instances, imports `generate_gt.py`, or
+  accepts seed42.
+- Verification: adapter/policy/local-scoring tests passed `30 passed`; the
+  complete public offline suite passed `2133 passed, 2 skipped, 22 deselected`;
+  the built wheel contains `ai4sci_bench/benchflow.py`.
+- Implementation commit: `a209722d`
