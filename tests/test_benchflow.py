@@ -146,8 +146,48 @@ def test_benchflow_reads_failed_run_result_instead_of_trusting_runner_exit(
 
     assert result["status"] == "attempt_failed"
     assert result["evaluation_status"] == "completed"
-    assert result["attempt_status"] == "failed"
+    assert result["attempt_status"] == "execution_failed"
     assert result["retryable"] is True
+
+
+@pytest.mark.parametrize(
+    ("raw_status", "expected_status"),
+    [
+        ("timeout", "execution_timeout"),
+        ("running", "execution_incomplete"),
+    ],
+)
+def test_benchflow_normalizes_noncompleted_attempt_statuses(
+    monkeypatch, tmp_path, raw_status, expected_status
+):
+    manifest = _manifest(tmp_path)
+    run_result = Path(manifest["run_result"])
+    payload = json.loads(run_result.read_text())
+    payload["status"] = raw_status
+    payload["agent_output"]["status"] = raw_status
+    run_result.write_text(json.dumps(payload), encoding="utf-8")
+    task_dir = Path(manifest["tasks_dir"]) / "demo"
+    task_dir.mkdir()
+
+    class FakeLoader:
+        def __init__(self, _tasks_dir):
+            pass
+
+        def load_task_by_id(self, _task_id):
+            return {"_task_dir": str(task_dir), "evaluation": {"scoring": []}}
+
+    monkeypatch.setattr("ai4sci_bench.benchflow.TaskLoader", FakeLoader)
+    monkeypatch.setattr("ai4sci_bench.scorers.custom.load_custom_scorer", lambda _task_dir: None)
+    monkeypatch.setattr(
+        "ai4sci_bench.runner.orchestrator._evaluate_gates_and_scores",
+        lambda *_args, **_kwargs: ([], True, 0, [], 0.0),
+    )
+
+    result = score_seed31415_manifest(manifest)
+
+    assert result["status"] == "attempt_failed"
+    assert result["attempt_status"] == expected_status
+    assert result["evaluation_status"] == "completed"
 
 
 def test_benchflow_rejects_prediction_dir_not_owned_by_run_result(tmp_path):

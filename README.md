@@ -387,6 +387,10 @@ statuses. The JSON result includes distinct `attempt_status` and
 `evaluation_status`, gate and scorer `ScoreDetail` records, prediction and run
 result SHA-256 values, scorer/task revisions, framework version, and optional
 harness/model/effort/sandbox provenance. It is a non-official local score.
+An agent execution failure is represented as `status: attempt_failed`,
+`attempt_status: execution_failed`, and `evaluation_status: completed` when
+the scorer itself ran successfully; this is distinct from a valid completed
+attempt that merely earned a low score or failed a scoring gate.
 
 Five opt-in `sample` tasks are fully public examples. Their B1–B4 prompts,
 ground-truth generators, and scorer implementations or configurations are

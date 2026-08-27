@@ -135,13 +135,13 @@ def _load_run_result(
     if result_status not in known or agent_status not in known:
         raise BenchFlowScoringError("run result contains an unknown execution status")
     if "timeout" in {result_status, agent_status}:
-        attempt_status = "timeout"
+        attempt_status = "execution_timeout"
     elif "failed" in {result_status, agent_status}:
-        attempt_status = "failed"
+        attempt_status = "execution_failed"
     elif result_status == agent_status == "completed":
         attempt_status = "completed"
     else:
-        attempt_status = "incomplete"
+        attempt_status = "execution_incomplete"
     return path, payload, attempt_status
 
 
@@ -254,7 +254,7 @@ def score_seed31415_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         framework_version = None
 
     evaluation_status = "evaluation_invalid" if internal_error else "completed"
-    attempt_failed = attempt_status in {"failed", "timeout", "incomplete"}
+    attempt_failed = attempt_status != "completed"
     return {
         "schema_version": SCHEMA_VERSION,
         "benchmark": "ASI-Bench",

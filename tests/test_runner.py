@@ -435,7 +435,10 @@ class TestBenchmarkOrchestrator:
             agent_metadata={
                 "agent_name": "custom_cli",
                 "cmd_template": f"python {tmp_dir}/agent.py --workspace {sample_task_instance.workspace_dir}",
-                "config": {"cwd": str(tmp_dir / "cwd")},
+                "config": {
+                    "cwd": str(tmp_dir / "cwd"),
+                    "api_base": "https://api.apexin.ai/v1",
+                },
             },
         )
         orch = BenchmarkOrchestrator(config)
@@ -496,6 +499,7 @@ class TestBenchmarkOrchestrator:
         assert str(workspace) not in agent_meta["cmd_template"]
         assert "<abs_path>" in agent_meta["config"]["cwd"]
         assert str(tmp_dir / "cwd") not in agent_meta["config"]["cwd"]
+        assert agent_meta["config"]["api_base"] == "https://api.apexin.ai/v1"
 
         stdout_text = (result_dir / "test__sanitize__b2.agent_stdout.jsonl").read_text()
         stderr_text = (result_dir / "test__sanitize__b2.agent_stderr.log").read_text()
@@ -527,6 +531,42 @@ class TestBenchmarkOrchestrator:
         assert "<repo_root><abs_path>" not in sanitized
         assert str(orch.repo_root) not in sanitized
         assert str(workspace) not in sanitized
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://api.apexin.ai/v1",
+            "http://localhost:8000/v1/chat/completions",
+            "https://example.test/a/b?next=/not/a/host/path",
+        ],
+    )
+    def test_sanitize_preserves_urls(self, sample_task_instance, tmp_dir, url):
+        agent = DummyAgent()
+        config = RunConfig(
+            agent=agent,
+            tasks_dir=str(sample_task_instance.task_dir.parent.parent),
+            output_dir=str(tmp_dir / "results"),
+        )
+        orch = BenchmarkOrchestrator(config)
+
+        assert orch._sanitize_persisted_text(url) == url
+
+    def test_sanitize_preserves_url_but_redacts_separate_absolute_path(
+        self, sample_task_instance, tmp_dir
+    ):
+        agent = DummyAgent()
+        config = RunConfig(
+            agent=agent,
+            tasks_dir=str(sample_task_instance.task_dir.parent.parent),
+            output_dir=str(tmp_dir / "results"),
+        )
+        orch = BenchmarkOrchestrator(config)
+
+        sanitized = orch._sanitize_persisted_text(
+            "endpoint=https://api.apexin.ai/v1 cwd=/opt/private/run"
+        )
+
+        assert sanitized == "endpoint=https://api.apexin.ai/v1 cwd=<abs_path>"
 
     def test_cleanup_workspace_transients_removes_cache_files_only(self, sample_task_instance, tmp_dir):
         agent = DummyAgent()

@@ -184,6 +184,14 @@ uses the final retry attempt:
 uv run pytest -q tests/test_benchflow.py tests/test_cli.py
 ```
 
+Persistence sanitization coverage verifies that HTTP(S) API endpoints remain
+intact in reproducibility metadata while separate absolute host paths are
+replaced with stable placeholders:
+
+```bash
+uv run pytest -q tests/test_runner.py -k sanitize
+```
+
 ## PyPI packaging
 
 The packaging contract is covered by `tests/test_packaging.py`: the sole

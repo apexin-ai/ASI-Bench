@@ -1293,12 +1293,26 @@ class BenchmarkOrchestrator:
         sanitized = text
         for source, placeholder in self._build_path_replacements(workspace):
             sanitized = sanitized.replace(source, placeholder)
-        sanitized = re.sub(
-            r"(?<![A-Za-z0-9_>])/(?:[^/\s'\"`]+/){1,}[^/\s'\"`]+",
-            "<abs_path>",
-            sanitized,
+
+        absolute_path = re.compile(
+            r"(?<![A-Za-z0-9_>])/(?:[^/\s'\"`]+/){1,}[^/\s'\"`]+"
         )
-        return sanitized
+        http_url = re.compile(r"https?://[^\s'\"`]+")
+
+        def redact_paths(value: str) -> str:
+            return absolute_path.sub("<abs_path>", value)
+
+        # Endpoint URLs carry reproducibility evidence and contain slash-heavy
+        # text that resembles an absolute path. Redact only the text between
+        # complete HTTP(S) URL spans.
+        parts: list[str] = []
+        cursor = 0
+        for match in http_url.finditer(sanitized):
+            parts.append(redact_paths(sanitized[cursor:match.start()]))
+            parts.append(match.group(0))
+            cursor = match.end()
+        parts.append(redact_paths(sanitized[cursor:]))
+        return "".join(parts)
 
     def _coerce_persisted_text(self, value: str | bytes) -> str:
         if isinstance(value, bytes):
