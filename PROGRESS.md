@@ -336,3 +336,22 @@
   previous real seed31415 B1 failure is now reported as `attempt_failed` while
   retaining `evaluation_status=completed` and scorer details.
 - Implementation commit: `77c394d`
+
+## 2026-08-27 — Preserve API provenance and clarify BenchFlow status
+
+- Problem: persistence path sanitization restarted its absolute-path match at
+  the second slash of an HTTP(S) URL, turning endpoints such as
+  `https://api.apexin.ai/v1` into `https:/<abs_path>`; BenchFlow also exposed
+  the ambiguous raw attempt value `failed` alongside scorer completion.
+- Resolution: protect complete HTTP(S) URL spans while redacting host paths in
+  surrounding text, and normalize attempt outcomes to `execution_failed`,
+  `execution_timeout`, and `execution_incomplete` while retaining independent
+  `evaluation_status`.
+- Prevention: persistence tests cover API endpoints, URL paths/query strings,
+  mixed URL/host-path text, and final result provenance; BenchFlow tests cover
+  failed, timed-out, and incomplete execution states.
+- Verification: focused regressions passed `18 passed`; the complete public
+  suite passed `2144 passed, 2 skipped, 22 deselected`; the real seed31415 B1
+  failure now reports `attempt_status=execution_failed` with
+  `evaluation_status=completed`.
+- Implementation commit: `db57b7a`
