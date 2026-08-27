@@ -21,7 +21,7 @@ from ai4sci_bench.core.task import TaskLoader
 from ai4sci_bench.local_scoring import _detail_dict, _has_internal_error, _json_default
 
 PUBLIC_SEED = 31415
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class BenchFlowScoringError(ValueError):
@@ -92,10 +92,63 @@ def _require_directory(label: str, value: Any) -> Path:
     return path
 
 
+def _load_run_result(
+    value: Any,
+    *,
+    task_id: str,
+    instance_id: str,
+    prompt_level: str | None,
+    prediction_dir: Path,
+) -> tuple[Path, dict[str, Any], str]:
+    """Load and bind a BenchFlow attempt to its persisted ASI-Bench result."""
+    if not isinstance(value, str) or not value:
+        raise BenchFlowScoringError("manifest.run_result must be a non-empty file path")
+    path = Path(value).resolve()
+    if not path.is_file():
+        raise BenchFlowScoringError(f"manifest.run_result file not found: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BenchFlowScoringError(f"Invalid run result JSON: {path}") from exc
+    if not isinstance(payload, dict):
+        raise BenchFlowScoringError("run result must be a JSON object")
+    if payload.get("task_id") != task_id or payload.get("instance_id") != instance_id:
+        raise BenchFlowScoringError("run result task_id/instance_id does not match manifest")
+    if prompt_level is not None and payload.get("prompt_level") != prompt_level:
+        raise BenchFlowScoringError("run result prompt_level does not match manifest")
+
+    agent_output = payload.get("agent_output")
+    if not isinstance(agent_output, dict):
+        raise BenchFlowScoringError("run result has no agent_output object")
+    persisted = agent_output.get("persisted_outputs")
+    if not isinstance(persisted, dict) or not persisted.get("dir"):
+        raise BenchFlowScoringError("run result has no persisted output directory")
+    persisted_dir = (path.parent / str(persisted["dir"])).resolve()
+    if persisted_dir != prediction_dir:
+        raise BenchFlowScoringError(
+            "manifest.prediction_dir must match the run result persisted output directory"
+        )
+
+    result_status = payload.get("status")
+    agent_status = agent_output.get("status")
+    known = {"pending", "running", "completed", "failed", "timeout"}
+    if result_status not in known or agent_status not in known:
+        raise BenchFlowScoringError("run result contains an unknown execution status")
+    if "timeout" in {result_status, agent_status}:
+        attempt_status = "timeout"
+    elif "failed" in {result_status, agent_status}:
+        attempt_status = "failed"
+    elif result_status == agent_status == "completed":
+        attempt_status = "completed"
+    else:
+        attempt_status = "incomplete"
+    return path, payload, attempt_status
+
+
 def score_seed31415_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     """Score one materialized seed31415 attempt for BenchFlow.
 
-    Required manifest keys are ``task_id``, ``instance_id``,
+    Required manifest keys are ``task_id``, ``instance_id``, ``run_result``,
     ``prediction_dir``, ``instance_dir`` and ``tasks_dir``.  ``reference_dir``
     is optional and, when supplied, must resolve to the instance's public
     ``reference/`` directory.  No key can request generation or override the
@@ -145,6 +198,13 @@ def score_seed31415_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     prompt_level = manifest.get("prompt_level")
     if prompt_level is not None and prompt_level not in {"b1", "b2", "b3", "b4"}:
         raise BenchFlowScoringError("manifest.prompt_level must be b1, b2, b3, or b4")
+    run_result_path, _run_result, attempt_status = _load_run_result(
+        manifest.get("run_result"),
+        task_id=task_id,
+        instance_id=instance_id,
+        prompt_level=prompt_level,
+        prediction_dir=prediction_dir,
+    )
 
     try:
         import ai4sci_bench.scorers  # noqa: F401
@@ -193,13 +253,17 @@ def score_seed31415_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     except importlib.metadata.PackageNotFoundError:
         framework_version = None
 
+    evaluation_status = "evaluation_invalid" if internal_error else "completed"
+    attempt_failed = attempt_status in {"failed", "timeout", "incomplete"}
     return {
         "schema_version": SCHEMA_VERSION,
         "benchmark": "ASI-Bench",
         "seed": PUBLIC_SEED,
         "official": False,
-        "status": "evaluation_invalid" if internal_error else "completed",
-        "retryable": False,
+        "status": "attempt_failed" if attempt_failed else evaluation_status,
+        "evaluation_status": evaluation_status,
+        "attempt_status": attempt_status,
+        "retryable": attempt_failed,
         "task_id": task_id,
         "instance_id": instance_id,
         "prompt_level": prompt_level,
@@ -208,6 +272,7 @@ def score_seed31415_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "scorer_revision": scorer_revision,
         "task_bundle_revision": manifest.get("task_bundle_revision") or _git_revision(tasks_dir),
         "artifact_sha256": _sha256_tree(prediction_dir),
+        "run_result_sha256": hashlib.sha256(run_result_path.read_bytes()).hexdigest(),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "provenance": {
             "framework_version": framework_version,

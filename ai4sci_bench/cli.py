@@ -1016,6 +1016,8 @@ def _ensure_run_sandbox_available(sandbox: str) -> None:
               help="Write derived batch_records/ artifacts after the run.")
 @click.option("--batch-records-root", default=None,
               help="Shared results root to scan when writing batch_records/ (defaults to --output-dir).")
+@click.option("--fail-on-agent-error", is_flag=True, default=False,
+              help="Exit 1 after saving results if any final attempt failed or timed out.")
 @click.option("--diagnose", is_flag=True, default=False,
               help="Run trajectory review after evaluation completes")
 @click.option("--diagnose-threshold", default=10.0, type=float,
@@ -1049,6 +1051,7 @@ def run(
     tool_mode: str | None,
     write_batch_records: bool,
     batch_records_root: str | None,
+    fail_on_agent_error: bool,
     diagnose: bool,
     diagnose_threshold: float,
 ):
@@ -1233,6 +1236,34 @@ def run(
         batch_records_root=batch_records_root,
         default_root=output_dir,
     )
+
+    if fail_on_agent_error:
+        failed = _failed_final_attempts(report.results)
+        if failed:
+            raise click.ClickException(
+                f"{len(failed)} final attempt(s) failed or timed out; "
+                f"results were saved to {output_dir}."
+            )
+
+
+def _failed_final_attempts(results: list[EvalResult]) -> list[EvalResult]:
+    """Return failed final attempts without treating earlier retries as fatal."""
+    final_by_run: dict[tuple[str, str], EvalResult] = {}
+    for result in results:
+        key = (result.instance_id, result.prompt_level.value)
+        current = final_by_run.get(key)
+        if current is None or result.attempt >= current.attempt:
+            final_by_run[key] = result
+
+    failures = []
+    for result in final_by_run.values():
+        agent_status = result.agent_output.status if result.agent_output else None
+        if result.status in {RunStatus.FAILED, RunStatus.TIMEOUT} or agent_status in {
+            RunStatus.FAILED,
+            RunStatus.TIMEOUT,
+        }:
+            failures.append(result)
+    return failures
 
 
 

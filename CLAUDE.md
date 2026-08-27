@@ -49,6 +49,9 @@
   目录和 task bundle。`benchflow-score` 不得接受 seed 生成请求、调用
   `generate_gt.py` 或评分 seed42。输出必须包含固定 schema 的 ScoreDetail、
   artifact SHA-256、scorer/task revision 和 harness/model/effort provenance。
+- BenchFlow 运行 `asibench run` 必须启用 `--fail-on-agent-error`，且不得只信任
+  进程退出码；manifest schema v2 必须提供对应 run result JSON，并将
+  `prediction_dir` 绑定到其 persisted outputs，分别报告 attempt 与 evaluation 状态。
 
 ## 任务生命周期
 

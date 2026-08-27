@@ -174,11 +174,14 @@ for generator/reference-builder symbols and forbids scorers from importing
 GT through the public scorer API.
 
 BenchFlow seed31415 adapter regression coverage validates the manifest seed and
-instance boundary, deterministic artifact hashing, public reference usage, and
-stable JSON score output:
+instance boundary, required run-result binding, independent agent execution
+status checks, deterministic artifact hashing, public reference usage, and
+stable JSON score output. CLI coverage also verifies that
+`run --fail-on-agent-error` saves evidence before returning non-zero and only
+uses the final retry attempt:
 
 ```bash
-uv run pytest -q tests/test_benchflow.py
+uv run pytest -q tests/test_benchflow.py tests/test_cli.py
 ```
 
 ## PyPI packaging

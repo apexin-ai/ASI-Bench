@@ -360,12 +360,20 @@ contains neither task answers nor generation logic.
 
 ### BenchFlow seed31415 scoring
 
-BenchFlow can score one already-materialized seed31415 attempt with the stable
-`benchflow-score` interface. The manifest must point to an existing prediction
-artifact directory, an instance directory containing public `reference/`, and
-the checked-out public task bundle. It must declare `seed: 31415` and an
-instance ID ending in `__seed31415`; the adapter never generates instances or
-accepts seed42 references.
+BenchFlow should execute ASI-Bench in strict mode so a failed or timed-out final
+attempt returns a non-zero process status after all result evidence is saved:
+
+```bash
+asibench run ... --fail-on-agent-error
+```
+
+Process status alone is not the execution contract. BenchFlow must also pass
+the corresponding persisted run result JSON to the stable `benchflow-score`
+interface. The schema-v2 manifest points to `run_result`, its exact persisted
+prediction artifact directory, an instance directory containing public
+`reference/`, and the checked-out public task bundle. It must declare
+`seed: 31415` and an instance ID ending in `__seed31415`; the adapter never
+generates instances or accepts seed42 references.
 
 ```bash
 asibench benchflow-score \
@@ -373,8 +381,11 @@ asibench benchflow-score \
   --output benchflow_score.json
 ```
 
-The JSON result includes gate and scorer `ScoreDetail` records, the prediction
-artifact SHA-256, scorer/task revisions, framework version, and optional
+The adapter binds `prediction_dir` to `agent_output.persisted_outputs.dir` in
+the run result and independently reads both top-level and agent execution
+statuses. The JSON result includes distinct `attempt_status` and
+`evaluation_status`, gate and scorer `ScoreDetail` records, prediction and run
+result SHA-256 values, scorer/task revisions, framework version, and optional
 harness/model/effort/sandbox provenance. It is a non-official local score.
 
 Five opt-in `sample` tasks are fully public examples. Their B1–B4 prompts,

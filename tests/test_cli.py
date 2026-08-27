@@ -14,6 +14,7 @@ from unittest.mock import patch
 from ai4sci_bench.cli import (
     _build_agent,
     _build_agent_metadata,
+    _failed_final_attempts,
     _is_eval_result_json,
     _parse_eval_result,
     _run_generate_with_timeout,
@@ -26,7 +27,26 @@ from ai4sci_bench.core.result_schema import (
     CURRENT_RESULT_SCHEMA_VERSION,
     RESULT_SCHEMA_VERSION_FIELD,
 )
-from ai4sci_bench.core.types import ToolMode
+from ai4sci_bench.core.types import PromptLevel, RunStatus, ToolMode
+
+
+def test_strict_run_status_uses_last_retry_attempt():
+    failed = SimpleNamespace(
+        instance_id="demo__seed31415",
+        prompt_level=PromptLevel.B1,
+        attempt=1,
+        status=RunStatus.FAILED,
+        agent_output=SimpleNamespace(status=RunStatus.FAILED),
+    )
+    recovered = SimpleNamespace(
+        instance_id="demo__seed31415",
+        prompt_level=PromptLevel.B1,
+        attempt=2,
+        status=RunStatus.COMPLETED,
+        agent_output=SimpleNamespace(status=RunStatus.COMPLETED),
+    )
+
+    assert _failed_final_attempts([failed, recovered]) == []
 
 
 class TestRunSandboxAvailability:
@@ -1449,6 +1469,32 @@ class TestCLIRun:
         ])
         assert result.exit_code == 0
         assert "Produce-Only Summary" in result.output
+
+    def test_run_strict_mode_returns_nonzero_after_persisting_failed_result(
+        self, sample_task_dir, tmp_dir
+    ):
+        tasks_dir = sample_task_dir.parent.parent
+        results_dir = tmp_dir / "results"
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "run",
+            "--tasks", "physics.test_task",
+            "--tasks-dir", str(tasks_dir),
+            "--output-dir", str(results_dir),
+            "--prompt-levels", "b1",
+            "--instances-per-task", "1",
+            "--seed", "42",
+            "--include-test",
+            "--agent-cmd", "false",
+            "--fail-on-agent-error",
+        ])
+
+        assert result.exit_code == 1
+        assert "1 final attempt(s) failed" in result.output
+        result_files = sorted((results_dir / "physics.test_task").glob("*.json"))
+        assert len(result_files) == 1
+        payload = json.loads(result_files[0].read_text())
+        assert payload["agent_output"]["status"] == "failed"
 
     def test_run_rejects_unsupported_agent_cmd_task_sandbox(self, sample_task_dir, tmp_dir):
         tasks_dir = sample_task_dir.parent.parent
