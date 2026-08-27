@@ -235,12 +235,28 @@ with `--agent`.
 | Kimi Code | `npm install -g @moonshot-ai/kimi-code` | **Use the npm package.** The PyPI package (`kimi-cli`) has different CLI arguments and is not compatible with this adapter. Requires Moonshot API key or local login (`kimi /login`) |
 | CodeWhale | See [CodeWhale docs](https://github.com/codewhale-ai/codewhale) | Requires DeepSeek API key by default |
 | AntiGravity | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | Experimental |
+| pi | `npm install -g @earendil-works/pi-coding-agent` | Native JSONL trajectories + cost extraction. Requires local login (`pi` + `/login`) or provider API key; `model` uses `provider/model` syntax |
+| opencode | `npm install -g opencode-ai` | Native JSONL trajectories + cost extraction. Requires `opencode auth login` or provider API key; `model` uses `provider/model` syntax |
 
 Example with Kimi Code:
 
 ```bash
 asibench run --agent kimi_code_cli \
   --agent-config '{"model": "kimi-k2.7"}' \
+  --output-dir out/
+```
+
+Example with pi (local login) and opencode (explicit endpoint):
+
+```bash
+# pi with harness-local login state
+asibench run --agent pi_cli \
+  --agent-config '{"model": "anthropic/claude-opus-4-6"}' \
+  --output-dir out/
+
+# opencode against a third-party OpenAI-compatible endpoint
+asibench run --agent opencode_cli \
+  --agent-config '{"model": "deepseek-chat", "api_base": "https://api.deepseek.com/v1", "api_key": "sk-...", "api_protocol": "openai"}' \
   --output-dir out/
 ```
 

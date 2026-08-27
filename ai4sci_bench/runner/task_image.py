@@ -21,6 +21,8 @@ AGENT_INSTALL_COMMANDS: dict[str | None, list[str]] = {
     "codex":       ["npm install -g @openai/codex"],
     "kimi_code":   ["npm install -g @moonshot-ai/kimi-code"],
     "mimo_code":   ["npm install -g @mimo-ai/cli"],
+    "pi":          ["npm install -g @earendil-works/pi-coding-agent"],
+    "opencode":    ["npm install -g opencode-ai"],
     "openhands":   [],  # mounted from host venv, no install needed
     "agy":         [],  # standalone binary, must be pre-installed on host
 }

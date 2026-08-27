@@ -103,6 +103,8 @@ _AGENT_CLI_BINARY = {
     "kimi_code_cli": "kimi",
     "antigravity_cli": "agy",
     "mimo_code_cli": "mimo",
+    "pi_cli": "pi",
+    "opencode_cli": "opencode",
 }
 
 
@@ -184,6 +186,10 @@ def _build_agent_metadata(
         metadata["adapter_class"] = "HermesAgentAdapter"
     elif agent_name == "codewhale":
         metadata["adapter_class"] = "CodeWhaleAdapter"
+    elif agent_name == "pi_cli":
+        metadata["adapter_class"] = "PiCLIAdapter"
+    elif agent_name == "opencode_cli":
+        metadata["adapter_class"] = "OpenCodeCLIAdapter"
     else:
         metadata["adapter_class"] = "CLIAgentAdapter"
     return metadata
@@ -986,7 +992,7 @@ def _ensure_run_sandbox_available(sandbox: str) -> None:
 @click.option("--instances-per-task", default=1, type=int, help="Instances per task")
 @click.option("--seed", default=42, type=int, help="Random seed for reproducibility")
 @click.option("--agent-cmd", help="Agent command template (file-exchange mode)")
-@click.option("--agent", help="Built-in agent name (direct_llm, claude_code_cli, codex_cli)")
+@click.option("--agent", help="Built-in agent name (direct_llm, claude_code_cli, codex_cli, kimi_code_cli, mimo_code_cli, antigravity_cli, openhands, hermes, codewhale, pi_cli, opencode_cli)")
 @click.option("--agent-config", default="{}", help="Agent config JSON")
 @click.option("--output-dir", default="results/", help="Output directory")
 @click.option("--parallel", default=1, type=int, help="Parallel workers")
@@ -2092,6 +2098,12 @@ def _build_agent(
     elif agent_name == "mimo_code_cli":
         from ai4sci_bench.adapters.mimo_code_cli import MiMoCodeCLIAdapter
         return MiMoCodeCLIAdapter(**agent_config)
+    elif agent_name == "pi_cli":
+        from ai4sci_bench.adapters.pi_cli import PiCLIAdapter
+        return PiCLIAdapter(**agent_config)
+    elif agent_name == "opencode_cli":
+        from ai4sci_bench.adapters.opencode_cli import OpenCodeCLIAdapter
+        return OpenCodeCLIAdapter(**agent_config)
     else:
         # Default to a dummy adapter for testing
         from ai4sci_bench.adapters.cli_agent import CLIAgentAdapter

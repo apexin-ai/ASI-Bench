@@ -89,8 +89,12 @@ class TrajectorySummary:
                 total_tool_calls += 1
                 tool_name = step.metadata.get("tool_name", "unknown")
                 tool_dist[tool_name] = tool_dist.get(tool_name, 0) + 1
-                if tool_name in ("Write", "Edit", "NotebookEdit"):
-                    fp = step.metadata.get("key_args", {}).get("file_path", "")
+                if tool_name in (
+                    "Write", "Edit", "NotebookEdit", "write", "edit", "patch",
+                ):
+                    fp = (step.metadata.get("key_args", {}).get("file_path", "")
+                          or step.metadata.get("key_args", {}).get("path", "")
+                          or step.metadata.get("key_args", {}).get("filePath", ""))
                     if fp:
                         modified_files.add(fp)
                 elif tool_name == "file_change":
@@ -101,7 +105,7 @@ class TrajectorySummary:
                 thinking_chars += len(step.content)
             elif step.step_type == "tool_result":
                 parent_tool = step.metadata.get("parent_tool_name", "")
-                if parent_tool in ("Bash", "command_execution", "shell"):
+                if parent_tool in ("Bash", "command_execution", "shell", "bash"):
                     code_execs += 1
                     if step.metadata.get("is_error"):
                         code_failures += 1

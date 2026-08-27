@@ -30,6 +30,17 @@ CODEX_AUTH_PATHS = [
     Path.home() / ".codex" / "auth.json",
 ]
 
+# pi stores OAuth tokens / API keys in ~/.pi/agent/auth.json (single file;
+# models.json is only mounted when the adapter generates a temp config dir).
+PI_AUTH_PATHS = [
+    Path.home() / ".pi" / "agent" / "auth.json",
+]
+
+# opencode stores provider credentials in ~/.local/share/opencode/auth.json.
+OPENCODE_AUTH_PATHS = [
+    Path.home() / ".local" / "share" / "opencode" / "auth.json",
+]
+
 # Optional proxy vars forwarded into CLI agent containers (Codex/Claude API access).
 PROXY_ENV_KEYS = (
     "http_proxy",
@@ -189,8 +200,8 @@ class OSSandbox:
             agent_cmd: The command to execute inside the container (e.g. ["claude", "--print", ...]).
             workspace: Host path to the workspace directory (mounted as /workspace).
             timeout: Timeout in seconds for the agent execution.
-            agent_type: One of "claude_code", "codex", or None.  Controls which
-                auth credentials are mounted into the container.
+            agent_type: e.g. "claude_code", "codex", "pi", "opencode", or None.
+                Controls which auth credentials are mounted into the container.
             extra_env: Additional environment variables to inject (e.g. API keys).
             allow_external_tools: Whether the user allowed external tools (web search etc.).
                 Network is only enabled when BOTH this and task's requires_network are True.
@@ -278,6 +289,12 @@ class OSSandbox:
             return self._mount_claude_auth()
         elif agent_type == "codex":
             return self._mount_codex_auth()
+        elif agent_type == "pi":
+            return self._mount_generic_auth(PI_AUTH_PATHS, "/home/agent/.pi/agent")
+        elif agent_type == "opencode":
+            return self._mount_generic_auth(
+                OPENCODE_AUTH_PATHS, "/home/agent/.local/share/opencode"
+            )
         # mimo_code, kimi_code, agy, openhands: auth via env vars (extra_env),
         # no host credential files to mount.
         return []
@@ -476,6 +493,18 @@ class OSSandbox:
                 logger.debug("CodeX auth file not found, skipping: %s", host_path)
         return mounts
 
+    def _mount_generic_auth(self, auth_paths: list[Path], container_dir: str) -> list[str]:
+        """Mount specific credential files read-only into ``container_dir``."""
+        mounts: list[str] = []
+        for host_path in auth_paths:
+            if host_path.exists():
+                container_path = f"{container_dir}/{host_path.name}"
+                mounts += ["-v", f"{host_path}:{container_path}:ro"]
+                logger.debug("Mounting auth file: %s -> %s", host_path, container_path)
+            else:
+                logger.debug("Auth file not found, skipping: %s", host_path)
+        return mounts
+
     # ------------------------------------------------------------------
     # Docker command construction
     # ------------------------------------------------------------------
@@ -578,6 +607,7 @@ class OSSandbox:
         #   dual opt-in: both task's requires_network AND allow_external_tools.
         needs_api_network = agent_type in (
             "claude_code", "codex", "mimo_code", "kimi_code", "agy", "openhands",
+            "pi", "opencode",
         )
         if needs_api_network:
             for key, value in self._host_proxy_env().items():

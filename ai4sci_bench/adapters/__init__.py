@@ -11,6 +11,8 @@ from ai4sci_bench.adapters.codewhale_agent import CodeWhaleAdapter
 from ai4sci_bench.adapters.kimi_code_cli import KimiCodeCLIAdapter
 from ai4sci_bench.adapters.antigravity_cli import AntigravityCLIAdapter
 from ai4sci_bench.adapters.mimo_code_cli import MiMoCodeCLIAdapter
+from ai4sci_bench.adapters.pi_cli import PiCLIAdapter
+from ai4sci_bench.adapters.opencode_cli import OpenCodeCLIAdapter
 
 __all__ = [
     "SubprocessAgentAdapter",
@@ -24,4 +26,6 @@ __all__ = [
     "KimiCodeCLIAdapter",
     "AntigravityCLIAdapter",
     "MiMoCodeCLIAdapter",
+    "PiCLIAdapter",
+    "OpenCodeCLIAdapter",
 ]

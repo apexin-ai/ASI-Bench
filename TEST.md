@@ -42,6 +42,47 @@ uv run pytest -q -m integration
 uv run pytest -q -m e2e
 ```
 
+## pi / opencode native adapters
+
+The `pi_cli` and `opencode_cli` adapters provide first-class support for the
+pi and opencode coding agents with native JSONL trajectories, token-cost
+extraction, and fake-success (terminal API error) detection.
+
+Offline unit tests (no agent CLI or API key needed):
+
+```bash
+uv run pytest -q \
+  tests/test_pi_cli_adapter.py \
+  tests/test_opencode_cli_adapter.py \
+  tests/test_native_agent_extractors.py
+```
+
+Coverage includes: command construction (prompt via stdin, never argv),
+auth mode resolution (local login / provider API key / explicit endpoint with
+`api_protocol`), tool-mode isolation, JSONL log parsing, `CostInfo` summing,
+terminal-error detection, `--sandbox os` integration (auth mounts, Docker
+install commands, network whitelist, agent_type plumbing), trajectory
+extractors, and JSONL schema detection dispatch.
+
+The extractors are pinned to verified CLI event schemas (pi v0.84.3,
+opencode v1.17.15). If either CLI changes its event format, update the
+fixtures in `tests/test_native_agent_extractors.py` together with
+`ai4sci_bench/trajectory/pi_extractor.py` /
+`ai4sci_bench/trajectory/opencode_extractor.py`.
+
+Manual smoke test (requires a real provider key; results are non-official):
+
+```bash
+asibench run --agent pi_cli \
+  --agent-config '{"model": "<provider/model>"}' \
+  --instances-dir hf_instances_seed31415/ \
+  --prompt-levels b3 --output-dir out_smoke/
+```
+
+Check points: result JSON has `raw_stdout_format=jsonl`, non-generic
+`trajectory_summary` (steps > 1), non-null `cost`; a deliberately invalid
+API key must yield `FAILED` + `error_message` (pi exits 0 on API errors).
+
 ## CLI Task Draft upload and browser confirmation
 
 Task submission tests cover manual PAT validation and storage, endpoint
