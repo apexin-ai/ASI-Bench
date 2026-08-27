@@ -319,3 +319,20 @@
   complete public offline suite passed `2133 passed, 2 skipped, 22 deselected`;
   the built wheel contains `ai4sci_bench/benchflow.py`.
 - Implementation commit: `a209722d`
+
+## 2026-08-27 — Bind BenchFlow scores to strict run evidence
+
+- Problem: `asibench run` returned zero after persisting failed agent attempts,
+  and the BenchFlow scorer trusted a caller-supplied prediction directory
+  without independently reading its ASI-Bench run result.
+- Resolution: add opt-in `run --fail-on-agent-error`, evaluated from the final
+  retry attempt after all evidence is saved; require a schema-v2 BenchFlow
+  manifest to bind `run_result` to its persisted output directory and report
+  separate attempt and evaluation statuses plus both artifact hashes.
+- Prevention: CLI tests cover non-zero strict exits and recovered retries;
+  adapter tests cover missing/mismatched run evidence and failed attempts.
+- Verification: focused CLI/BenchFlow/reporting tests passed `163 passed`; the
+  complete public suite passed `2138 passed, 2 skipped, 22 deselected`; the
+  previous real seed31415 B1 failure is now reported as `attempt_failed` while
+  retaining `evaluation_status=completed` and scorer details.
+- Implementation commit: `77c394d`
