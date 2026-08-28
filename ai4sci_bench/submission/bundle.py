@@ -149,7 +149,6 @@ def _validate_official_submission(
             missing_seed.append(instance_id or "<missing instance_id>")
         elif match.group("number") != "42":
             wrong_seed.append(f"{instance_id} (seed{match.group('number')})")
-
         provenance = data.get("provenance")
         sandbox = provenance.get("sandbox") if isinstance(provenance, dict) else None
         sandbox = sandbox if isinstance(sandbox, dict) else {}

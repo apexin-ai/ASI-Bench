@@ -102,7 +102,9 @@ be fixed before submission.
 In the Portal's **Local testing** step, confirm that you ran the same model and
 settings for B1–B4, select the provider/model version, and enter all four finite
 scores (0–100). `local_testing_done` plus one score for each level is a submission
-requirement, not an optional note.
+requirement, not an optional note. The Portal's Task contribution policy also
+requires this evidence to be recorded from the `os` (Docker) sandbox; evidence
+from `none`, `task`, or `linux_ns` cannot unlock submission.
 
 Task contribution trials must run in the Docker OS sandbox. The command defaults
 to `--sandbox os` and rejects `none`, `task`, and `linux_ns`. Record

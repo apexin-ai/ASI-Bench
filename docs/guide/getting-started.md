@@ -95,6 +95,10 @@ File-exchange agents configured with `--agent-cmd` support `none` and
 Every run records provenance (agent, model, effort, sandbox, framework version) so
 results are reproducible and comparable.
 
+For official submissions, the Portal requires the recorded effective sandbox to
+be `os`. Other modes remain available for local development and seed31415 local
+scoring, but are not accepted for seed42 submission.
+
 When installed from PyPI, task environments install the same released
 `asibench` version instead of treating `site-packages` as an editable source
 checkout. Their caches live under `~/.asibench/`. Before a run starts,

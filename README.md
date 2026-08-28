@@ -198,7 +198,7 @@ seed42 GT is not public. Local benchmark runs never calculate official scores.
 | Produce-only reports | Unscored placeholders are never displayed as `0.0`; all-unscored per-task score tables are omitted |
 | Submission | seed42 requires verified `--sandbox os` results; `submit` uploads a draft by default and `--no-upload` creates a local bundle only |
 | Local scoring | `score --repo seed31415` writes a separate non-official JSON report; seed42 is rejected |
-| Custom agents | `--agent-cmd` supports the `none` and `linux_ns` sandboxes |
+| Custom agents | `--agent-cmd` supports the `none` and `linux_ns` sandboxes for local runs; official seed42 submission requires an `os`-compatible built-in adapter |
 | Built-in agents | Use `--agent` with `--agent-config`; compatible adapters can use Docker-based `os` isolation |
 
 > **Platform note:** The examples use Linux Bash, and the `linux_ns` sandbox
@@ -348,7 +348,7 @@ asibench run \
   --instances-dir example_instances/ \
   --tasks astronomy.nbody_close_encounters \
   --agent-cmd 'python my_agent.py --workspace {workspace}' \
-  --sandbox linux_ns \
+  --sandbox os \
   --output-dir example_results/
 
 asibench submit --results-dir example_results/
