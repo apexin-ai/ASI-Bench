@@ -303,3 +303,22 @@
   skipped / 22 deselected`; `asibench-0.1.4` wheel and sdist both passed
   `twine check --strict`.
 - Release preparation commit: `5b172fff`
+
+## Require Docker OS provenance for official submissions
+
+- Problem: contributed-task difficulty evidence and seed42 scoring bundles
+  could be produced in `none`, `task`, or `linux_ns`, so official submissions
+  did not guarantee the intended reproducible Docker execution boundary.
+- Resolution: make `difficulty-check` default to and require `--sandbox os`,
+  require every Task `local_test_results` entry to record `sandbox: os`, and
+  reject seed42 bundles unless every result carries fail-closed,
+  `docker_container` provenance with a non-empty image identity. Both Task and
+  result checks fail before authentication or network access.
+- Prevention: regression tests cover non-OS Task evidence, pre-auth rejection,
+  missing or incomplete seed42 provenance, and image identity exposure across
+  OS-capable adapters; templates and contributor/scoring guides state the same
+  requirement.
+- Verification: focused submission, difficulty, and OS-adapter tests passed
+  `180 passed`; the full offline suite passed `2136 passed / 2 skipped / 22
+  deselected`; wheel and sdist passed `twine check --strict`.
+- Implementation commit: `f7a9340`
