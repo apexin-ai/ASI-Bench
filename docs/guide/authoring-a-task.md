@@ -92,7 +92,7 @@ settings against all four prompt levels:
 asibench validate --pre-submit tasks/physics/my_task/
 
 # defaults to B1, B2, B3, and B4
-asibench difficulty-check --task physics.my_task
+asibench difficulty-check --task physics.my_task --sandbox os
 ```
 
 `--pre-submit` runs your generator and feeds its reference output through your
@@ -103,6 +103,11 @@ In the Portal's **Local testing** step, confirm that you ran the same model and
 settings for B1–B4, select the provider/model version, and enter all four finite
 scores (0–100). `local_testing_done` plus one score for each level is a submission
 requirement, not an optional note.
+
+Task contribution trials must run in the Docker OS sandbox. The command defaults
+to `--sandbox os` and rejects `none`, `task`, and `linux_ns`. Record
+`sandbox: os` on every entry in `task_submission.yaml.local_test_results`; the
+CLI validates this evidence before contacting the Portal.
 
 The difficulty gate applies only to the low-guidance levels: every B3 and B4
 mean score must be strictly below 40. B1 and B2 are required evidence but have

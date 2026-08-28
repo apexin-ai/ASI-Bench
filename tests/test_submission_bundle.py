@@ -30,6 +30,7 @@ def _make_results_dir(
     include_framework_task_info: bool = True,
     seed: str = "seed42",
     task_id: str = "physics.demo_task",
+    sandbox: str = "os",
 ) -> Path:
     """Create a fake produce-only `run` output dir with one instance."""
     results = root / "out"
@@ -67,7 +68,16 @@ def _make_results_dir(
         "parameters": {"seed": 42, "n": 10},
         "final_score": 0.0,
         "status": "completed",
-        "provenance": {"agent": {"agent_name": "direct_llm"}, "sandbox": {"effective_mode": "none"}},
+        "provenance": {
+            "agent": {"agent_name": "direct_llm"},
+            "sandbox": {
+                "requested_mode": sandbox,
+                "effective_mode": sandbox,
+                "enforcement_status": "fail_closed" if sandbox != "none" else "not_requested",
+                "verification_status": "docker_container" if sandbox == "os" else "not_applicable",
+                "image_identity": "sha256:test-task-image" if sandbox == "os" else None,
+            },
+        },
         "agent_output": {
             "code_files": ["solution.py"],
             "data_files": data_files,
@@ -130,6 +140,23 @@ def test_submit_rejects_seed31415_before_upload_or_bundle(tmp_path, monkeypatch)
     assert "Bundle built" not in result.output
 
 
+def test_submit_rejects_non_os_seed42_before_authentication(tmp_path, monkeypatch):
+    results = _make_results_dir(tmp_path, sandbox="none")
+    monkeypatch.setattr(
+        "ai4sci_bench.auth.resolve_token",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("authentication must not start")
+        ),
+    )
+
+    result = CliRunner().invoke(cli, ["submit", "--results-dir", str(results)])
+
+    assert result.exit_code != 0
+    assert "--sandbox os" in result.output
+    assert "Docker" in result.output
+    assert "Bundle built" not in result.output
+
+
 def test_submit_defaults_to_official_site_and_requires_identity(tmp_path, monkeypatch):
     results = _make_results_dir(tmp_path)
     monkeypatch.delenv("ASIBENCH_SUBMIT_ENDPOINT", raising=False)
@@ -184,6 +211,31 @@ def test_submit_uploads_to_official_site_with_authenticated_identity(
 
 
 class TestBuildSubmission:
+    @pytest.mark.parametrize(
+        "sandbox_provenance",
+        [
+            {},
+            {"effective_mode": "none"},
+            {
+                "effective_mode": "os",
+                "enforcement_status": "fail_closed",
+                "verification_status": "docker_container",
+                "image_identity": None,
+            },
+        ],
+    )
+    def test_seed42_requires_verified_os_provenance(
+        self, tmp_path, sandbox_provenance,
+    ):
+        results = _make_results_dir(tmp_path)
+        result_path = next((results / "physics.demo_task").glob("*.json"))
+        data = json.loads(result_path.read_text())
+        data["provenance"]["sandbox"] = sandbox_provenance
+        result_path.write_text(json.dumps(data), encoding="utf-8")
+
+        with pytest.raises(ValueError, match="--sandbox os.*Docker provenance"):
+            build_submission(results)
+
     def test_seed31415_results_are_rejected(self, tmp_path):
         results = _make_results_dir(tmp_path, seed="seed31415")
 

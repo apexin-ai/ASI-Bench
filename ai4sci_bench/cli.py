@@ -877,7 +877,14 @@ def task_submit_cmd(task_dir: Path, endpoint: str | None, force_file_sync: bool)
     from ai4sci_bench.auth.resolve import resolve_token
     from ai4sci_bench.branding import submit_endpoint
     from ai4sci_bench.submission.endpoints import token_settings_url
-    from ai4sci_bench.submission.task_submit import submit_task
+    from ai4sci_bench.submission.task_submit import (
+        submit_task,
+        validate_task_os_evidence,
+    )
+
+    evidence_error = validate_task_os_evidence(task_dir)
+    if evidence_error is not None:
+        raise click.ClickException(evidence_error)
 
     resolved = submit_endpoint(endpoint)
     api = _resolve_api_base(resolved)
@@ -2125,6 +2132,8 @@ feasibility_checklist:
     - {id: machine_checkable_scoring, status: unsure}
 local_testing_done: false
 local_test_results: []
+# Each completed entry must include `sandbox: os`; Task contribution trials
+# are accepted only from `asibench difficulty-check --sandbox os`.
 """)
 
     for level in ["b1", "b2", "b3", "b4"]:
@@ -3480,8 +3489,8 @@ def _parse_agent_config(raw: str) -> dict:
               help="B3/B4 difficulty threshold (maximum 40); B1/B2 are recorded but not limited.")
 @click.option("--instances-per-task", default=1, type=int, show_default=True)
 @click.option("--seed", default=42, type=int, show_default=True)
-@click.option("--sandbox", default="none", show_default=True,
-              help="Sandbox mode for the evaluated agent: none, task, os, linux_ns.")
+@click.option("--sandbox", default="os", show_default=True,
+              help="Sandbox mode for Task contribution evidence; must be os (Docker).")
 @click.option("--timeout", default=DEFAULT_TIMEOUT_SECONDS, show_default=True, type=int,
               help="Agent timeout in seconds. Task metadata cannot override this value.")
 @click.option("--tasks-dir", default="tasks/", show_default=True)
@@ -3541,6 +3550,10 @@ def difficulty_check(
 
     if (task_id is None) == (status_filter is None):
         raise click.ClickException("Provide exactly one of --task or --status.")
+    if sandbox != "os":
+        raise click.ClickException(
+            "Task contribution difficulty-check requires --sandbox os (Docker)."
+        )
 
     parsed_levels = [lvl.strip() for lvl in prompt_levels.split(",") if lvl.strip()]
     if not parsed_levels:

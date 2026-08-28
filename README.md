@@ -160,10 +160,18 @@ asibench score \
 The command writes a separate `local_score_seed31415.json` and never overwrites
 the produce-only result. Local scores are reproducible but non-official.
 
-For `seed42`, repeat the pull and run with separate directories, then submit for
-private-reference scoring:
+For `seed42`, repeat the pull and run with separate directories using the
+required Docker OS sandbox, then submit for private-reference scoring. Because
+generic `--agent-cmd` does not support `os`, use an OS-compatible built-in
+adapter:
 
 ```bash
+asibench run \
+  --instances-dir hf_instances_seed42/ \
+  --agent codex_cli \
+  --agent-config '{"model": "gpt-5.5"}' \
+  --sandbox os \
+  --output-dir out_seed42/
 asibench login
 asibench submit --results-dir out_seed42/ \
   --benchmark-repo Apexintelligence-AI/ASI-Bench-seed42
@@ -171,9 +179,10 @@ asibench submit --results-dir out_seed42/ \
 
 `submit` creates an authenticated draft on the ASI-Bench website. Review the
 completeness summary and confirm the draft to enter the official scoring queue.
-Only seed42 result directories are accepted: the CLI checks every instance ID
-before building a bundle or authenticating, and rejects seed31415, unknown, or
-mixed-seed results. If `--benchmark-repo` is supplied, it must identify the
+Only seed42 result directories produced with `--sandbox os` are accepted: the
+CLI checks every instance ID and each result's verified Docker provenance before
+building a bundle or authenticating. It rejects non-OS runs, seed31415, unknown,
+or mixed-seed results. If `--benchmark-repo` is supplied, it must identify the
 official seed42 dataset.
 `asibench score --repo seed42` is rejected before reading local inputs because
 seed42 GT is not public. Local benchmark runs never calculate official scores.
@@ -187,7 +196,7 @@ seed42 GT is not public. Local benchmark runs never calculate official scores.
 | Prompt levels | All four levels run by default; select a subset with `--prompt-levels` |
 | Timeout | `--timeout` defaults to 10,800 seconds and applies uniformly to every task |
 | Produce-only reports | Unscored placeholders are never displayed as `0.0`; all-unscored per-task score tables are omitted |
-| Submission | `submit` uploads a draft by default; `--no-upload` creates a local bundle only |
+| Submission | seed42 requires verified `--sandbox os` results; `submit` uploads a draft by default and `--no-upload` creates a local bundle only |
 | Local scoring | `score --repo seed31415` writes a separate non-official JSON report; seed42 is rejected |
 | Custom agents | `--agent-cmd` supports the `none` and `linux_ns` sandboxes |
 | Built-in agents | Use `--agent` with `--agent-config`; compatible adapters can use Docker-based `os` isolation |
@@ -274,7 +283,7 @@ asibench task create --domain physics --name my_new_task
 asibench validate --pre-submit tasks/physics/my_new_task/
 
 # 4. Required same-model trial across B1, B2, B3, and B4
-asibench difficulty-check --task physics.my_new_task
+asibench difficulty-check --task physics.my_new_task --sandbox os
 
 # 5. Upload an exact Draft snapshot, then review and submit it in the Portal
 asibench task submit --task-dir tasks/physics/my_new_task/
@@ -287,7 +296,8 @@ asibench task submit --task-dir tasks/physics/my_new_task/
   evaluation gates and weighted scorers, runtime dependencies, and local-testing
   evidence.
 - Complete `validate --pre-submit` and a same-model `difficulty-check` across
-  B1–B4 before submission.
+  B1–B4 in the Docker OS sandbox before submission. `difficulty-check` defaults
+  to and requires `--sandbox os`.
 - Record all four scores on the 0–100 scale.
   B1 and B2 have no score ceiling; every B3 and B4 mean score must be strictly
   below 40. The CLI marks
@@ -306,8 +316,9 @@ asibench task submit --task-dir tasks/physics/my_new_task/
   set `ASIBENCH_SUBMIT_TOKEN`; tokens are intentionally not accepted as command
   arguments so they do not enter shell history.
 - The Portal requires `local_testing_done` and one finite score for each level
-  before freezing a revision; the required difficulty verdict follows the
-  B3/B4-below-40 policy above.
+  before freezing a revision. Every `local_test_results` entry must record
+  `sandbox: os`; the required difficulty verdict follows the B3/B4-below-40
+  policy above.
 - Authors do not create repository pull requests. Administrators publish
   accepted tasks after review.
 

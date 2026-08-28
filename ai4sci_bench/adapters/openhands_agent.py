@@ -235,6 +235,11 @@ class OpenHandsAdapter(AgentAdapter):
         self._os_sandbox: object | None = None
         self._sandbox_image_identity: str | None = None
 
+    @property
+    def sandbox_image_identity(self) -> str | None:
+        """Expose the Docker image used for OS-sandbox provenance."""
+        return self._sandbox_image_identity
+
     def setup(self, config: dict) -> None:
         self.timeout_seconds = int(config.get("timeout", self.timeout_seconds))
         self.repo_root = Path(config.get("repo_root", self.repo_root))

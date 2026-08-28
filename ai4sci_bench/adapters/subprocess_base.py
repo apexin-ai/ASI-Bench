@@ -131,6 +131,12 @@ class SubprocessAgentAdapter(AgentAdapter):
             LinuxNSSandbox() if self.sandbox == "linux_ns" else None
         )
 
+    @property
+    def sandbox_image_identity(self) -> str | None:
+        """Expose the Docker image used by OS-capable subprocess adapters."""
+        identity = getattr(self, "_sandbox_image_identity", None)
+        return identity if isinstance(identity, str) and identity else None
+
     def solve(self, task_instance: TaskInstance) -> AgentOutput:
         """Execute agent subprocess and collect results."""
         eff_timeout = self._get_effective_timeout(task_instance)

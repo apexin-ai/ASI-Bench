@@ -38,16 +38,19 @@ asibench score --repo seed31415 \
   --instances-dir hf_instances_seed31415/ \
   --tasks-dir /path/to/ASI-Bench/tasks/
 
-# 3b. Run seed42 separately, then sign in for private-reference scoring
-# (use --instances-dir hf_instances_seed42/ and --output-dir out_seed42/)
+# 3b. Run seed42 separately in the required Docker OS sandbox
+asibench run --instances-dir hf_instances_seed42/ \
+  --agent codex_cli --agent-config '{"model":"gpt-5.5"}' \
+  --sandbox os --output-dir out_seed42/
 asibench login
 
 # 4. Upload a seed42 draft to the website for scoring
 asibench submit --results-dir out_seed42/
 ```
 
-Repeat the run with `hf_instances_seed42/` and a distinct `out_seed42/`
-directory before submitting seed42.
+Use an OS-compatible built-in adapter and a distinct `out_seed42/` directory.
+The CLI rejects seed42 results that do not carry verified `--sandbox os`
+Docker provenance.
 
 `asibench run` evaluates `b1,b2,b3,b4` by default. Use `--prompt-levels` only
 when you intentionally want a subset.
@@ -117,10 +120,11 @@ Use `asibench submit` for seed42.
 ## Submit for scoring
 
 `asibench submit` builds a bundle of your declared outputs with checksums and
-provenance. It accepts only seed42 runs: every instance ID is validated before
-bundle creation and authentication, so seed31415, unknown, and mixed-seed
-directories fail locally. A supplied `--benchmark-repo` must also name the
-official seed42 dataset. By default it uploads the valid bundle to the
+provenance. It accepts only seed42 runs produced with `--sandbox os`: every
+instance ID and its Docker provenance are validated before bundle creation and
+authentication, so non-OS, seed31415, unknown, and mixed-seed directories fail
+locally. A supplied `--benchmark-repo` must also name the official seed42
+dataset. By default it uploads the valid bundle to the
 ASI-Bench website as a draft and prints a **confirm link**:
 
 1. Open the link in your browser.
