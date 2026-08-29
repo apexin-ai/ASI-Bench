@@ -19,7 +19,8 @@ feasibility_checklist:
     - {id: self_contained_inputs, status: unsure}
     - {id: machine_checkable_scoring, status: unsure}
 
-# Set true only after one approved model has completed the same B1-B4 run.
+# Set true only after one approved model has completed the same B1-B4 run in
+# the required Docker OS sandbox (`asibench difficulty-check --sandbox os`).
 local_testing_done: false
 local_test_results: []
 
@@ -28,6 +29,7 @@ local_test_results: []
 #   - provider: GPT
 #     family: "5.6"
 #     version: base
+#     sandbox: os
 #     results:
 #       - {prompt_level: b1, score: 90}
 #       - {prompt_level: b2, score: 75}

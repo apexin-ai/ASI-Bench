@@ -141,6 +141,7 @@ def _validate_official_submission(
     """Reject anything outside the private-reference seed42 contract."""
     missing_seed: list[str] = []
     wrong_seed: list[str] = []
+    invalid_sandbox: list[str] = []
     for _, data in records:
         instance_id = str(data.get("instance_id") or "")
         match = _SEED_SUFFIX_RE.search(instance_id)
@@ -148,6 +149,17 @@ def _validate_official_submission(
             missing_seed.append(instance_id or "<missing instance_id>")
         elif match.group("number") != "42":
             wrong_seed.append(f"{instance_id} (seed{match.group('number')})")
+        provenance = data.get("provenance")
+        sandbox = provenance.get("sandbox") if isinstance(provenance, dict) else None
+        sandbox = sandbox if isinstance(sandbox, dict) else {}
+        if not (
+            sandbox.get("effective_mode") == "os"
+            and sandbox.get("enforcement_status") == "fail_closed"
+            and sandbox.get("verification_status") == "docker_container"
+            and isinstance(sandbox.get("image_identity"), str)
+            and sandbox["image_identity"].strip()
+        ):
+            invalid_sandbox.append(instance_id or "<missing instance_id>")
 
     if missing_seed:
         shown = ", ".join(missing_seed[:5])
@@ -160,6 +172,13 @@ def _validate_official_submission(
         raise ValueError(
             f"Official result submission only accepts {OFFICIAL_SUBMISSION_SEED}; "
             f"score seed31415 locally with `asibench score`. Rejected: {shown}"
+        )
+    if invalid_sandbox:
+        shown = ", ".join(invalid_sandbox[:5])
+        raise ValueError(
+            "Official seed42 result submission requires every result to be "
+            "produced with `asibench run --sandbox os` and carry verified Docker "
+            f"provenance, including an image identity. Invalid: {shown}"
         )
 
     if benchmark_repo is not None:

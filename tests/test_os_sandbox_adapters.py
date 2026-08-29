@@ -49,6 +49,25 @@ def _mock_os_sandbox_result(
     return (success, log, stdout, stderr, image_id)
 
 
+def test_os_capable_adapters_expose_image_identity_for_submission_provenance():
+    from ai4sci_bench.adapters.antigravity_cli import AntigravityCLIAdapter
+    from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
+    from ai4sci_bench.adapters.kimi_code_cli import KimiCodeCLIAdapter
+    from ai4sci_bench.adapters.mimo_code_cli import MiMoCodeCLIAdapter
+    from ai4sci_bench.adapters.openhands_agent import OpenHandsAdapter
+
+    adapters = [
+        AntigravityCLIAdapter(),
+        ClaudeCodeCLIAdapter(),
+        KimiCodeCLIAdapter(),
+        MiMoCodeCLIAdapter(),
+        OpenHandsAdapter(api_key="sk-test"),
+    ]
+    for adapter in adapters:
+        adapter._sandbox_image_identity = "sha256:test-task-image"
+        assert adapter.sandbox_image_identity == "sha256:test-task-image"
+
+
 # ═══════════════════════════════════════════════════════════════════
 # MiMo Code CLI
 # ═══════════════════════════════════════════════════════════════════

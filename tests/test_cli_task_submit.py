@@ -28,7 +28,18 @@ def _task_dir(root: Path) -> Path:
         encoding="utf-8",
     )
     (root / "task_submission.yaml").write_text(
-        "schema_version: 1\nscientific_goal: Test the CLI upload.\n",
+        "schema_version: 1\n"
+        "scientific_goal: Test the CLI upload.\n"
+        "local_testing_done: true\n"
+        "local_test_results:\n"
+        "  - provider: Test\n"
+        "    family: test-model\n"
+        "    sandbox: os\n"
+        "    results:\n"
+        "      - {prompt_level: b1, score: 80}\n"
+        "      - {prompt_level: b2, score: 70}\n"
+        "      - {prompt_level: b3, score: 30}\n"
+        "      - {prompt_level: b4, score: 25}\n",
         encoding="utf-8",
     )
     (root / "generate_gt.py").write_text("print('gt')\n", encoding="utf-8")
@@ -187,6 +198,54 @@ def test_submit_task_reports_auth_failure_without_masking_status(tmp_path, monke
     assert result.ok is False
     assert result.status_code == 401
     assert "Invalid token" in result.error
+
+
+def test_submit_task_rejects_non_os_local_test_before_network(tmp_path, monkeypatch):
+    task_dir = _task_dir(tmp_path / "task")
+    submission_path = task_dir / "task_submission.yaml"
+    submission_path.write_text(
+        submission_path.read_text().replace("sandbox: os", "sandbox: linux_ns"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        task_submit,
+        "_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("network must not start")
+        ),
+    )
+
+    result = submit_task(task_dir, "https://portal.example", "asi_pat_x")
+
+    assert result.ok is False
+    assert "--sandbox os" in (result.error or "")
+    assert "local_test_results[0]" in (result.error or "")
+
+
+def test_cli_task_submit_rejects_non_os_evidence_before_authentication(
+    tmp_path, monkeypatch,
+):
+    task_dir = _task_dir(tmp_path / "task")
+    submission_path = task_dir / "task_submission.yaml"
+    submission_path.write_text(
+        submission_path.read_text().replace("sandbox: os", "sandbox: task"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "ai4sci_bench.auth.resolve.resolve_token",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("authentication must not start")
+        ),
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        ["task", "submit", "--task-dir", str(task_dir)],
+    )
+
+    assert result.exit_code != 0
+    assert "--sandbox os" in result.output
+    assert "local_test_results[0]" in result.output
 
 
 def test_cli_task_submit_uses_saved_token_uploads_draft_and_opens_review(

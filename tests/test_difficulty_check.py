@@ -441,6 +441,15 @@ class TestDifficultyCheckCLI:
         assert "b1,b2,b3,b4" in result.output
         assert "B3/B4" in result.output
         assert "40" in result.output
+        assert "default: os" in result.output
+
+    def test_rejects_non_os_sandbox(self):
+        result = CliRunner().invoke(cli, [
+            "difficulty-check", "--task", "x.y", "--sandbox", "linux_ns",
+        ])
+
+        assert result.exit_code != 0
+        assert "requires --sandbox os" in result.output
 
     def test_threshold_above_40_is_rejected(self):
         result = CliRunner().invoke(cli, [

@@ -30,14 +30,17 @@
   过滤 `reference/`，`asibench score --repo seed42` 必须拒绝并引导 `submit`。
 - `asibench submit` 只接受所有 instance ID 均属于 seed42 的结果；必须在打包、
   鉴权和联网前拒绝 seed31415、未知或混合 seed，且不得信任 `--benchmark-repo`
-  绕过实例级校验。
+  绕过实例级校验。每个 seed42 结果还必须具有 `--sandbox os` 生成的、包含镜像
+  identity 的 fail-closed Docker provenance，否则同样在打包和鉴权前拒绝。
 - `asibench task submit --task-dir ...` 使用本地 PAT 将 Task 精确同步为 Portal Draft，
   然后打开 owner-only 页面供作者核对文件和字段；CLI 不执行最终 submit。首次登录由
   用户在 Portal Settings 手动创建/复制 PAT，CLI 隐藏输入、在线校验并以 0600 保存；
   CI 使用 `ASIBENCH_SUBMIT_TOKEN`，不得提供 token 命令行参数。
 - Task 贡献的 `difficulty-check` 必须记录 B1–B4，但只以 B3/B4 平均分严格
   小于 40 为通过条件；B1/B2 不限分且报告为 `RECORDED`，CLI 不得允许把
-  B3/B4 阈值调高到 40 以上，catalog flagged 也只检查 B3/B4。
+  B3/B4 阈值调高到 40 以上，catalog flagged 也只检查 B3/B4。该检查必须在
+  Docker `os` 沙箱运行，Task Draft 的每组 `local_test_results` 必须记录
+  `sandbox: os`，并在联网前校验。
 - `task_submission.yaml` 保存 Portal-only 作者证据，随 Revision 冻结供审核，但不得
   导出进 benchmark Task 仓库；正式任务目录仍不得公开该文件，只有 `_template` 可包含。
 - `--instances-dir` 是只读输入；运行专属的 `framework_task_info.json` 必须写入

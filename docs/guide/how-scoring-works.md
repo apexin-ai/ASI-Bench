@@ -23,10 +23,10 @@ seed31415 local scoring is deliberately public but marked non-official.
 1. You run either seed in produce-only mode (`asibench run`).
 2. For seed31415, `asibench score --repo seed31415` uses the pulled public
    references and this checkout's GitHub scorers, writing a separate report.
-3. For seed42, `asibench login` identifies the submitter and `asibench submit` uploads an
-   authenticated draft to the ASI-Bench website. The CLI validates every
-   instance ID and rejects seed31415, unknown, or mixed-seed result directories
-   before it builds a bundle or reads credentials.
+3. For seed42, run the agent with `--sandbox os`; `asibench login` identifies
+   the submitter and `asibench submit` uploads an authenticated draft to the
+   ASI-Bench website. The CLI validates every instance ID and its Docker
+   provenance before it builds a bundle or reads credentials.
 4. You **confirm** the submission in the browser; it enters the website's scoring
    queue and is evaluated against private task material.
 5. The confirmed, officially scored run can be published to the leaderboard.
@@ -39,8 +39,9 @@ after scoring through the ASI-Bench website.
 seed31415 is the open evaluation split: public references make scorer behavior
 fully reproducible. seed42 is the protected evaluation split: public scoring
 logic remains auditable, but references are only available to the website.
-Only seed42 can enter `asibench submit`; seed31415 remains local and
-non-official. Neither split publishes GT generators or private solver assets.
+Only seed42 results with verified Docker OS provenance can enter
+`asibench submit`; seed31415 remains local and non-official. Neither split
+publishes GT generators or private solver assets.
 
 The runtime boundary is data-driven: a public scorer receives an already
 materialized instance and reference directory. It cannot accept a seed or call

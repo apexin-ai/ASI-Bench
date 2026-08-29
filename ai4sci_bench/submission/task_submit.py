@@ -194,6 +194,42 @@ def _metadata_path(task_dir: Path) -> Path | None:
     return None
 
 
+def validate_task_os_evidence(task_dir: str | Path) -> str | None:
+    """Return an error unless Task author evidence records OS-sandbox trials."""
+    task_dir = Path(task_dir).resolve()
+    path = task_dir / "task_submission.yaml"
+    if not path.is_file():
+        return (
+            "task_submission.yaml is required and must record local testing "
+            "performed with `asibench difficulty-check --sandbox os`."
+        )
+    try:
+        evidence = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        return f"Could not read task_submission.yaml: {exc}"
+    if not isinstance(evidence, dict):
+        return "task_submission.yaml must contain a YAML mapping"
+    if evidence.get("local_testing_done") is not True:
+        return (
+            "task_submission.yaml must set local_testing_done: true after an "
+            "OS-sandbox difficulty check."
+        )
+    results = evidence.get("local_test_results")
+    if not isinstance(results, list) or not results:
+        return (
+            "task_submission.yaml must include at least one local_test_results "
+            "entry produced with `--sandbox os`."
+        )
+    for index, result in enumerate(results):
+        if not isinstance(result, dict) or result.get("sandbox") != "os":
+            return (
+                f"task_submission.yaml local_test_results[{index}] must set "
+                "sandbox: os; Task contribution evidence must be produced with "
+                "`asibench difficulty-check --sandbox os`."
+            )
+    return None
+
+
 def submit_task(
     task_dir: str | Path,
     endpoint: str,
@@ -220,6 +256,9 @@ def submit_task(
     task_id = str(metadata.get("id") or metadata.get("task_id") or "").strip()
     if not _TASK_ID_RE.fullmatch(task_id):
         return TaskSubmitResult(ok=False, error=f"Invalid or missing stable Task id: {task_id!r}")
+    evidence_error = validate_task_os_evidence(root)
+    if evidence_error is not None:
+        return TaskSubmitResult(ok=False, error=evidence_error)
     try:
         files = collect_task_files(root)
     except ValueError as exc:

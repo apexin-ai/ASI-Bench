@@ -88,7 +88,9 @@ API key must yield `FAILED` + `error_message` (pi exits 0 on API errors).
 Task submission tests cover manual PAT validation and storage, endpoint
 normalization, safe Task-relative file collection, exact Draft synchronization,
 snapshot reconciliation, browser opening, headless/CI behavior, and the rule
-that the CLI never performs the final Proposal submit:
+that the CLI never performs the final Proposal submit. They also verify that
+every local-test evidence entry records `sandbox: os` and that invalid evidence
+is rejected before credential resolution or network access:
 
 ```bash
 uv run pytest -q tests/test_cli_task_submit.py tests/test_token_login.py \
@@ -99,8 +101,9 @@ uv run pytest -q tests/test_cli_task_submit.py tests/test_token_login.py \
 
 Task-author difficulty checks run and record B1–B4, but only B3/B4 control the
 verdict. Their mean scores must be strictly below the default ceiling of 40;
-B1/B2 are serialized as ungated `RECORDED` rows. The CLI rejects a threshold
-above 40, and catalog flagging likewise ignores B1/B2. Cover the terminal,
+B1/B2 are serialized as ungated `RECORDED` rows. The command defaults to and
+requires the Docker `os` sandbox. The CLI rejects a threshold above 40, and
+catalog flagging likewise ignores B1/B2. Cover the terminal,
 JSON, Markdown, CSV, persistence, and catalog contracts with:
 
 ```bash
@@ -171,9 +174,10 @@ uv run pytest -q \
 Result submission defaults to `https://asibench.apexin.ai/`, requires a submitter
 identity, uploads a draft, and directs the user to the website confirmation page.
 Before bundle creation or authentication, it requires every result instance to
-carry the seed42 suffix and rejects seed31415, unknown, and mixed-seed runs. A
-provided benchmark repository must be the seed42 alias or canonical repository
-ID; provenance cannot override the instance-level boundary.
+carry the seed42 suffix and verified Docker OS provenance (`effective_mode=os`,
+fail-closed enforcement, `docker_container` verification, and an image
+identity). It rejects non-OS, seed31415, unknown, and mixed-seed runs. A provided
+benchmark repository must be the seed42 alias or canonical repository ID.
 Public fixed-seed submission bundles do not require
 `framework_task_info.json`; bundle tests lock that this framework-only file
 remains optional. The tests mock the upload and never create a real online
@@ -182,6 +186,8 @@ submission:
 ```bash
 uv run pytest -q \
   tests/test_submission_bundle.py \
+  tests/test_cli_task_submit.py \
+  tests/test_difficulty_check.py \
   tests/test_device_login_cli.py \
   tests/test_endpoints.py
 ```
