@@ -355,3 +355,20 @@
   failure now reports `attempt_status=execution_failed` with
   `evaluation_status=completed`.
 - Implementation commit: `db57b7a`
+
+## 2026-08-29 — Native pi/opencode PR audit fixes
+
+- Problem: PR #4's two native adapters validated raw constructor arguments
+  before resolving `api_key_env`/`api_base_env`, and persisted provenance could
+  expose credential values. The PR also lacked live CLI evidence.
+- Resolution: resolve environment-backed credentials before validation and
+  native-provider selection; recursively redact credential config keys while
+  retaining endpoint values; record verified CLI baselines and document live
+  `--version`/`--help` probes.
+- Verification: focused additions passed `11 passed`; full public suite passed
+  `2239 passed, 2 skipped, 22 deselected`; npx probes returned pi `0.84.3` and
+  opencode `1.17.15` with the documented flags. Docker daemon was available,
+  but no global CLIs were installed, so no fake container smoke result was
+  recorded.
+- Commits: implementation and tests are in the local public branch; parent
+  submodule remains local and unpushed.

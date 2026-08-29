@@ -419,6 +419,11 @@ An agent execution failure is represented as `status: attempt_failed`,
 the scorer itself ran successfully; this is distinct from a valid completed
 attempt that merely earned a low score or failed a scoring gate.
 
+The native `pi_cli` and `opencode_cli` adapters retain verified CLI facts
+(`pi` 0.84.3 and `opencode` 1.17.15). At startup the runner probes the actual
+binary with `--version`; these versions are the compatibility baseline, not a
+substitute for the runtime probe.
+
 Five opt-in `sample` tasks are fully public examples. Their B1–B4 prompts,
 ground-truth generators, and scorer implementations or configurations are
 available under `tasks/`:

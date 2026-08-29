@@ -78,6 +78,8 @@ class PiCLIAdapter(SubprocessAgentAdapter):
     """
 
     VALID_EFFORT_LEVELS = ("off", "minimal", "low", "medium", "high", "xhigh", "max")
+    VERIFIED_CLI_VERSION = "0.84.3"
+    CLI_BINARY = "pi"
 
     VALID_API_PROTOCOLS: frozenset[str] = frozenset({
         "openai", "anthropic", "openai_responses", "google",
@@ -136,9 +138,11 @@ class PiCLIAdapter(SubprocessAgentAdapter):
                 f"Invalid api_protocol {api_protocol!r}. "
                 f"Valid values: {sorted(self.VALID_API_PROTOCOLS)}"
             )
-        if api_base is not None and api_key is None:
+        resolved_api_key = api_key if api_key is not None else self._read_env_secret(api_key_env)
+        resolved_api_base = api_base if api_base is not None else self._read_env_secret(api_base_env)
+        if resolved_api_base is not None and resolved_api_key is None:
             raise ValueError("api_base was given but api_key is missing.")
-        if api_base is None and api_protocol is not None:
+        if resolved_api_base is None and api_protocol is not None:
             raise ValueError(
                 "api_protocol was given but api_base is missing — "
                 "api_protocol needs an endpoint to apply to."
@@ -148,8 +152,8 @@ class PiCLIAdapter(SubprocessAgentAdapter):
         self.allow_external_tools = allow_external_tools
         self.tool_mode = self._resolve_tool_mode(tool_mode, allow_external_tools)
         self.effort = effort
-        self.api_key = api_key if api_key is not None else self._read_env_secret(api_key_env)
-        self.api_base = api_base if api_base is not None else self._read_env_secret(api_base_env)
+        self.api_key = resolved_api_key
+        self.api_base = resolved_api_base
         self.api_key_env = api_key_env
         self.api_base_env = api_base_env
         self.api_protocol = api_protocol
@@ -157,7 +161,7 @@ class PiCLIAdapter(SubprocessAgentAdapter):
         self.provider = provider
         self.reasoning = reasoning
 
-        self._uses_native_provider = api_base is not None and self.api_key is not None
+        self._uses_native_provider = self.api_base is not None and self.api_key is not None
         if not self._uses_native_provider and self.api_key is not None:
             # Key-only mode: the key must map to a known provider env var.
             self._resolved_provider = self._resolve_key_only_provider(

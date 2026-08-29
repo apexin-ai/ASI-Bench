@@ -169,6 +169,14 @@ def test_env_secret_reading(tmp_path, monkeypatch):
         PiCLIAdapter(api_key_env="MY_PI_KEY_UNSET_XYZ")
 
 
+def test_env_endpoint_and_key_use_native_provider(monkeypatch):
+    monkeypatch.setenv("MY_PI_KEY", "sk-from-env")
+    monkeypatch.setenv("MY_PI_BASE", "https://api.example.com/v1")
+    adapter = PiCLIAdapter(model="glm-5.3", api_key_env="MY_PI_KEY", api_base_env="MY_PI_BASE", api_protocol="openai")
+    assert adapter._uses_native_provider is True
+    assert adapter._model_arg() == "bench/glm-5.3"
+
+
 # ── Log parsing ───────────────────────────────────────────────
 
 PI_FIXTURE = "\n".join([
@@ -395,3 +403,8 @@ def test_install_command_registered():
     assert AGENT_INSTALL_COMMANDS["pi"] == [
         "npm install -g @earendil-works/pi-coding-agent",
     ]
+
+
+def test_verified_cli_version_fact():
+    assert PiCLIAdapter.VERIFIED_CLI_VERSION == "0.84.3"
+    assert PiCLIAdapter.CLI_BINARY == "pi"

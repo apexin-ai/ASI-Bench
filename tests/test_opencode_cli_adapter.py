@@ -173,6 +173,14 @@ def test_env_secret_reading(monkeypatch):
         OpenCodeCLIAdapter(api_key_env="MY_OC_KEY_UNSET_XYZ")
 
 
+def test_env_endpoint_and_key_use_native_provider(monkeypatch):
+    monkeypatch.setenv("MY_OC_KEY", "sk-from-env")
+    monkeypatch.setenv("MY_OC_BASE", "https://api.example.com/v1")
+    adapter = OpenCodeCLIAdapter(model="glm-5.3", api_key_env="MY_OC_KEY", api_base_env="MY_OC_BASE", api_protocol="openai")
+    assert adapter._uses_native_provider is True
+    assert adapter._model_arg() == "bench/glm-5.3"
+
+
 # ── Log parsing / usage / errors ──────────────────────────────
 
 OPENCODE_FIXTURE = "\n".join([
@@ -363,3 +371,8 @@ class TestOpenCodeOsSandbox:
 def test_install_command_registered():
     from ai4sci_bench.runner.task_image import AGENT_INSTALL_COMMANDS
     assert AGENT_INSTALL_COMMANDS["opencode"] == ["npm install -g opencode-ai"]
+
+
+def test_verified_cli_version_fact():
+    assert OpenCodeCLIAdapter.VERIFIED_CLI_VERSION == "1.17.15"
+    assert OpenCodeCLIAdapter.CLI_BINARY == "opencode"

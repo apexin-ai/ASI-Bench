@@ -239,6 +239,11 @@ replaced with stable placeholders:
 uv run pytest -q tests/test_runner.py -k sanitize
 ```
 
+Native adapter tests pin the CLI versions whose command/config schemas were
+verified (`pi` 0.84.3 and `opencode` 1.17.15); the normal run banner performs
+the live `--version` probe when those binaries are installed. Full Docker
+smoke tests remain environment-dependent.
+
 ## PyPI packaging
 
 The packaging contract is covered by `tests/test_packaging.py`: the sole

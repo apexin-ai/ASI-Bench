@@ -168,7 +168,7 @@ def _build_agent_metadata(
     metadata: dict[str, Any] = {
         "agent_name": agent_name,
         "cmd_template": agent_cmd,
-        "config": dict(agent_config),
+        "config": _redact_agent_config(agent_config),
         "allow_external_tools": allow_external_tools,
         "tool_mode": resolved_mode,
     }
@@ -193,6 +193,26 @@ def _build_agent_metadata(
     else:
         metadata["adapter_class"] = "CLIAgentAdapter"
     return metadata
+
+
+_SENSITIVE_CONFIG_KEYS = frozenset({
+    "api_key", "token", "password", "secret", "authorization",
+})
+
+
+def _redact_agent_config(value: Any) -> Any:
+    """Remove credential values before agent config enters persisted provenance."""
+    if isinstance(value, dict):
+        return {
+            key: "<redacted>" if key.lower() in _SENSITIVE_CONFIG_KEYS
+            else _redact_agent_config(inner)
+            for key, inner in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_agent_config(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_agent_config(item) for item in value)
+    return value
 
 
 @click.group()

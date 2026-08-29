@@ -14,6 +14,7 @@ from unittest.mock import patch
 from ai4sci_bench.cli import (
     _build_agent,
     _build_agent_metadata,
+    _redact_agent_config,
     _failed_final_attempts,
     _is_eval_result_json,
     _parse_eval_result,
@@ -23,6 +24,19 @@ from ai4sci_bench.cli import (
     _save_eval_result,
     cli,
 )
+
+
+def test_agent_provenance_redacts_credentials_but_keeps_endpoint():
+    redacted = _redact_agent_config({
+        "api_key": "sk-secret",
+        "api_base": "https://api.apexin.ai/v1",
+        "nested": {"token": "tok-secret", "provider": "openai"},
+    })
+    assert redacted == {
+        "api_key": "<redacted>",
+        "api_base": "https://api.apexin.ai/v1",
+        "nested": {"token": "<redacted>", "provider": "openai"},
+    }
 from ai4sci_bench.core.result_schema import (
     CURRENT_RESULT_SCHEMA_VERSION,
     RESULT_SCHEMA_VERSION_FIELD,

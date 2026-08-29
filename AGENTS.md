@@ -55,6 +55,7 @@
 - BenchFlow 运行 `asibench run` 必须启用 `--fail-on-agent-error`，且不得只信任
   进程退出码；manifest schema v2 必须提供对应 run result JSON，并将
   `prediction_dir` 绑定到其 persisted outputs，分别报告 attempt 与 evaluation 状态。
+- 原生 pi/opencode adapter 必须先解析 `api_key_env`/api_base_env 再做校验；provenance 只保留 endpoint 和环境变量名，禁止持久化 API key。CLI 版本必须用 `--version`/help 实测确认。
 - 持久化元数据的路径脱敏必须保留完整 HTTP(S) API endpoint，只替换 URL
   之外的宿主机绝对路径；agent 执行失败必须报告为 `attempt_status:
   execution_failed`，不得与 scorer 完成或低分混淆。
