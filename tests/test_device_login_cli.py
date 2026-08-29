@@ -200,7 +200,20 @@ class TestAuthCommands:
         r = CliRunner().invoke(cli, ["auth", "status"])
         assert "Not logged in" in r.output
 
-    def test_login_device_flow_e2e(self, portal_ok):
+    def test_login_device_flow_e2e(self, portal_ok, monkeypatch):
+        # Exercise the successful interactive command path, including the
+        # credential persistence that follows browser approval.
+        import ai4sci_bench.cli as cli_module
+        from ai4sci_bench.auth import credentials
+
+        monkeypatch.setattr(cli_module, "_stdio_interactive", lambda: True)
+        r = CliRunner().invoke(
+            cli, ["login", "--device", "--endpoint", portal_ok.api])
+        assert r.exit_code == 0, r.output
+        saved = credentials.load_credential(portal_ok.api)
+        assert saved and saved["token"] == "asi_pat_test123"
+
+    def test_login_device_flow_requires_tty(self, portal_ok):
         r = CliRunner().invoke(
             cli, ["login", "--device", "--endpoint", portal_ok.api])
         # CliRunner stdin/stdout are not TTYs → login must refuse, not hang.
