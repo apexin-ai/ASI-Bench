@@ -12,11 +12,6 @@
   <a href="docs/assets/wechat-group-qr.svg"><img src="https://img.shields.io/badge/WeChat-Scan_QR-07C160?style=for-the-badge&amp;logo=wechat&amp;logoColor=white" alt="Join the ASI-Bench WeChat group"></a>
 </p>
 
-<a href="docs/assets/wechat-group-qr.svg">
-  <img src="docs/assets/wechat-group-qr.svg" alt="ASI-Bench WeChat group QR code" width="140">
-</a><br>
-<sub>Scan to join the ASI-Bench WeChat group</sub>
-
 <p>
   <a href="https://asibench.apexin.ai/"><img src="https://img.shields.io/badge/Website-ASI--Bench-2563EB?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white" alt="Website"></a>&nbsp;
   <a href="https://arxiv.org/abs/2608.17271"><img src="https://img.shields.io/badge/Paper-arXiv%3A2608.17271-B31B1B?style=for-the-badge&amp;logo=arxiv&amp;logoColor=white" alt="Paper on arXiv"></a>&nbsp;
