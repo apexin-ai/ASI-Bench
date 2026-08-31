@@ -372,3 +372,26 @@
   recorded.
 - Commits: implementation and tests are in the local public branch; parent
   submodule remains local and unpushed.
+
+## 2026-08-31 — Native adapter real Docker and seed31415 closure
+
+- Problem: mock tests did not reveal that Docker installed pi through a
+  floating npm tag (`0.74.2`), reused stale agent images after CLI/base changes,
+  passed OS prompts in argv, used Node 20 although pi `0.84.3` requires Node
+  `>=22.19`, installed task packages as an unprivileged build user, and dropped
+  native token cost from produce-only result JSON.
+- Resolution: pin pi `0.84.3` and opencode `1.17.15`; use Node 22 and Docker
+  stdin; bind agent image tags to the base schema and exact install command;
+  install overlays as root then restore agent ownership/non-root runtime; carry
+  `CostInfo` through the produce-only branch.
+- Verification: native/OS regression passed `218 passed`; the built wheel
+  contains both native adapters and trajectory extractors. Real Docker
+  runs used Node `22.23.2`, exact CLI versions, API-key env injection and image
+  SHA provenance. Formal seed31415 B1 completed for both adapters: Pi used 5
+  turns/22 tools/74,157 tokens, OpenCode used 11 turns/21 tools/95,728 tokens;
+  both produced the required files and scored `93.02/100` locally. Persisted
+  results contain no API key.
+- Prevention: never use floating CLI tags in evaluator images; every overlay
+  cache key must include its parent image and installation recipe; real Docker
+  acceptance is required when a native CLI schema changes.
+- Implementation commit: `8bc8b8e405d1e97133d26fea7eab425249f5f0c4`.
