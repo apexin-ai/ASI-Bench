@@ -189,6 +189,7 @@ class OSSandbox:
         extra_env: dict[str, str] | None = None,
         allow_external_tools: bool = False,
         extra_mounts: list[str] | None = None,
+        stdin_input: str | None = None,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         """Run an arbitrary agent command inside the task container.
 
@@ -240,6 +241,7 @@ class OSSandbox:
             extra_env=extra_env,
             allow_external_tools=allow_external_tools,
             extra_mounts=extra_mounts,
+            stdin_open=stdin_input is not None,
         )
 
         try:
@@ -249,6 +251,7 @@ class OSSandbox:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                input=stdin_input,
                 timeout=timeout + 30,
             )
             log = result.stdout + ("\n" + result.stderr if result.stderr else "")
@@ -522,10 +525,15 @@ class OSSandbox:
         extra_env: dict[str, str] | None = None,
         allow_external_tools: bool = False,
         extra_mounts: list[str] | None = None,
+        stdin_open: bool = False,
     ) -> list[str]:
         cmd = [
             "docker",
             "run",
+        ]
+        if stdin_open:
+            cmd.append("-i")
+        cmd += [
             "--name",
             container_name,
             "--rm",

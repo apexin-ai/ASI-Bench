@@ -323,6 +323,7 @@ class OpenCodeCLIAdapter(SubprocessAgentAdapter):
                 agent_type="opencode",
                 allow_external_tools=self.allow_external_tools,
                 extra_env=extra_env,
+                stdin_input=(workspace / "prompt.md").read_text(encoding="utf-8"),
             )
         )
         elapsed = time.time() - t0
@@ -357,13 +358,8 @@ class OpenCodeCLIAdapter(SubprocessAgentAdapter):
         )
 
     def _build_os_agent_cmd(self, workspace) -> list[str]:
-        """Build the opencode command for execution inside a Docker container.
-
-        The container has no usable stdin, so the prompt goes in argv —
-        same trade-off as the claude/kimi/pi adapters in os mode.
-        """
-        prompt = (workspace / "prompt.md").read_text(encoding="utf-8")
-        return self._base_command() + [prompt]
+        """Build the opencode command; Docker supplies the prompt on stdin."""
+        return self._base_command()
 
     # ── Log parsing ────────────────────────────────────────────
 

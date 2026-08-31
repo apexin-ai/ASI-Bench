@@ -454,6 +454,7 @@ class BenchmarkOrchestrator:
                 execution_time_seconds=agent_output.execution_time_seconds,
                 status=agent_output.status,
                 agent_output=agent_output,
+                cost=agent_output.cost,
             )
 
         try:

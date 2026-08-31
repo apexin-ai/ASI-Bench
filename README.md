@@ -244,8 +244,8 @@ with `--agent`.
 | Kimi Code | `npm install -g @moonshot-ai/kimi-code` | **Use the npm package.** The PyPI package (`kimi-cli`) has different CLI arguments and is not compatible with this adapter. Requires Moonshot API key or local login (`kimi /login`) |
 | CodeWhale | See [CodeWhale docs](https://github.com/codewhale-ai/codewhale) | Requires DeepSeek API key by default |
 | AntiGravity | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | Experimental |
-| pi | `npm install -g @earendil-works/pi-coding-agent` | Native JSONL trajectories + cost extraction. Requires local login (`pi` + `/login`) or provider API key; `model` uses `provider/model` syntax |
-| opencode | `npm install -g opencode-ai` | Native JSONL trajectories + cost extraction. Requires `opencode auth login` or provider API key; `model` uses `provider/model` syntax |
+| pi | `npm install -g @earendil-works/pi-coding-agent@0.84.3` | Native JSONL trajectories + cost extraction. Requires local login (`pi` + `/login`) or provider API key; `model` uses `provider/model` syntax |
+| opencode | `npm install -g opencode-ai@1.17.15` | Native JSONL trajectories + cost extraction. Requires `opencode auth login` or provider API key; `model` uses `provider/model` syntax |
 
 Example with Kimi Code:
 

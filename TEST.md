@@ -83,6 +83,30 @@ Check points: result JSON has `raw_stdout_format=jsonl`, non-generic
 `trajectory_summary` (steps > 1), non-null `cost`; a deliberately invalid
 API key must yield `FAILED` + `error_message` (pi exits 0 on API errors).
 
+OS smoke tests must use `--sandbox os` and the exact seed31415 instance ID.
+The image must report Node 22 plus pi `0.84.3` or opencode `1.17.15`; result
+provenance must contain a Docker image SHA. The 2026-08-31 acceptance run used
+`materials.relaxation_mode_recovery__seed31415` B1 with an OpenAI-compatible
+endpoint. Both adapters completed, produced `analysis.py` and
+`results/modes.csv`, persisted native token usage, and scored `93.02/100` via:
+
+```bash
+asibench score --repo seed31415 \
+  --results-dir <agent-results> \
+  --instances-dir <seed31415-instances> \
+  --tasks-dir tasks
+```
+
+The Docker regression suite also covers stdin forwarding, pinned CLI install
+commands, Node/base-schema cache invalidation, and root-only image build steps
+followed by a non-root runtime:
+
+```bash
+uv run pytest -q tests/test_os_sandbox.py tests/test_os_sandbox_adapters.py \
+  tests/test_pi_cli_adapter.py tests/test_opencode_cli_adapter.py \
+  tests/test_native_agent_extractors.py tests/test_integration.py
+```
+
 ## CLI Task Draft upload and browser confirmation
 
 Task submission tests cover manual PAT validation and storage, endpoint

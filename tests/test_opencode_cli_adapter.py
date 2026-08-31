@@ -309,7 +309,7 @@ class TestOpenCodeOsSandbox:
         kwargs = mock_sb.run_agent.call_args.kwargs
         assert kwargs["agent_type"] == "opencode"
 
-    def test_solve_os_cmd_contains_prompt_argv(self, tmp_path):
+    def test_solve_os_passes_prompt_via_stdin(self, tmp_path):
         from unittest.mock import MagicMock
         adapter = self._adapter(tmp_path)
         mock_sb = MagicMock()
@@ -317,8 +317,9 @@ class TestOpenCodeOsSandbox:
         adapter._os_sandbox = mock_sb
 
         adapter.solve(self._make_task_instance(tmp_path))
-        cmd = mock_sb.run_agent.call_args.kwargs["agent_cmd"]
-        assert "Solve this task." in cmd
+        kwargs = mock_sb.run_agent.call_args.kwargs
+        assert "Solve this task." not in kwargs["agent_cmd"]
+        assert kwargs["stdin_input"] == "Solve this task."
 
     def test_solve_os_passes_config_content_env(self, tmp_path):
         from unittest.mock import MagicMock
@@ -370,7 +371,7 @@ class TestOpenCodeOsSandbox:
 
 def test_install_command_registered():
     from ai4sci_bench.runner.task_image import AGENT_INSTALL_COMMANDS
-    assert AGENT_INSTALL_COMMANDS["opencode"] == ["npm install -g opencode-ai"]
+    assert AGENT_INSTALL_COMMANDS["opencode"] == ["npm install -g opencode-ai@1.17.15"]
 
 
 def test_verified_cli_version_fact():

@@ -348,14 +348,8 @@ class PiCLIAdapter(SubprocessAgentAdapter):
         return cmd
 
     def _build_os_agent_cmd(self, workspace) -> list[str]:
-        """Build the pi command for execution inside a Docker container.
-
-        The container has no usable stdin (``docker run`` without ``-i``), so
-        the prompt goes in argv behind ``--`` — same trade-off as the claude
-        and kimi adapters in os mode.
-        """
-        prompt = (workspace / "prompt.md").read_text(encoding="utf-8")
-        return self._base_command() + ["--", prompt]
+        """Build the pi command; the prompt is supplied through Docker stdin."""
+        return self._base_command()
 
     def _build_command(self, task_instance: TaskInstance, task_env):
         return self._base_command()
@@ -405,6 +399,7 @@ class PiCLIAdapter(SubprocessAgentAdapter):
                 allow_external_tools=self.allow_external_tools,
                 extra_env=extra_env,
                 extra_mounts=extra_mounts,
+                stdin_input=(workspace / "prompt.md").read_text(encoding="utf-8"),
             )
         )
         elapsed = time.time() - t0
