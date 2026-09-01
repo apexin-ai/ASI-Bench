@@ -798,6 +798,7 @@ def login_cmd(endpoint: str | None, device: bool):
     shown there. The token is validated before it is stored and is never put in
     shell history. ``--device`` retains the optional no-copy authorization flow.
     """
+    from ai4sci_bench.auth import save_credential
     from ai4sci_bench.auth.device_login import DeviceLoginError, device_login
 
     api = _resolve_api_base(endpoint)
