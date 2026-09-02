@@ -454,6 +454,7 @@ class BenchmarkOrchestrator:
                 execution_time_seconds=agent_output.execution_time_seconds,
                 status=agent_output.status,
                 agent_output=agent_output,
+                cost=agent_output.cost,
             )
 
         try:
@@ -1158,6 +1159,10 @@ class BenchmarkOrchestrator:
             extractor_name = self._detect_jsonl_trajectory_schema(raw)
             if extractor_name == "codex":
                 from ai4sci_bench.trajectory.codex_extractor import extract_from_jsonl
+            elif extractor_name == "pi":
+                from ai4sci_bench.trajectory.pi_extractor import extract_from_jsonl
+            elif extractor_name == "opencode":
+                from ai4sci_bench.trajectory.opencode_extractor import extract_from_jsonl
             else:
                 from ai4sci_bench.trajectory.claude_extractor import extract_from_jsonl
             trajectory = extract_from_jsonl(raw, agent_output.instance_id)
@@ -1205,6 +1210,19 @@ class BenchmarkOrchestrator:
                     return "codex"
             if etype in {"assistant", "user", "system"}:
                 return "claude"
+            if etype in {
+                "agent_start", "agent_end", "turn_start", "turn_end",
+                "message_start", "message_update", "message_end",
+                "tool_execution_start", "tool_execution_update",
+                "tool_execution_end",
+            }:
+                return "pi"
+            # opencode events are top-level type + a `part` payload; check
+            # before the generic codex tool_use/message rules below.
+            if etype in {"step_start", "step_finish"} or (
+                etype in {"tool_use", "text", "reasoning"} and "part" in event
+            ):
+                return "opencode"
             if etype in {
                 "message",
                 "function_call",
@@ -1293,12 +1311,26 @@ class BenchmarkOrchestrator:
         sanitized = text
         for source, placeholder in self._build_path_replacements(workspace):
             sanitized = sanitized.replace(source, placeholder)
-        sanitized = re.sub(
-            r"(?<![A-Za-z0-9_>])/(?:[^/\s'\"`]+/){1,}[^/\s'\"`]+",
-            "<abs_path>",
-            sanitized,
+
+        absolute_path = re.compile(
+            r"(?<![A-Za-z0-9_>])/(?:[^/\s'\"`]+/){1,}[^/\s'\"`]+"
         )
-        return sanitized
+        http_url = re.compile(r"https?://[^\s'\"`]+")
+
+        def redact_paths(value: str) -> str:
+            return absolute_path.sub("<abs_path>", value)
+
+        # Endpoint URLs carry reproducibility evidence and contain slash-heavy
+        # text that resembles an absolute path. Redact only the text between
+        # complete HTTP(S) URL spans.
+        parts: list[str] = []
+        cursor = 0
+        for match in http_url.finditer(sanitized):
+            parts.append(redact_paths(sanitized[cursor:match.start()]))
+            parts.append(match.group(0))
+            cursor = match.end()
+        parts.append(redact_paths(sanitized[cursor:]))
+        return "".join(parts)
 
     def _coerce_persisted_text(self, value: str | bytes) -> str:
         if isinstance(value, bytes):

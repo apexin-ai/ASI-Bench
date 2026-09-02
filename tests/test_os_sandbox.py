@@ -485,6 +485,30 @@ class TestRunAgent:
         assert "claude" in call_args
 
     @patch("ai4sci_bench.runner.os_sandbox.subprocess.run")
+    def test_run_agent_forwards_stdin_into_interactive_container(
+        self, mock_run, sandbox: OSSandbox, tmp_path: Path
+    ):
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        mock_run.return_value = MagicMock(returncode=0, stdout="{}\n", stderr="")
+
+        sandbox.run_agent(
+            {"difficulty": {}},
+            agent_cmd=["pi", "-p", "--mode", "json"],
+            workspace=workspace,
+            timeout=300,
+            agent_type="pi",
+            stdin_input="solve from stdin",
+        )
+
+        run_call = next(
+            call for call in mock_run.call_args_list
+            if len(call.args) > 0 and "run" in call.args[0]
+        )
+        assert "-i" in run_call.args[0]
+        assert run_call.kwargs["input"] == "solve from stdin"
+
+    @patch("ai4sci_bench.runner.os_sandbox.subprocess.run")
     def test_run_agent_failure(self, mock_run, sandbox: OSSandbox, tmp_path: Path):
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -742,10 +766,41 @@ class TestTaskImageBuilder:
     def test_task_image_tag_depends_on_packages(self, builder: TaskImageBuilder):
         meta1 = {"_runtime_packages": ["numpy==1.26"]}
         meta2 = {"_runtime_packages": ["scipy==1.12"]}
-        tag1 = builder._task_image_tag(meta1)
-        tag2 = builder._task_image_tag(meta2)
+        with patch.object(
+            builder.env_manager,
+            "compute_cache_key",
+            side_effect=lambda meta: "|".join(meta["_runtime_packages"]),
+        ):
+            tag1 = builder._task_image_tag(meta1)
+            tag2 = builder._task_image_tag(meta2)
         assert tag1 != tag2
         assert tag1.startswith("ai4sci-bench-task:")
+
+    def test_agent_image_tag_depends_on_pinned_install_command(
+        self, builder: TaskImageBuilder
+    ):
+        metadata = {"_runtime_packages": ["numpy==1.26"]}
+        with patch.object(builder.env_manager, "compute_cache_key", return_value="task-key"):
+            with patch.dict(
+                "ai4sci_bench.runner.task_image.AGENT_INSTALL_COMMANDS",
+                {"pi": ["npm install -g pi@1"]},
+            ):
+                tag1 = builder._task_agent_image_tag(metadata, "pi")
+            with patch.dict(
+                "ai4sci_bench.runner.task_image.AGENT_INSTALL_COMMANDS",
+                {"pi": ["npm install -g pi@2"]},
+            ):
+                tag2 = builder._task_agent_image_tag(metadata, "pi")
+        assert tag1 != tag2
+
+    def test_agent_image_tag_depends_on_base_schema(self, builder: TaskImageBuilder):
+        metadata = {"_runtime_packages": ["numpy==1.26"]}
+        with patch.object(builder.env_manager, "compute_cache_key", return_value="task-key"):
+            with patch.object(builder, "_base_image_tag", return_value="base:v1"):
+                tag1 = builder._task_agent_image_tag(metadata, "pi")
+            with patch.object(builder, "_base_image_tag", return_value="base:v2"):
+                tag2 = builder._task_agent_image_tag(metadata, "pi")
+        assert tag1 != tag2
 
     def test_ensure_base_image_returns_cached(self, builder: TaskImageBuilder):
         with patch.object(builder, "ensure_docker_available"), \
@@ -789,16 +844,20 @@ class TestTaskImageBuilder:
     def test_ensure_image_builds_task_image_with_packages(self, builder: TaskImageBuilder):
         with patch.object(builder, "ensure_base_image", return_value="ai4sci-bench-base:abc"), \
              patch.object(builder, "_image_exists", return_value=False), \
+             patch.object(builder.env_manager, "compute_cache_key", return_value="task-key"), \
              patch.object(builder, "_build_image") as mock_build:
             tag = builder.ensure_image({"_runtime_packages": ["numpy==1.26"]})
             assert tag.startswith("ai4sci-bench-task:")
             mock_build.assert_called_once()
             dockerfile_arg = mock_build.call_args[0][1]
             assert "uv pip install numpy==1.26" in dockerfile_arg
+            assert dockerfile_arg.index("USER root") < dockerfile_arg.index("uv pip install")
+            assert dockerfile_arg.rfind("USER agent") > dockerfile_arg.index("uv pip install")
 
     def test_ensure_image_returns_cached_task_image(self, builder: TaskImageBuilder):
         with patch.object(builder, "ensure_base_image", return_value="ai4sci-bench-base:abc"), \
              patch.object(builder, "_image_exists", return_value=True), \
+             patch.object(builder.env_manager, "compute_cache_key", return_value="task-key"), \
              patch.object(builder, "_build_image") as mock_build:
             tag = builder.ensure_image({"_runtime_packages": ["numpy"]})
             mock_build.assert_not_called()

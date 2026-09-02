@@ -61,7 +61,7 @@ when you intentionally want a subset.
 - **Any CLI / script:** `--agent-cmd '<command>'` (file-exchange mode). The
   framework prepares a workspace with the inputs and prompt, runs your command,
   and collects the output files your agent writes.
-- **Built-in adapters:** `--agent direct_llm|claude_code_cli|codex_cli|…` with
+- **Built-in adapters:** `--agent direct_llm|claude_code_cli|codex_cli|kimi_code_cli|mimo_code_cli|antigravity_cli|openhands|hermes|codewhale|pi_cli|opencode_cli|…` with
   `--agent-config '{...}'` (model, API key/base, reasoning effort). Compatible
   adapters accept a third-party `api_base` + `api_protocol` (`openai` or
   `anthropic`).

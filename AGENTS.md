@@ -47,6 +47,21 @@
   output 目录，不得新增或覆盖 Hugging Face 拉取目录中的文件。
 - produce-only 的数值零只是序列化占位符；报告不得将未评分结果显示为
   `0.0`，全未评分时应隐藏 per-task 分数表。
+- BenchFlow 适配只接受已物化的 seed31415 manifest：必须校验
+  `seed: 31415`、`instance_id` 后缀、现有 `instance_dir/reference/`、prediction artifact
+  目录和 task bundle。`benchflow-score` 不得接受 seed 生成请求、调用
+  `generate_gt.py` 或评分 seed42。输出必须包含固定 schema 的 ScoreDetail、
+  artifact SHA-256、scorer/task revision 和 harness/model/effort provenance。
+- BenchFlow 运行 `asibench run` 必须启用 `--fail-on-agent-error`，且不得只信任
+  进程退出码；manifest schema v2 必须提供对应 run result JSON，并将
+  `prediction_dir` 绑定到其 persisted outputs，分别报告 attempt 与 evaluation 状态。
+- 原生 pi/opencode adapter 必须先解析 `api_key_env`/api_base_env 再做校验；provenance 只保留 endpoint 和环境变量名，禁止持久化 API key。CLI 版本必须用 `--version`/help 实测确认。
+- pi/opencode 的 OS 镜像固定 pi `0.84.3`、opencode `1.17.15` 和 Node 22；
+  prompt 通过 `docker run -i` 的 stdin 传入。agent image cache identity 必须绑定
+  base schema 与精确安装命令，produce-only result 也必须持久化原生 token cost。
+- 持久化元数据的路径脱敏必须保留完整 HTTP(S) API endpoint，只替换 URL
+  之外的宿主机绝对路径；agent 执行失败必须报告为 `attempt_status:
+  execution_failed`，不得与 scorer 完成或低分混淆。
 
 ## 任务生命周期
 

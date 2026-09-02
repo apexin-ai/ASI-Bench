@@ -252,12 +252,28 @@ with `--agent`.
 | Kimi Code | `npm install -g @moonshot-ai/kimi-code` | **Use the npm package.** The PyPI package (`kimi-cli`) has different CLI arguments and is not compatible with this adapter. Requires Moonshot API key or local login (`kimi /login`) |
 | CodeWhale | See [CodeWhale docs](https://github.com/codewhale-ai/codewhale) | Requires DeepSeek API key by default |
 | AntiGravity | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | Experimental |
+| pi | `npm install -g @earendil-works/pi-coding-agent@0.84.3` | Native JSONL trajectories + cost extraction. Requires local login (`pi` + `/login`) or provider API key; `model` uses `provider/model` syntax |
+| opencode | `npm install -g opencode-ai@1.17.15` | Native JSONL trajectories + cost extraction. Requires `opencode auth login` or provider API key; `model` uses `provider/model` syntax |
 
 Example with Kimi Code:
 
 ```bash
 asibench run --agent kimi_code_cli \
   --agent-config '{"model": "kimi-k2.7"}' \
+  --output-dir out/
+```
+
+Example with pi (local login) and opencode (explicit endpoint):
+
+```bash
+# pi with harness-local login state
+asibench run --agent pi_cli \
+  --agent-config '{"model": "anthropic/claude-opus-4-6"}' \
+  --output-dir out/
+
+# opencode against a third-party OpenAI-compatible endpoint
+asibench run --agent opencode_cli \
+  --agent-config '{"model": "deepseek-chat", "api_base": "https://api.deepseek.com/v1", "api_key": "sk-...", "api_protocol": "openai"}' \
   --output-dir out/
 ```
 
@@ -376,6 +392,45 @@ formal task may therefore include an evaluator-only `*_eval_runtime.py` helper,
 but never a GT generator, reference builder, or seed-to-instance entry point.
 The public `submission_sandbox.py` is execution isolation infrastructure and
 contains neither task answers nor generation logic.
+
+### BenchFlow seed31415 scoring
+
+BenchFlow should execute ASI-Bench in strict mode so a failed or timed-out final
+attempt returns a non-zero process status after all result evidence is saved:
+
+```bash
+asibench run ... --fail-on-agent-error
+```
+
+Process status alone is not the execution contract. BenchFlow must also pass
+the corresponding persisted run result JSON to the stable `benchflow-score`
+interface. The schema-v2 manifest points to `run_result`, its exact persisted
+prediction artifact directory, an instance directory containing public
+`reference/`, and the checked-out public task bundle. It must declare
+`seed: 31415` and an instance ID ending in `__seed31415`; the adapter never
+generates instances or accepts seed42 references.
+
+```bash
+asibench benchflow-score \
+  --manifest benchflow_manifest.json \
+  --output benchflow_score.json
+```
+
+The adapter binds `prediction_dir` to `agent_output.persisted_outputs.dir` in
+the run result and independently reads both top-level and agent execution
+statuses. The JSON result includes distinct `attempt_status` and
+`evaluation_status`, gate and scorer `ScoreDetail` records, prediction and run
+result SHA-256 values, scorer/task revisions, framework version, and optional
+harness/model/effort/sandbox provenance. It is a non-official local score.
+An agent execution failure is represented as `status: attempt_failed`,
+`attempt_status: execution_failed`, and `evaluation_status: completed` when
+the scorer itself ran successfully; this is distinct from a valid completed
+attempt that merely earned a low score or failed a scoring gate.
+
+The native `pi_cli` and `opencode_cli` adapters retain verified CLI facts
+(`pi` 0.84.3 and `opencode` 1.17.15). At startup the runner probes the actual
+binary with `--version`; these versions are the compatibility baseline, not a
+substitute for the runtime probe.
 
 Five opt-in `sample` tasks are fully public examples. Their B1–B4 prompts,
 ground-truth generators, and scorer implementations or configurations are

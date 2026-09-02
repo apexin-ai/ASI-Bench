@@ -103,6 +103,8 @@ _AGENT_CLI_BINARY = {
     "kimi_code_cli": "kimi",
     "antigravity_cli": "agy",
     "mimo_code_cli": "mimo",
+    "pi_cli": "pi",
+    "opencode_cli": "opencode",
 }
 
 
@@ -166,7 +168,7 @@ def _build_agent_metadata(
     metadata: dict[str, Any] = {
         "agent_name": agent_name,
         "cmd_template": agent_cmd,
-        "config": dict(agent_config),
+        "config": _redact_agent_config(agent_config),
         "allow_external_tools": allow_external_tools,
         "tool_mode": resolved_mode,
     }
@@ -184,9 +186,33 @@ def _build_agent_metadata(
         metadata["adapter_class"] = "HermesAgentAdapter"
     elif agent_name == "codewhale":
         metadata["adapter_class"] = "CodeWhaleAdapter"
+    elif agent_name == "pi_cli":
+        metadata["adapter_class"] = "PiCLIAdapter"
+    elif agent_name == "opencode_cli":
+        metadata["adapter_class"] = "OpenCodeCLIAdapter"
     else:
         metadata["adapter_class"] = "CLIAgentAdapter"
     return metadata
+
+
+_SENSITIVE_CONFIG_KEYS = frozenset({
+    "api_key", "token", "password", "secret", "authorization",
+})
+
+
+def _redact_agent_config(value: Any) -> Any:
+    """Remove credential values before agent config enters persisted provenance."""
+    if isinstance(value, dict):
+        return {
+            key: "<redacted>" if key.lower() in _SENSITIVE_CONFIG_KEYS
+            else _redact_agent_config(inner)
+            for key, inner in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_agent_config(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_agent_config(item) for item in value)
+    return value
 
 
 @click.group()
@@ -570,6 +596,27 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
             f"{report['scorer_error_count']} instance(s) had internal scorer errors; "
             f"inspect {destination}."
         )
+
+
+@cli.command("benchflow-score")
+@click.option("--manifest", "manifest_path", required=True, type=click.Path(exists=True, dir_okay=False),
+              help="BenchFlow seed31415 manifest JSON")
+@click.option("--output", "output_path", default=None, type=click.Path(dir_okay=False),
+              help="Stable score result JSON (default: beside manifest)")
+def benchflow_score_cmd(manifest_path: str, output_path: str | None):
+    """Score one materialized seed31415 attempt for BenchFlow.
+
+    This command never generates instances or accepts seed42 references. The
+    manifest must point at an existing prediction directory, instance bundle,
+    and public task bundle.
+    """
+    from ai4sci_bench.benchflow import BenchFlowScoringError, score_manifest_file
+
+    try:
+        destination = score_manifest_file(manifest_path, output_path)
+    except BenchFlowScoringError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"BenchFlow seed31415 score: {destination}")
 
 
 @cli.command("submit")
@@ -973,7 +1020,7 @@ def _ensure_run_sandbox_available(sandbox: str) -> None:
 @click.option("--instances-per-task", default=1, type=int, help="Instances per task")
 @click.option("--seed", default=42, type=int, help="Random seed for reproducibility")
 @click.option("--agent-cmd", help="Agent command template (file-exchange mode)")
-@click.option("--agent", help="Built-in agent name (direct_llm, claude_code_cli, codex_cli)")
+@click.option("--agent", help="Built-in agent name (direct_llm, claude_code_cli, codex_cli, kimi_code_cli, mimo_code_cli, antigravity_cli, openhands, hermes, codewhale, pi_cli, opencode_cli)")
 @click.option("--agent-config", default="{}", help="Agent config JSON")
 @click.option("--output-dir", default="results/", help="Output directory")
 @click.option("--parallel", default=1, type=int, help="Parallel workers")
@@ -1003,6 +1050,8 @@ def _ensure_run_sandbox_available(sandbox: str) -> None:
               help="Write derived batch_records/ artifacts after the run.")
 @click.option("--batch-records-root", default=None,
               help="Shared results root to scan when writing batch_records/ (defaults to --output-dir).")
+@click.option("--fail-on-agent-error", is_flag=True, default=False,
+              help="Exit 1 after saving results if any final attempt failed or timed out.")
 @click.option("--diagnose", is_flag=True, default=False,
               help="Run trajectory review after evaluation completes")
 @click.option("--diagnose-threshold", default=10.0, type=float,
@@ -1036,6 +1085,7 @@ def run(
     tool_mode: str | None,
     write_batch_records: bool,
     batch_records_root: str | None,
+    fail_on_agent_error: bool,
     diagnose: bool,
     diagnose_threshold: float,
 ):
@@ -1220,6 +1270,34 @@ def run(
         batch_records_root=batch_records_root,
         default_root=output_dir,
     )
+
+    if fail_on_agent_error:
+        failed = _failed_final_attempts(report.results)
+        if failed:
+            raise click.ClickException(
+                f"{len(failed)} final attempt(s) failed or timed out; "
+                f"results were saved to {output_dir}."
+            )
+
+
+def _failed_final_attempts(results: list[EvalResult]) -> list[EvalResult]:
+    """Return failed final attempts without treating earlier retries as fatal."""
+    final_by_run: dict[tuple[str, str], EvalResult] = {}
+    for result in results:
+        key = (result.instance_id, result.prompt_level.value)
+        current = final_by_run.get(key)
+        if current is None or result.attempt >= current.attempt:
+            final_by_run[key] = result
+
+    failures = []
+    for result in final_by_run.values():
+        agent_status = result.agent_output.status if result.agent_output else None
+        if result.status in {RunStatus.FAILED, RunStatus.TIMEOUT} or agent_status in {
+            RunStatus.FAILED,
+            RunStatus.TIMEOUT,
+        }:
+            failures.append(result)
+    return failures
 
 
 
@@ -2048,6 +2126,12 @@ def _build_agent(
     elif agent_name == "mimo_code_cli":
         from ai4sci_bench.adapters.mimo_code_cli import MiMoCodeCLIAdapter
         return MiMoCodeCLIAdapter(**agent_config)
+    elif agent_name == "pi_cli":
+        from ai4sci_bench.adapters.pi_cli import PiCLIAdapter
+        return PiCLIAdapter(**agent_config)
+    elif agent_name == "opencode_cli":
+        from ai4sci_bench.adapters.opencode_cli import OpenCodeCLIAdapter
+        return OpenCodeCLIAdapter(**agent_config)
     else:
         # Default to a dummy adapter for testing
         from ai4sci_bench.adapters.cli_agent import CLIAgentAdapter

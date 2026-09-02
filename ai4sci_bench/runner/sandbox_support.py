@@ -52,8 +52,9 @@ SANDBOX_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "task packages pre-installed in image layer."
         ),
         "cons": (
-            "Requires Docker; supported by direct_llm, claude_code_cli, and "
-            "codex_cli adapters; higher startup overhead than task mode."
+            "Requires Docker; supported by direct_llm, claude_code_cli, "
+            "codex_cli, kimi_code_cli, mimo_code_cli, pi_cli, and "
+            "opencode_cli adapters; higher startup overhead than task mode."
         ),
     },
     "linux_ns": {

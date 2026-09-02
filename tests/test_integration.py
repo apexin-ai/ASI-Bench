@@ -10,6 +10,7 @@ import pytest
 from ai4sci_bench.core.agent_interface import AgentAdapter
 from ai4sci_bench.core.types import (
     AgentOutput,
+    CostInfo,
     EvalResult,
     PromptLevel,
     RunStatus,
@@ -76,6 +77,13 @@ class ImageIdentityAgent(PerfectAgent):
         return super().solve(task_instance)
 
 
+class CostReportingAgent(ZeroAgent):
+    def solve(self, task_instance: TaskInstance) -> AgentOutput:
+        output = super().solve(task_instance)
+        output.cost = CostInfo(input_tokens=11, output_tokens=7, total_tokens=18)
+        return output
+
+
 class TestEndToEnd:
     """End-to-end integration tests using the test task from conftest."""
 
@@ -118,6 +126,31 @@ class TestEndToEnd:
 
         assert report.n_instances >= 1
         assert report.overall_mean_score == 0.0
+
+    def test_produce_only_result_persists_agent_cost(self, sample_task_dir, tmp_dir):
+        results_dir = tmp_dir / "results"
+        config = RunConfig(
+            agent=CostReportingAgent(),
+            tasks=["physics.test_task"],
+            tasks_dir=str(sample_task_dir.parent.parent),
+            output_dir=str(results_dir),
+            instances_per_task=1,
+            seed=42,
+            include_test=True,
+            prompt_levels=["b2"],
+            score=False,
+        )
+
+        BenchmarkOrchestrator(config).run()
+
+        result_file = next(results_dir.rglob("*__b2.json"))
+        result = json.loads(result_file.read_text())
+        assert result["cost"] == {
+            "input_tokens": 11,
+            "output_tokens": 7,
+            "total_tokens": 18,
+            "estimated_cost_usd": 0.0,
+        }
 
     def test_results_saved_to_disk(self, sample_task_dir, tmp_dir):
         """Results are persisted as JSON files."""

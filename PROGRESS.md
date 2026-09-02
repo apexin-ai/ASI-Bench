@@ -304,21 +304,94 @@
   `twine check --strict`.
 - Release preparation commit: `5b172fff`
 
-## Require Docker OS provenance for official submissions
+## 2026-08-26 — BenchFlow seed31415 scorer adapter
 
-- Problem: contributed-task difficulty evidence and seed42 scoring bundles
-  could be produced in `none`, `task`, or `linux_ns`, so official submissions
-  did not guarantee the intended reproducible Docker execution boundary.
-- Resolution: make `difficulty-check` default to and require `--sandbox os`,
-  require every Task `local_test_results` entry to record `sandbox: os`, and
-  reject seed42 bundles unless every result carries fail-closed,
-  `docker_container` provenance with a non-empty image identity. Both Task and
-  result checks fail before authentication or network access.
-- Prevention: regression tests cover non-OS Task evidence, pre-auth rejection,
-  missing or incomplete seed42 provenance, and image identity exposure across
-  OS-capable adapters; templates and contributor/scoring guides state the same
-  requirement.
-- Verification: focused submission, difficulty, and OS-adapter tests passed
-  `180 passed`; the full offline suite passed `2136 passed / 2 skipped / 22
-  deselected`; wheel and sdist passed `twine check --strict`.
-- Implementation commit: `f7a9340`
+- Problem: BenchFlow had no stable single-attempt interface for feeding
+  already-materialized seed31415 prediction artifacts into the public scorer,
+  and could not receive machine-readable ScoreDetail/provenance output.
+- Resolution: add `asibench benchflow-score` and the JSON manifest adapter.
+  It validates the seed, instance suffix, reference location, task contract and
+  optional scorer revision; hashes prediction artifacts; and emits gate/scorer
+  details, status, revisions, framework version and harness/model/effort
+  provenance. It never generates instances, imports `generate_gt.py`, or
+  accepts seed42.
+- Verification: adapter/policy/local-scoring tests passed `30 passed`; the
+  complete public offline suite passed `2133 passed, 2 skipped, 22 deselected`;
+  the built wheel contains `ai4sci_bench/benchflow.py`.
+- Implementation commit: `a209722d`
+
+## 2026-08-27 — Bind BenchFlow scores to strict run evidence
+
+- Problem: `asibench run` returned zero after persisting failed agent attempts,
+  and the BenchFlow scorer trusted a caller-supplied prediction directory
+  without independently reading its ASI-Bench run result.
+- Resolution: add opt-in `run --fail-on-agent-error`, evaluated from the final
+  retry attempt after all evidence is saved; require a schema-v2 BenchFlow
+  manifest to bind `run_result` to its persisted output directory and report
+  separate attempt and evaluation statuses plus both artifact hashes.
+- Prevention: CLI tests cover non-zero strict exits and recovered retries;
+  adapter tests cover missing/mismatched run evidence and failed attempts.
+- Verification: focused CLI/BenchFlow/reporting tests passed `163 passed`; the
+  complete public suite passed `2138 passed, 2 skipped, 22 deselected`; the
+  previous real seed31415 B1 failure is now reported as `attempt_failed` while
+  retaining `evaluation_status=completed` and scorer details.
+- Implementation commit: `77c394d`
+
+## 2026-08-27 — Preserve API provenance and clarify BenchFlow status
+
+- Problem: persistence path sanitization restarted its absolute-path match at
+  the second slash of an HTTP(S) URL, turning endpoints such as
+  `https://api.apexin.ai/v1` into `https:/<abs_path>`; BenchFlow also exposed
+  the ambiguous raw attempt value `failed` alongside scorer completion.
+- Resolution: protect complete HTTP(S) URL spans while redacting host paths in
+  surrounding text, and normalize attempt outcomes to `execution_failed`,
+  `execution_timeout`, and `execution_incomplete` while retaining independent
+  `evaluation_status`.
+- Prevention: persistence tests cover API endpoints, URL paths/query strings,
+  mixed URL/host-path text, and final result provenance; BenchFlow tests cover
+  failed, timed-out, and incomplete execution states.
+- Verification: focused regressions passed `18 passed`; the complete public
+  suite passed `2144 passed, 2 skipped, 22 deselected`; the real seed31415 B1
+  failure now reports `attempt_status=execution_failed` with
+  `evaluation_status=completed`.
+- Implementation commit: `db57b7a`
+
+## 2026-08-29 — Native pi/opencode PR audit fixes
+
+- Problem: PR #4's two native adapters validated raw constructor arguments
+  before resolving `api_key_env`/`api_base_env`, and persisted provenance could
+  expose credential values. The PR also lacked live CLI evidence.
+- Resolution: resolve environment-backed credentials before validation and
+  native-provider selection; recursively redact credential config keys while
+  retaining endpoint values; record verified CLI baselines and document live
+  `--version`/`--help` probes.
+- Verification: focused additions passed `11 passed`; full public suite passed
+  `2239 passed, 2 skipped, 22 deselected`; npx probes returned pi `0.84.3` and
+  opencode `1.17.15` with the documented flags. Docker daemon was available,
+  but no global CLIs were installed, so no fake container smoke result was
+  recorded.
+- Commits: implementation and tests are in the local public branch; parent
+  submodule remains local and unpushed.
+
+## 2026-08-31 — Native adapter real Docker and seed31415 closure
+
+- Problem: mock tests did not reveal that Docker installed pi through a
+  floating npm tag (`0.74.2`), reused stale agent images after CLI/base changes,
+  passed OS prompts in argv, used Node 20 although pi `0.84.3` requires Node
+  `>=22.19`, installed task packages as an unprivileged build user, and dropped
+  native token cost from produce-only result JSON.
+- Resolution: pin pi `0.84.3` and opencode `1.17.15`; use Node 22 and Docker
+  stdin; bind agent image tags to the base schema and exact install command;
+  install overlays as root then restore agent ownership/non-root runtime; carry
+  `CostInfo` through the produce-only branch.
+- Verification: native/OS regression passed `218 passed`; the built wheel
+  contains both native adapters and trajectory extractors. Real Docker
+  runs used Node `22.23.2`, exact CLI versions, API-key env injection and image
+  SHA provenance. Formal seed31415 B1 completed for both adapters: Pi used 5
+  turns/22 tools/74,157 tokens, OpenCode used 11 turns/21 tools/95,728 tokens;
+  both produced the required files and scored `93.02/100` locally. Persisted
+  results contain no API key.
+- Prevention: never use floating CLI tags in evaluator images; every overlay
+  cache key must include its parent image and installation recipe; real Docker
+  acceptance is required when a native CLI schema changes.
+- Implementation commit: `8bc8b8e405d1e97133d26fea7eab425249f5f0c4`.

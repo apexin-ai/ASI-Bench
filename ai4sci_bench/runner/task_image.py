@@ -21,6 +21,10 @@ AGENT_INSTALL_COMMANDS: dict[str | None, list[str]] = {
     "codex":       ["npm install -g @openai/codex"],
     "kimi_code":   ["npm install -g @moonshot-ai/kimi-code"],
     "mimo_code":   ["npm install -g @mimo-ai/cli"],
+    # Native adapters are verified against these exact CLI schemas. Floating
+    # npm dist-tags have already served incompatible flag sets in production.
+    "pi":          ["npm install -g @earendil-works/pi-coding-agent@0.84.3"],
+    "opencode":    ["npm install -g opencode-ai@1.17.15"],
     "openhands":   [],  # mounted from host venv, no install needed
     "agy":         [],  # standalone binary, must be pre-installed on host
 }
@@ -30,11 +34,12 @@ class TaskImageBuilder:
     """Build and cache Docker images keyed by task runtime requirements."""
 
     PYTHON_BASE_IMAGE = "python:3.12-slim"
+    # v10: Node 22 is required by the pinned pi 0.84.3 CLI (node:fs.globSync).
     # v9: preserve /opt/venv/bin in login shells spawned by Codex command execution.
     # v8: chmod 0777 on /home/agent and /tmp/agent-auth so that --user host_uid
     # (set by OSSandbox on Linux to fix bind-mount UID mismatch) can still read
     # auth mounts and let CLIs write session state under HOME.
-    BASE_IMAGE_SCHEMA_VERSION = 9
+    BASE_IMAGE_SCHEMA_VERSION = 10
 
     def __init__(self, repo_root: Path):
         self.repo_root = repo_root
@@ -85,7 +90,7 @@ class TaskImageBuilder:
             "    && rm -rf /var/lib/apt/lists/*\n"
             "\n"
             "# Install Node.js (agent CLIs need it)\n"
-            "RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \\\n"
+            "RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \\\n"
             "    && apt-get install -y --no-install-recommends nodejs \\\n"
             "    && rm -rf /var/lib/apt/lists/*\n"
             "\n"
@@ -184,16 +189,16 @@ class TaskImageBuilder:
         if self._image_exists(tag):
             return tag
 
-        lines = [f"FROM {base_tag}\n"]
+        lines = [f"FROM {base_tag}\n", "USER root\n"]
         if agent_install_cmds:
             lines.append(f"# Install {agent_type} CLI\n")
-            lines.append("USER root\n")
             for cmd in agent_install_cmds:
                 lines.append(f"RUN {cmd}\n")
-            lines.append("USER agent\n")
         if runtime_packages:
             packages = " ".join(runtime_packages)
             lines.append(f"RUN uv pip install {packages}\n")
+        lines.append("RUN chown -R agent:agent /opt/venv /home/agent\n")
+        lines.append("USER agent\n")
         lines.append(
             f'LABEL ai4sci.task.cache_key="{self.env_manager.compute_cache_key(task_metadata)}"\n'
             f'LABEL ai4sci.agent_type="{agent_type or "none"}"\n'
@@ -416,7 +421,10 @@ class TaskImageBuilder:
     def _task_agent_image_tag(self, task_metadata: dict[str, Any], agent_type: str | None) -> str:
         cache_key = self.env_manager.compute_cache_key(task_metadata)
         agent_suffix = agent_type or "base"
-        payload = f"{cache_key}|{agent_suffix}".encode("utf-8")
+        install_identity = "\n".join(AGENT_INSTALL_COMMANDS.get(agent_type, []))
+        payload = (
+            f"{self._base_image_tag()}|{cache_key}|{agent_suffix}|{install_identity}"
+        ).encode("utf-8")
         digest = hashlib.sha256(payload).hexdigest()[:12]
         return f"ai4sci-bench-task:{digest}"
 

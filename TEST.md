@@ -42,6 +42,71 @@ uv run pytest -q -m integration
 uv run pytest -q -m e2e
 ```
 
+## pi / opencode native adapters
+
+The `pi_cli` and `opencode_cli` adapters provide first-class support for the
+pi and opencode coding agents with native JSONL trajectories, token-cost
+extraction, and fake-success (terminal API error) detection.
+
+Offline unit tests (no agent CLI or API key needed):
+
+```bash
+uv run pytest -q \
+  tests/test_pi_cli_adapter.py \
+  tests/test_opencode_cli_adapter.py \
+  tests/test_native_agent_extractors.py
+```
+
+Coverage includes: command construction (prompt via stdin, never argv),
+auth mode resolution (local login / provider API key / explicit endpoint with
+`api_protocol`), tool-mode isolation, JSONL log parsing, `CostInfo` summing,
+terminal-error detection, `--sandbox os` integration (auth mounts, Docker
+install commands, network whitelist, agent_type plumbing), trajectory
+extractors, and JSONL schema detection dispatch.
+
+The extractors are pinned to verified CLI event schemas (pi v0.84.3,
+opencode v1.17.15). If either CLI changes its event format, update the
+fixtures in `tests/test_native_agent_extractors.py` together with
+`ai4sci_bench/trajectory/pi_extractor.py` /
+`ai4sci_bench/trajectory/opencode_extractor.py`.
+
+Manual smoke test (requires a real provider key; results are non-official):
+
+```bash
+asibench run --agent pi_cli \
+  --agent-config '{"model": "<provider/model>"}' \
+  --instances-dir hf_instances_seed31415/ \
+  --prompt-levels b3 --output-dir out_smoke/
+```
+
+Check points: result JSON has `raw_stdout_format=jsonl`, non-generic
+`trajectory_summary` (steps > 1), non-null `cost`; a deliberately invalid
+API key must yield `FAILED` + `error_message` (pi exits 0 on API errors).
+
+OS smoke tests must use `--sandbox os` and the exact seed31415 instance ID.
+The image must report Node 22 plus pi `0.84.3` or opencode `1.17.15`; result
+provenance must contain a Docker image SHA. The 2026-08-31 acceptance run used
+`materials.relaxation_mode_recovery__seed31415` B1 with an OpenAI-compatible
+endpoint. Both adapters completed, produced `analysis.py` and
+`results/modes.csv`, persisted native token usage, and scored `93.02/100` via:
+
+```bash
+asibench score --repo seed31415 \
+  --results-dir <agent-results> \
+  --instances-dir <seed31415-instances> \
+  --tasks-dir tasks
+```
+
+The Docker regression suite also covers stdin forwarding, pinned CLI install
+commands, Node/base-schema cache invalidation, and root-only image build steps
+followed by a non-root runtime:
+
+```bash
+uv run pytest -q tests/test_os_sandbox.py tests/test_os_sandbox_adapters.py \
+  tests/test_pi_cli_adapter.py tests/test_opencode_cli_adapter.py \
+  tests/test_native_agent_extractors.py tests/test_integration.py
+```
+
 ## CLI Task Draft upload and browser confirmation
 
 Task submission tests cover manual PAT validation and storage, endpoint
@@ -178,6 +243,30 @@ in subprocesses containing only public files. It also scans evaluator runtimes
 for generator/reference-builder symbols and forbids scorers from importing
 `generate_gt`, so seed31415 remains locally scoreable without exposing seed42
 GT through the public scorer API.
+
+BenchFlow seed31415 adapter regression coverage validates the manifest seed and
+instance boundary, required run-result binding, independent agent execution
+status checks, deterministic artifact hashing, public reference usage, and
+stable JSON score output. CLI coverage also verifies that
+`run --fail-on-agent-error` saves evidence before returning non-zero and only
+uses the final retry attempt:
+
+```bash
+uv run pytest -q tests/test_benchflow.py tests/test_cli.py
+```
+
+Persistence sanitization coverage verifies that HTTP(S) API endpoints remain
+intact in reproducibility metadata while separate absolute host paths are
+replaced with stable placeholders:
+
+```bash
+uv run pytest -q tests/test_runner.py -k sanitize
+```
+
+Native adapter tests pin the CLI versions whose command/config schemas were
+verified (`pi` 0.84.3 and `opencode` 1.17.15); the normal run banner performs
+the live `--version` probe when those binaries are installed. Full Docker
+smoke tests remain environment-dependent.
 
 ## PyPI packaging
 
