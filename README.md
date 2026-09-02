@@ -478,11 +478,10 @@ for the complete authoring guide.
 
 ## How scoring works (and stays fair)
 
-To measure run-to-run variance for a contributed task, use
-`asibench difficulty-check-repeat --task <task-id>`. It executes the task three
-times in separate subprocesses with fresh workspaces and reports every run's
-scores; it never carries retry, resume, trajectory, or agent context between
-repetitions. This command requires the Docker `os` sandbox.
+For a one-step run followed by local scoring on seed31415, use
+`asibench run-score --instances-dir <instances> --tasks-dir tasks/`. It accepts
+the same task/agent settings plus `--parallel` and `--repetitions`; repeated
+runs are written below `run_N/` and scored independently.
 
 - **Public execution framework:** agent adapters, sandboxes, instance loading,
   output collection, and submission packaging are auditable in this repository.

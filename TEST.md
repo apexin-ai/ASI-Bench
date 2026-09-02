@@ -326,8 +326,6 @@ any dependency change.
 
 ### Independent three-run difficulty check
 
-`asibench difficulty-check-repeat --task <task-id>` runs the selected task three
-times as independent subprocesses in Docker `os` sandboxes. Each run receives a
-fresh workspace and output directory; prior errors, trajectories, retries, and
-agent context are not reused. The command prints all three score reports and
-can write a combined JSON summary with `--output`.
+`asibench run-score` composes `run` and `score` for seed31415. It forwards
+`--parallel` to the runner and can repeat the complete workflow with
+`--repetitions`; each repetition has separate run and score output.

@@ -598,6 +598,54 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
         )
 
 
+@cli.command("run-score")
+@click.option("--instances-dir", required=True, help="Pulled seed31415 instances directory.")
+@click.option("--tasks-dir", default="tasks/", show_default=True)
+@click.option("--tasks", default="all", show_default=True,
+              help="Comma-separated task IDs, or all tasks found in instances.")
+@click.option("--agent", default=None, help="Built-in agent name.")
+@click.option("--agent-cmd", default=None, help="Agent command template.")
+@click.option("--agent-config", default="{}", show_default=True)
+@click.option("--prompt-levels", default="b1,b2,b3,b4", show_default=True)
+@click.option("--parallel", default=1, type=click.IntRange(min=1), show_default=True)
+@click.option("--repetitions", default=1, type=click.IntRange(min=1), show_default=True,
+              help="Repeat the complete run+score workflow independently.")
+@click.option("--sandbox", default="none", show_default=True)
+@click.option("--timeout", default=DEFAULT_TIMEOUT_SECONDS, type=int, show_default=True)
+@click.option("--output-dir", default="run-score-results/", show_default=True)
+def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
+               prompt_levels, parallel, repetitions, sandbox, timeout, output_dir):
+    """Run agents and then score each run (seed31415 local scoring)."""
+    if repetitions > 1 and Path(output_dir).exists() and any(Path(output_dir).iterdir()):
+        raise click.ClickException("--output-dir must be empty or absent when using --repetitions")
+    base = Path(output_dir)
+    for number in range(1, repetitions + 1):
+        run_dir = base / f"run_{number}" if repetitions > 1 else base
+        score_path = run_dir / "local_score_seed31415.json"
+        run_args = [sys.executable, "-m", "ai4sci_bench.cli", "run",
+                    "--instances-dir", instances_dir, "--tasks-dir", tasks_dir,
+                    "--tasks", tasks, "--prompt-levels", prompt_levels,
+                    "--parallel", str(parallel), "--sandbox", sandbox,
+                    "--timeout", str(timeout), "--output-dir", str(run_dir)]
+        if agent:
+            run_args += ["--agent", agent]
+        if agent_cmd:
+            run_args += ["--agent-cmd", agent_cmd]
+        if agent_config != "{}":
+            run_args += ["--agent-config", agent_config]
+        click.echo(f"\n=== Run + score {number}/{repetitions} ===")
+        if subprocess.run(run_args).returncode != 0:
+            raise click.ClickException(f"run failed for repetition {number}")
+        score_args = [sys.executable, "-m", "ai4sci_bench.cli", "score",
+                      "--repo", "seed31415", "--results-dir", str(run_dir),
+                      "--instances-dir", instances_dir, "--tasks-dir", tasks_dir,
+                      "--output", str(score_path)]
+        if subprocess.run(score_args).returncode != 0:
+            raise click.ClickException(f"score failed for repetition {number}")
+        click.echo(f"Scores saved: {score_path}")
+    click.echo(f"Completed {repetitions} independent run+score repetition(s).")
+
+
 @cli.command("benchflow-score")
 @click.option("--manifest", "manifest_path", required=True, type=click.Path(exists=True, dir_okay=False),
               help="BenchFlow seed31415 manifest JSON")
@@ -3870,83 +3918,6 @@ def difficulty_check(
     if aborts:
         sys.exit(2)
     sys.exit(0 if failures == 0 else 1)
-
-
-@cli.command("difficulty-check-repeat")
-@click.option("--task", "task_id", required=True, help="Task ID to evaluate.")
-@click.option("--agent", "agent_name", default="direct_llm", show_default=True)
-@click.option("--agent-config", default="{}", show_default=True)
-@click.option("--prompt-levels", default="b1,b2,b3,b4", show_default=True)
-@click.option("--threshold", default=40, type=click.IntRange(min=1, max=40), show_default=True)
-@click.option("--instances-per-task", default=1, type=int, show_default=True)
-@click.option("--seed", default=42, type=int, show_default=True)
-@click.option("--sandbox", default="os", show_default=True)
-@click.option("--timeout", default=DEFAULT_TIMEOUT_SECONDS, type=int, show_default=True)
-@click.option("--tasks-dir", default="tasks/", show_default=True)
-@click.option("--output", "output_path", default=None, type=click.Path())
-def difficulty_check_repeat(
-    task_id, agent_name, agent_config, prompt_levels, threshold,
-    instances_per_task, seed, sandbox, timeout, tasks_dir, output_path,
-):
-    """Run one task three times in fresh processes and return all scores.
-
-    Each repetition has a new process, adapter, temporary output directory, and
-    workspace. No retry/resume state or trajectory is shared between repetitions.
-    This is intended to measure run-to-run variance, not to select the best run.
-    """
-    if sandbox != "os":
-        raise click.ClickException(
-            "difficulty-check-repeat requires --sandbox os (Docker)."
-        )
-    try:
-        json.loads(agent_config)
-    except json.JSONDecodeError as exc:
-        raise click.ClickException(f"Invalid --agent-config JSON: {exc}") from exc
-
-    reports = []
-    with tempfile.TemporaryDirectory(prefix="difficulty_repeat_") as tmp:
-        root = Path(tmp)
-        for repetition in range(1, 4):
-            report_path = root / f"repeat_{repetition}.json"
-            cmd = [
-                sys.executable, "-m", "ai4sci_bench.cli", "difficulty-check",
-                "--task", task_id, "--agent", agent_name,
-                "--agent-config", agent_config, "--prompt-levels", prompt_levels,
-                "--threshold", str(threshold), "--instances-per-task", str(instances_per_task),
-                "--seed", str(seed), "--sandbox", "os", "--timeout", str(timeout),
-                "--tasks-dir", tasks_dir, "--output", str(report_path),
-                "--no-save-scores", "--no-color",
-            ]
-            completed = subprocess.run(cmd, capture_output=True, text=True)
-            if completed.stdout:
-                click.echo(completed.stdout.rstrip())
-            if completed.returncode not in (0, 1) or not report_path.exists():
-                detail = (completed.stderr or completed.stdout or "unknown error").strip()
-                raise click.ClickException(
-                    f"Repetition {repetition} failed (exit {completed.returncode}): {detail[-500:]}"
-                )
-            data = json.loads(report_path.read_text(encoding="utf-8"))
-            reports.append(data)
-
-    summary = {
-        "task_id": task_id,
-        "repetitions": 3,
-        "independent_processes": True,
-        "sandbox": sandbox,
-        "runs": reports,
-    }
-    click.echo("\nIndependent repetition scores:")
-    for i, report in enumerate(reports, 1):
-        scores = ", ".join(
-            f"{row['agent']} {row['prompt_level'].upper()}={row['mean_score']:.2f}"
-            for row in report.get("results", [])
-        )
-        click.echo(f"  Run {i}: {scores or 'no scores'}")
-    if output_path:
-        out = Path(output_path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        click.echo(f"Summary JSON: {out}")
 
 
 def _latest_evaluation_date(score_data: dict[str, Any] | None) -> str | None:

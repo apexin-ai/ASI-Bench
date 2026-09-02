@@ -62,9 +62,8 @@
 - 持久化元数据的路径脱敏必须保留完整 HTTP(S) API endpoint，只替换 URL
   之外的宿主机绝对路径；agent 执行失败必须报告为 `attempt_status:
   execution_failed`，不得与 scorer 完成或低分混淆。
-- `difficulty-check-repeat --task <id>` 固定在 `os` 沙箱中启动三个独立 CLI
-  进程，使用全新 workspace/output 且不复用 retry、resume 或 agent 上下文，
-  用于报告三次独立分数和运行方差。
+- `run-score` 串联 seed31415 的 `run` 与 `score`；支持 `--parallel` 和
+  `--repetitions`，重复流程使用独立输出目录和进程。
 
 ## 任务生命周期
 

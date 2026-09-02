@@ -89,45 +89,23 @@ class TestRunSandboxAvailability:
         assert result.exit_code != 0
         assert "Docker daemon unavailable" in result.output
 
-
-class TestDifficultyCheckRepeat:
-    def test_runs_three_independent_processes_and_reports_each_score(self, monkeypatch):
+    def test_run_score_runs_then_scores_each_repetition(self, monkeypatch, tmp_path):
         calls = []
-
-        def fake_run(cmd, capture_output, text):
+        def fake_run(cmd, **kwargs):
             calls.append(cmd)
-            report_path = Path(cmd[cmd.index("--output") + 1])
-            run_no = len(calls)
-            report_path.write_text(json.dumps({
-                "task_id": "math.demo",
-                "results": [{"agent": "direct_llm", "prompt_level": "b3",
-                              "mean_score": float(run_no), "max_score": 100,
-                              "min_score": float(run_no), "instances": 1,
-                              "enforced": True, "passed": True}],
-            }))
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-
+            return SimpleNamespace(returncode=0)
         monkeypatch.setattr("ai4sci_bench.cli.subprocess.run", fake_run)
         result = CliRunner().invoke(cli, [
-            "difficulty-check-repeat", "--task", "math.demo",
-            "--sandbox", "os",
+            "run-score", "--instances-dir", str(tmp_path / "instances"),
+            "--tasks-dir", str(tmp_path / "tasks"), "--repetitions", "3",
+            "--parallel", "4", "--agent", "direct_llm",
+            "--output-dir", str(tmp_path / "out"),
         ])
-
         assert result.exit_code == 0, result.output
-        assert len(calls) == 3
-        assert all("difficulty-check" in cmd for cmd in calls)
-        assert all("--no-save-scores" in cmd for cmd in calls)
-        assert "Run 1:" in result.output
-        assert "Run 2:" in result.output
-        assert "Run 3:" in result.output
-        assert len({tuple(cmd[cmd.index("--output") + 1:cmd.index("--output") + 2]) for cmd in calls}) == 3
-
-    def test_requires_os_sandbox(self):
-        result = CliRunner().invoke(cli, [
-            "difficulty-check-repeat", "--task", "math.demo", "--sandbox", "none",
-        ])
-        assert result.exit_code != 0
-        assert "requires --sandbox os" in result.output
+        assert len(calls) == 6
+        assert [c[3] for c in calls] == ["run", "score"] * 3
+        assert all("--parallel" in c and c[c.index("--parallel") + 1] == "4" for c in calls[::2])
+        assert len({c[c.index("--output-dir") + 1] for c in calls[::2]}) == 3
 
 
 class TestBuildAgent:
