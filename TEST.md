@@ -323,3 +323,11 @@ can coexist with the rest of a user's environment. CI separately installs the
 built wheel in a clean environment, exercising the dependencies that `pip`
 would resolve for an end user. Update `uv.lock` deliberately and commit it with
 any dependency change.
+
+### Independent three-run difficulty check
+
+`asibench difficulty-check-repeat --task <task-id>` runs the selected task three
+times as independent subprocesses in Docker `os` sandboxes. Each run receives a
+fresh workspace and output directory; prior errors, trajectories, retries, and
+agent context are not reused. The command prints all three score reports and
+can write a combined JSON summary with `--output`.

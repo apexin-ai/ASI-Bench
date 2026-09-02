@@ -478,6 +478,12 @@ for the complete authoring guide.
 
 ## How scoring works (and stays fair)
 
+To measure run-to-run variance for a contributed task, use
+`asibench difficulty-check-repeat --task <task-id>`. It executes the task three
+times in separate subprocesses with fresh workspaces and reports every run's
+scores; it never carries retry, resume, trajectory, or agent context between
+repetitions. This command requires the Docker `os` sandbox.
+
 - **Public execution framework:** agent adapters, sandboxes, instance loading,
   output collection, and submission packaging are auditable in this repository.
 - **Public local scoring:** seed31415 publishes references on Hugging Face and
