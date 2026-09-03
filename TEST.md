@@ -193,6 +193,15 @@ uv run pytest -q \
   tests/test_runner.py::TestInstancesDirWorkspaceIsolation
 ```
 
+The `math.nnls_modulus_deblur` scorer resolves observation, kernel, and
+measurement metadata from either the agent output workspace or the instance's
+`data/` directory, independent of the process working directory. Cover this
+contract with:
+
+```bash
+uv run pytest -q tests/test_nnls_modulus_scorer.py
+```
+
 ## Authenticated website submission
 
 Result submission defaults to `https://asibench.apexin.ai/`, requires a submitter

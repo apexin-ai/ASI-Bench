@@ -622,9 +622,9 @@ class ResidualGate(Scorer):
         rel_slack = float(config.get("relative_residual_slack", 0.02))
 
         x = _load_npy(pred_dir / rec_name)
-        b = _load_npy(pred_dir / obs_name)
-        h = _load_npy(pred_dir / ker_name)
-        info = _load_json(pred_dir / info_name)
+        b = _load_input_npy(pred_dir, ref_dir, obs_name)
+        h = _load_input_npy(pred_dir, ref_dir, ker_name)
+        info = _load_input_json(pred_dir, ref_dir, info_name)
 
         if x is None or b is None or h is None:
             return ScoreDetail(
