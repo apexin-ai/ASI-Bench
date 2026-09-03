@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import threading
 import time
+from pathlib import Path
 
 from ai4sci_bench.adapters.subprocess_base import (
     SubprocessAgentAdapter,
     collect_output_files,
+    safe_run_key,
 )
 from ai4sci_bench.core.types import AgentOutput, CostInfo, RunStatus, TaskInstance, ToolMode
 from ai4sci_bench.runner.os_sandbox import OSSandbox
@@ -23,6 +26,15 @@ CLAUDE_CORE_TOOLS = (
     "EnterWorktree,ExitWorktree"
 )
 CLAUDE_SEARCH_TOOLS = CLAUDE_CORE_TOOLS + ",WebSearch,WebFetch"
+
+# Auth/config files copied into the isolated per-run Claude home for
+# host-side (non-OS-sandbox) execution. Mirrors the read-only auth mounts
+# used by the OS sandbox (runner/os_sandbox.py CLAUDE_AUTH_PATHS) so host
+# and container runs see the same ambient config surface. Everything else
+# under the real HOME — session transcripts, ~/.claude.json project
+# history, todos, auto-memory files, user-scoped MCP servers, skills — is
+# deliberately NOT copied: that is the cross-instance memory surface.
+CLAUDE_AUTH_FILENAMES = (".credentials.json", "settings.json")
 
 
 class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
@@ -274,11 +286,71 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
     def _build_run_env(self, task_instance, task_env) -> dict[str, str] | None:
         base_env = super()._build_run_env(task_instance, task_env)
         api_env = self._build_api_env()
-        if not api_env:
-            return base_env
         env = dict(base_env) if base_env else dict(os.environ)
-        env.update(api_env)
+        if api_env:
+            env.update(api_env)
+        if self.tool_mode != ToolMode.UNRESTRICTED:
+            isolated_home = self._prepare_isolated_claude_home(task_instance)
+            env["HOME"] = str(isolated_home)
+            env["USERPROFILE"] = str(isolated_home)
+            # Overwrite any ambient CLAUDE_CONFIG_DIR so the child cannot
+            # escape the isolated home via a pre-set environment variable.
+            env["CLAUDE_CONFIG_DIR"] = str(isolated_home / ".claude")
         return env
+
+    def _prepare_isolated_claude_home(self, task_instance) -> Path:
+        """Create a minimal per-run Claude home that excludes ambient state.
+
+        Host-side runs (sandbox none/task/linux_ns) must not see the real
+        ``HOME``: Claude Code writes session transcripts, project history,
+        todos and auto-memory under it, and reads user-level config
+        (``~/.claude.json`` MCP servers, hooks, skills) from it. Running
+        instances sequentially with the ambient HOME would let one
+        instance's state — or the user's personal config — influence the
+        next, contaminating benchmark results.
+
+        Only the credential/config files mirrored by the OS sandbox auth
+        mounts (``CLAUDE_AUTH_FILENAMES``) are copied in; everything else
+        starts empty for this instance + prompt level run.
+        """
+        home = (
+            self.repo_root
+            / ".ai4sci-bench"
+            / "claude_home"
+            / safe_run_key(task_instance.run_key)
+        )
+        claude_dir = home / ".claude"
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(home, 0o700)
+            os.chmod(claude_dir, 0o700)
+        except OSError:
+            pass
+
+        source_claude_dir = self._host_claude_dir()
+        for filename in CLAUDE_AUTH_FILENAMES:
+            src = source_claude_dir / filename
+            if not src.is_file():
+                continue
+            dst = claude_dir / filename
+            shutil.copy2(src, dst)
+            try:
+                os.chmod(dst, 0o600)
+            except OSError:
+                pass
+
+        logger.info(
+            "claude_code_cli: using isolated per-run HOME at %s", home,
+        )
+        return home
+
+    @staticmethod
+    def _host_claude_dir() -> Path:
+        """Return the real host Claude config dir (honors CLAUDE_CONFIG_DIR)."""
+        config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+        if config_dir:
+            return Path(config_dir)
+        return Path.home() / ".claude"
 
     # ── Solve ──────────────────────────────────────────────────
 

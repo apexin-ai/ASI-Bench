@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -254,6 +255,107 @@ class TestClaudeCodeCLIAdapter:
         adapter.solve(sample_task_instance)
 
         mock_run.assert_called_once()
+
+    def test_restricted_mode_uses_isolated_claude_home(self, sample_task_instance, tmp_dir):
+        """Restricted host-mode Claude runs must not see the ambient HOME.
+
+        Claude Code writes session transcripts, project history, todos and
+        auto-memory under HOME, and reads user-level config (MCP servers,
+        hooks, skills) from ~/.claude.json + ~/.claude/. Sequentially
+        executed instances would otherwise share that memory surface.
+        """
+        host_home = tmp_dir / "host_home"
+        host_claude = host_home / ".claude"
+        host_claude.mkdir(parents=True)
+        (host_claude / ".credentials.json").write_text('{"accessToken": "ok"}')
+        (host_claude / "settings.json").write_text('{"model": "x"}')
+        (host_claude / "projects").mkdir()
+        (host_claude / "projects" / "session.jsonl").write_text("{}")
+        (host_home / ".claude.json").write_text('{"mcpServers": {}}')
+
+        adapter = ClaudeCodeCLIAdapter()
+        adapter.setup({"sandbox": "none", "repo_root": str(tmp_dir / "repo")})
+
+        with patch.dict(
+            "os.environ",
+            {"HOME": str(host_home), "USERPROFILE": str(host_home)},
+            clear=True,
+        ):
+            env = adapter._build_run_env(sample_task_instance, task_env=None)
+
+        isolated_home = Path(env["HOME"])
+        isolated_claude = isolated_home / ".claude"
+        assert isolated_home.is_relative_to(
+            tmp_dir / "repo" / ".ai4sci-bench" / "claude_home"
+        )
+        assert env["USERPROFILE"] == str(isolated_home)
+        assert env["CLAUDE_CONFIG_DIR"] == str(isolated_claude)
+        # Auth/config files are mirrored (same surface as OS sandbox mounts).
+        assert (isolated_claude / ".credentials.json").read_text() == '{"accessToken": "ok"}'
+        assert (isolated_claude / "settings.json").read_text() == '{"model": "x"}'
+        # Memory surfaces are NOT copied.
+        assert not (isolated_claude / "projects").exists()
+        assert not (isolated_home / ".claude.json").exists()
+
+    def test_isolated_claude_home_differs_per_run(self, sample_task_instance, tmp_dir):
+        """Each instance + prompt level run gets its own isolated HOME."""
+        adapter = ClaudeCodeCLIAdapter()
+        adapter.setup({"sandbox": "none", "repo_root": str(tmp_dir / "repo")})
+        other_level = replace(sample_task_instance, prompt_level=PromptLevel.B3)
+
+        with patch.dict("os.environ", {"HOME": "/host"}, clear=True):
+            env_b2 = adapter._build_run_env(sample_task_instance, task_env=None)
+            env_b3 = adapter._build_run_env(other_level, task_env=None)
+
+        assert env_b2["HOME"] != env_b3["HOME"]
+        assert Path(env_b2["HOME"]).is_dir()
+        assert Path(env_b3["HOME"]).is_dir()
+
+    def test_unrestricted_mode_keeps_ambient_claude_home(self, sample_task_instance, tmp_dir):
+        """Unrestricted mode is explicit opt-in to ambient Claude state."""
+        host_home = tmp_dir / "host_home"
+        adapter = ClaudeCodeCLIAdapter(tool_mode="unrestricted")
+        adapter.setup({"sandbox": "none", "repo_root": str(tmp_dir / "repo")})
+
+        with patch.dict("os.environ", {"HOME": str(host_home)}, clear=True):
+            env = adapter._build_run_env(sample_task_instance, task_env=None)
+
+        assert env["HOME"] == str(host_home)
+        assert "CLAUDE_CONFIG_DIR" not in env
+
+    def test_isolated_claude_home_overrides_ambient_config_dir(self, sample_task_instance, tmp_dir):
+        """A pre-set CLAUDE_CONFIG_DIR must not defeat HOME isolation."""
+        adapter = ClaudeCodeCLIAdapter()
+        adapter.setup({"sandbox": "none", "repo_root": str(tmp_dir / "repo")})
+
+        with patch.dict(
+            "os.environ",
+            {"HOME": "/host", "CLAUDE_CONFIG_DIR": "/ambient/claude"},
+            clear=True,
+        ):
+            env = adapter._build_run_env(sample_task_instance, task_env=None)
+
+        assert env["CLAUDE_CONFIG_DIR"] == str(Path(env["HOME"]) / ".claude")
+
+    def test_isolated_claude_home_honors_host_config_dir(self, sample_task_instance, tmp_dir):
+        """Credentials are sourced from CLAUDE_CONFIG_DIR when set on the host."""
+        host_config = tmp_dir / "custom_claude"
+        host_config.mkdir()
+        (host_config / ".credentials.json").write_text('{"accessToken": "custom"}')
+
+        adapter = ClaudeCodeCLIAdapter()
+        adapter.setup({"sandbox": "none", "repo_root": str(tmp_dir / "repo")})
+
+        with patch.dict(
+            "os.environ",
+            {"HOME": str(tmp_dir / "host"), "CLAUDE_CONFIG_DIR": str(host_config)},
+            clear=True,
+        ):
+            env = adapter._build_run_env(sample_task_instance, task_env=None)
+
+        assert (
+            Path(env["HOME"]) / ".claude" / ".credentials.json"
+        ).read_text() == '{"accessToken": "custom"}'
 
     def test_init(self):
         adapter = ClaudeCodeCLIAdapter(

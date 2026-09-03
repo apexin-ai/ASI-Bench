@@ -14,6 +14,7 @@ from pathlib import Path
 from ai4sci_bench.adapters.subprocess_base import (
     SubprocessAgentAdapter,
     collect_output_files,
+    safe_run_key,
 )
 from ai4sci_bench.core.types import AgentOutput, CostInfo, RunStatus, TaskInstance, ToolMode
 
@@ -187,28 +188,51 @@ class KimiCodeCLIAdapter(SubprocessAgentAdapter):
 
     # ── Native config file ────────────────────────────────────
 
-    def _ensure_kimi_home(self) -> str:
-        """Return the ``KIMI_CODE_HOME`` dir, generating config.toml if needed."""
+    def _ensure_kimi_home(self, task_instance: TaskInstance | None = None) -> str:
+        """Return the ``KIMI_CODE_HOME`` dir, generating config.toml if needed.
+
+        Auto-generated homes are **per instance run** (keyed by
+        ``task_instance.run_key``) so the session/log state that the Kimi
+        CLI writes under its home cannot leak between sequentially
+        executed instances. A user-provided ``kimi_home`` is shared by
+        explicit choice and is used as-is. Callers without a task instance
+        (legacy/tests) fall back to a single adapter-level shared dir.
+        """
         if self.kimi_home:
             # User-provided persistent dir: use as-is, don't overwrite their config.
             return self.kimi_home
-        if self._temp_kimi_home:
-            return self._temp_kimi_home
 
-        tmpdir = tempfile.mkdtemp(prefix="kimi_home_")
-        os.chmod(tmpdir, 0o700)
+        root = self._temp_kimi_home
+        if root is None:
+            root = tempfile.mkdtemp(prefix="kimi_home_")
+            os.chmod(root, 0o700)
+            self._temp_kimi_home = root
+            logger.info("kimi_code_cli: generated home root at %s", root)
 
-        config_content = self._generate_kimi_config()
-        config_path = os.path.join(tmpdir, "config.toml")
+        if task_instance is None:
+            home = Path(root)
+        else:
+            home = Path(root) / safe_run_key(task_instance.run_key)
+        home.mkdir(mode=0o700, exist_ok=True)
+        try:
+            os.chmod(home, 0o700)
+        except OSError:
+            pass
+
+        self._write_kimi_config_if_missing(home)
+        if task_instance is not None:
+            logger.info(
+                "kimi_code_cli: using per-instance KIMI_CODE_HOME at %s", home,
+            )
+        return str(home)
+
+    def _write_kimi_config_if_missing(self, home: Path) -> None:
+        """Write the generated provider config.toml unless it already exists."""
+        config_path = home / "config.toml"
+        if config_path.exists():
+            return
         with open(config_path, "w", encoding="utf-8") as f:
-            f.write(config_content)
-
-        self._temp_kimi_home = tmpdir
-        logger.info(
-            "kimi_code_cli: generated config at %s (type=%s, base_url=%s)",
-            tmpdir, self._resolved_type, self._resolved_base,
-        )
-        return tmpdir
+            f.write(self._generate_kimi_config())
 
     def _generate_kimi_config(self) -> str:
         cli_type = self._resolved_type or "openai"
@@ -233,18 +257,22 @@ class KimiCodeCLIAdapter(SubprocessAgentAdapter):
 
     _CONTAINER_KIMI_HOME = "/home/agent/.kimi-code"
 
-    def _build_api_env(self) -> dict[str, str]:
+    def _build_api_env(
+        self, task_instance: TaskInstance | None = None,
+    ) -> dict[str, str]:
         """Build env vars for host (non-os) execution."""
         env: dict[str, str] = {}
         if self._uses_native_provider or self.kimi_home:
-            kimi_home = self._ensure_kimi_home()
+            kimi_home = self._ensure_kimi_home(task_instance)
             env["KIMI_CODE_HOME"] = kimi_home
             logger.info("kimi_code_cli: using KIMI_CODE_HOME=%s", kimi_home)
         elif self.api_key:
             env["MOONSHOT_API_KEY"] = self.api_key
         return env
 
-    def _build_os_api_env(self) -> dict[str, str]:
+    def _build_os_api_env(
+        self, task_instance: TaskInstance | None = None,
+    ) -> dict[str, str]:
         """Build env vars for Docker (os sandbox) execution.
 
         KIMI_CODE_HOME must point to the container-internal path, not the
@@ -253,22 +281,27 @@ class KimiCodeCLIAdapter(SubprocessAgentAdapter):
         """
         env: dict[str, str] = {}
         if self._uses_native_provider or self.kimi_home:
-            self._ensure_kimi_home()
+            self._ensure_kimi_home(task_instance)
             env["KIMI_CODE_HOME"] = self._CONTAINER_KIMI_HOME
         elif self.api_key:
             env["MOONSHOT_API_KEY"] = self.api_key
         return env
 
-    def _build_os_extra_mounts(self) -> list[str]:
+    def _build_os_extra_mounts(
+        self, task_instance: TaskInstance | None = None,
+    ) -> list[str]:
         """Build extra Docker volume mounts for os sandbox.
 
         Kimi CLI needs KIMI_CODE_HOME to be writable (it creates sessions/
         and logs/ on startup). We mount the host config dir as rw so that
-        config.toml is visible and subdirectories can be created.
+        config.toml is visible and subdirectories can be created. The
+        host-side dir is per instance run (unless the user supplied an
+        explicit ``kimi_home``), so session state cannot leak between
+        sequentially executed instances.
         """
         mounts: list[str] = []
         if self._uses_native_provider or self.kimi_home:
-            host_kimi_home = self._ensure_kimi_home()
+            host_kimi_home = self._ensure_kimi_home(task_instance)
             mounts += ["-v", f"{host_kimi_home}:{self._CONTAINER_KIMI_HOME}:rw"]
         return mounts
 
@@ -289,7 +322,7 @@ class KimiCodeCLIAdapter(SubprocessAgentAdapter):
 
     def _build_run_env(self, task_instance, task_env) -> dict[str, str] | None:
         base_env = super()._build_run_env(task_instance, task_env)
-        api_env = self._build_api_env()
+        api_env = self._build_api_env(task_instance)
         if not api_env:
             return base_env
         env = dict(base_env) if base_env else dict(os.environ)
@@ -308,8 +341,8 @@ class KimiCodeCLIAdapter(SubprocessAgentAdapter):
         eff_timeout = self._get_effective_timeout(task_instance)
         workspace = task_instance.workspace_dir
         cmd = self._build_os_agent_cmd(workspace)
-        extra_env: dict[str, str] | None = self._build_os_api_env() or None
-        extra_mounts: list[str] = self._build_os_extra_mounts()
+        extra_env: dict[str, str] | None = self._build_os_api_env(task_instance) or None
+        extra_mounts: list[str] = self._build_os_extra_mounts(task_instance)
 
         t0 = time.time()
         assert self._os_sandbox is not None

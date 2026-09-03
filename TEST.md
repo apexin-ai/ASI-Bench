@@ -107,6 +107,40 @@ uv run pytest -q tests/test_os_sandbox.py tests/test_os_sandbox_adapters.py \
   tests/test_native_agent_extractors.py tests/test_integration.py
 ```
 
+## Per-run harness home isolation (claude_code / kimi_code / codex)
+
+CLI harnesses keep session transcripts, history, and auto-memory under their
+home directories (e.g. `~/.claude/projects/`, `~/.codex/sessions/`,
+`KIMI_CODE_HOME/sessions/`). To prevent that state from leaking between
+sequentially executed instances:
+
+- **OS sandbox**: each instance runs in a one-shot `--rm` container with a
+  fresh `HOME=/home/agent`, so harness session state is destroyed with the
+  container.
+- **Host-side runs** (`--sandbox none|task|linux_ns`):
+  - `claude_code_cli` builds an isolated per-run `HOME` under
+    `.ai4sci-bench/claude_home/<run_key>/` (tool_mode ≠ unrestricted), copying
+    only `.credentials.json` and `settings.json` and setting
+    `HOME`/`USERPROFILE`/`CLAUDE_CONFIG_DIR`. Sessions, `~/.claude.json`, and
+    ambient user config are excluded.
+  - `codex_cli` builds an isolated per-run `CODEX_HOME` under
+    `.ai4sci-bench/codex_home/<run_key>/` with `--ignore-user-config`.
+  - `kimi_code_cli` generates a per-instance `KIMI_CODE_HOME` subdirectory
+    (keyed by `run_key`) under one adapter-level temp root; an explicitly
+    user-provided `kimi_home` remains shared by choice.
+
+```bash
+uv run pytest -q tests/test_adapters.py tests/test_kimi_adapter.py \
+  tests/test_subprocess_base.py
+```
+
+Coverage includes: isolated HOME construction and auth mirroring, exclusion
+of session/memory surfaces (`.claude/projects/`, `~/.claude.json`), distinct
+homes per instance + prompt level, `CLAUDE_CONFIG_DIR` override semantics,
+unrestricted-mode opt-out, per-instance kimi homes for both host env and
+`--sandbox os` rw mounts, explicit `kimi_home` passthrough, and teardown
+cleanup of the whole home root.
+
 ## CLI Task Draft upload and browser confirmation
 
 Task submission tests cover manual PAT validation and storage, endpoint

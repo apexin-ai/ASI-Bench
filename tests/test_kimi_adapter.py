@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 
 import pytest
 
@@ -277,6 +278,97 @@ def test_teardown_removes_temp_kimi_home():
     assert tmp is not None and os.path.isdir(tmp)
     adapter.teardown()
     assert not os.path.exists(tmp)
+    assert adapter._temp_kimi_home is None
+
+
+class _RunKeyStub:
+    """Minimal task-instance stand-in exposing only run_key."""
+
+    def __init__(self, run_key: str):
+        self.run_key = run_key
+
+
+def test_native_mode_homes_differ_per_instance(tmp_path):
+    """Sequentially executed instances must not share a KIMI_CODE_HOME.
+
+    Kimi CLI writes sessions/ and logs/ under its home; a shared dir would
+    leak state from one instance into the next.
+    """
+    import os
+    adapter = KimiCodeCLIAdapter(
+        api_key="sk-test",
+        api_base="https://api.kimi.com/coding/v1",
+    )
+    try:
+        inst_a = _RunKeyStub("task__inst1__seed0__b2")
+        inst_b = _RunKeyStub("task__inst2__seed1__b2")
+
+        env_a = adapter._build_api_env(inst_a)
+        env_b = adapter._build_api_env(inst_b)
+
+        home_a = Path(env_a["KIMI_CODE_HOME"])
+        home_b = Path(env_b["KIMI_CODE_HOME"])
+        assert home_a != home_b
+        assert home_a.is_relative_to(adapter._temp_kimi_home)
+        assert home_b.is_relative_to(adapter._temp_kimi_home)
+        assert home_a.is_dir() and home_b.is_dir()
+        # Both homes carry the generated provider config.
+        for home in (home_a, home_b):
+            content = (home / "config.toml").read_text()
+            assert 'base_url = "https://api.kimi.com/coding/v1"' in content
+        # Same instance resolves to the same home (retries are deterministic).
+        assert adapter._build_api_env(inst_a)["KIMI_CODE_HOME"] == str(home_a)
+    finally:
+        adapter.teardown()
+
+
+def test_os_sandbox_mounts_are_per_instance():
+    """OS-sandbox rw mounts must map a per-instance host dir into the container."""
+    adapter = KimiCodeCLIAdapter(
+        api_key="sk-test",
+        api_base="https://api.kimi.com/coding/v1",
+    )
+    try:
+        mounts_a = adapter._build_os_extra_mounts(_RunKeyStub("task__inst1__seed0__b2"))
+        mounts_b = adapter._build_os_extra_mounts(_RunKeyStub("task__inst2__seed1__b2"))
+
+        assert len(mounts_a) == 2 and len(mounts_b) == 2
+        assert mounts_a[1].split(":")[0] != mounts_b[1].split(":")[0]
+        assert mounts_a[1].split(":")[1] == adapter._CONTAINER_KIMI_HOME
+        assert mounts_a[1].endswith(":rw")
+    finally:
+        adapter.teardown()
+
+
+def test_user_kimi_home_is_shared_across_instances(tmp_path):
+    """An explicit kimi_home is shared by choice and never isolated."""
+    user_home = tmp_path / "my-kimi"
+    user_home.mkdir()
+    (user_home / "config.toml").write_text("# my hand-tuned config\n")
+
+    adapter = KimiCodeCLIAdapter(kimi_home=str(user_home))
+    env_a = adapter._build_api_env(_RunKeyStub("task__inst1__seed0__b2"))
+    env_b = adapter._build_api_env(_RunKeyStub("task__inst2__seed1__b2"))
+
+    assert env_a["KIMI_CODE_HOME"] == str(user_home)
+    assert env_b["KIMI_CODE_HOME"] == str(user_home)
+    assert (user_home / "config.toml").read_text() == "# my hand-tuned config\n"
+
+
+def test_teardown_removes_all_instance_homes():
+    import os
+    adapter = KimiCodeCLIAdapter(
+        api_key="sk-test",
+        api_base="https://api.kimi.com/coding/v1",
+    )
+    adapter._build_api_env(_RunKeyStub("task__inst1__seed0__b2"))
+    adapter._build_api_env(_RunKeyStub("task__inst2__seed1__b2"))
+    root = adapter._temp_kimi_home
+    assert root is not None and os.path.isdir(root)
+
+    adapter.teardown()
+
+    assert not os.path.exists(root)
     assert adapter._temp_kimi_home is None
 
 

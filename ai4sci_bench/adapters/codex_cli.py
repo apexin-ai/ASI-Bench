@@ -16,6 +16,7 @@ from pathlib import Path
 from ai4sci_bench.adapters.subprocess_base import (
     SubprocessAgentAdapter,
     collect_output_files,
+    safe_run_key,
 )
 from ai4sci_bench.core.types import AgentOutput, CostInfo, RunStatus, TaskInstance, ToolMode
 from ai4sci_bench.runner.os_sandbox import OSSandbox
@@ -506,11 +507,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         CODEX_HOME with config.toml), its config is copied into the
         isolated dir so the provider routing is preserved.
         """
-        safe_run_key = "".join(
-            ch if ch.isalnum() or ch in "._-" else "_"
-            for ch in task_instance.run_key
-        )[:120]
-        home = self.repo_root / ".ai4sci-bench" / "codex_home" / safe_run_key
+        home = self.repo_root / ".ai4sci-bench" / "codex_home" / safe_run_key(task_instance.run_key)
         codex_dir = home / ".codex"
         config_dir = home / ".config"
         codex_dir.mkdir(parents=True, exist_ok=True)
