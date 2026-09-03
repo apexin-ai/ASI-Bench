@@ -63,7 +63,8 @@
   之外的宿主机绝对路径；agent 执行失败必须报告为 `attempt_status:
   execution_failed`，不得与 scorer 完成或低分混淆。
 - `run-score` 串联 seed31415 的 `run` 与 `score`；支持 `--parallel` 和
-  `--repetitions`，重复流程使用独立输出目录和进程。
+  `--repetitions`，重复流程使用独立输出目录和进程；所有 repetition 的 task
+  共用一个有界队列，前一轮尾部释放的槽位须立即由后一轮 task 补位。
 
 ## 任务生命周期
 

@@ -91,21 +91,32 @@ class TestRunSandboxAvailability:
 
     def test_run_score_runs_then_scores_each_repetition(self, monkeypatch, tmp_path):
         calls = []
+        tasks_dir = tmp_path / "tasks"
+        instances_dir = tmp_path / "instances"
+        for task_id in ("math.demo_a", "math.demo_b"):
+            task_dir = tasks_dir / "math" / task_id.rsplit(".", 1)[1]
+            task_dir.mkdir(parents=True)
+            (task_dir / "task_meta.yaml").write_text(
+                f"id: {task_id}\nstatus: final\n", encoding="utf-8"
+            )
+            (instances_dir / f"{task_id}__seed31415").mkdir(parents=True)
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
             return SimpleNamespace(returncode=0)
         monkeypatch.setattr("ai4sci_bench.cli.subprocess.run", fake_run)
         result = CliRunner().invoke(cli, [
-            "run-score", "--instances-dir", str(tmp_path / "instances"),
-            "--tasks-dir", str(tmp_path / "tasks"), "--repetitions", "3",
+            "run-score", "--instances-dir", str(instances_dir),
+            "--tasks-dir", str(tasks_dir), "--repetitions", "3",
             "--parallel", "4", "--agent", "direct_llm",
             "--output-dir", str(tmp_path / "out"),
         ])
         assert result.exit_code == 0, result.output
-        assert len(calls) == 6
-        assert [c[3] for c in calls] == ["run", "score"] * 3
-        assert all("--parallel" in c and c[c.index("--parallel") + 1] == "4" for c in calls[::2])
-        assert len({c[c.index("--output-dir") + 1] for c in calls[::2]}) == 3
+        assert len(calls) == 9
+        assert {c[3] for c in calls} == {"run", "score"}
+        run_calls = [c for c in calls if c[3] == "run"]
+        assert len(run_calls) == 6
+        assert all("--parallel" in c and c[c.index("--parallel") + 1] == "1" for c in run_calls)
+        assert len({c[c.index("--output-dir") + 1] for c in run_calls}) == 6
 
 
 class TestBuildAgent:

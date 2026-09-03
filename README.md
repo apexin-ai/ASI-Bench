@@ -481,7 +481,9 @@ for the complete authoring guide.
 For a one-step run followed by local scoring on seed31415, use
 `asibench run-score --instances-dir <instances> --tasks-dir tasks/`. It accepts
 the same task/agent settings plus `--parallel` and `--repetitions`; repeated
-runs are written below `run_N/` and scored independently.
+runs are written below `run_N/` and scored independently. `--parallel` is a
+single global task-worker limit: when one repetition reaches its final tasks,
+tasks from the next repetition immediately fill released worker slots.
 
 - **Public execution framework:** agent adapters, sandboxes, instance loading,
   output collection, and submission packaging are auditable in this repository.

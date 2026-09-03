@@ -618,32 +618,95 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
     """Run agents and then score each run (seed31415 local scoring)."""
     if repetitions > 1 and Path(output_dir).exists() and any(Path(output_dir).iterdir()):
         raise click.ClickException("--output-dir must be empty or absent when using --repetitions")
+    if agent and agent_cmd:
+        raise click.ClickException("--agent and --agent-cmd are mutually exclusive")
+
+    from ai4sci_bench.core.task import TaskLoader
+    from ai4sci_bench.runner.parallel import auto_limit_workers
+
+    instances_root = Path(instances_dir)
+    if tasks == "all":
+        discovered = TaskLoader(Path(tasks_dir)).discover_tasks()
+        task_ids = [
+            str(meta["id"]) for meta in discovered
+            if any(instances_root.glob(f"{meta['id']}__*"))
+        ]
+    else:
+        task_ids = [task_id.strip() for task_id in tasks.split(",") if task_id.strip()]
+    if not task_ids:
+        raise click.ClickException("No matching tasks found in --instances-dir")
+
+    effective_parallel = auto_limit_workers(parallel, sandbox=sandbox)
     base = Path(output_dir)
-    for number in range(1, repetitions + 1):
+
+    def _run_task(number: int, task_id: str) -> tuple[int, str, int]:
         run_dir = base / f"run_{number}" if repetitions > 1 else base
-        score_path = run_dir / "local_score_seed31415.json"
+        job_dir = run_dir / ".jobs" / task_id.replace(".", "_")
         run_args = [sys.executable, "-m", "ai4sci_bench.cli", "run",
                     "--instances-dir", instances_dir, "--tasks-dir", tasks_dir,
-                    "--tasks", tasks, "--prompt-levels", prompt_levels,
-                    "--parallel", str(parallel), "--sandbox", sandbox,
-                    "--timeout", str(timeout), "--output-dir", str(run_dir)]
+                    "--tasks", task_id, "--prompt-levels", prompt_levels,
+                    "--parallel", "1", "--sandbox", sandbox,
+                    "--timeout", str(timeout), "--output-dir", str(job_dir)]
         if agent:
             run_args += ["--agent", agent]
         if agent_cmd:
             run_args += ["--agent-cmd", agent_cmd]
         if agent_config != "{}":
             run_args += ["--agent-config", agent_config]
-        click.echo(f"\n=== Run + score {number}/{repetitions} ===")
-        if subprocess.run(run_args).returncode != 0:
-            raise click.ClickException(f"run failed for repetition {number}")
+        click.echo(f"\n=== Run {number}/{repetitions}: {task_id} ===")
+        run_status = subprocess.run(run_args).returncode
+        if run_status != 0:
+            return number, task_id, run_status
+        source = job_dir / task_id
+        destination = run_dir / task_id
+        if source.is_dir():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source), str(destination))
+        return number, task_id, 0
+
+    def _score_repetition(number: int) -> int:
+        run_dir = base / f"run_{number}" if repetitions > 1 else base
+        score_path = run_dir / "local_score_seed31415.json"
         score_args = [sys.executable, "-m", "ai4sci_bench.cli", "score",
                       "--repo", "seed31415", "--results-dir", str(run_dir),
                       "--instances-dir", instances_dir, "--tasks-dir", tasks_dir,
                       "--output", str(score_path)]
-        if subprocess.run(score_args).returncode != 0:
-            raise click.ClickException(f"score failed for repetition {number}")
-        click.echo(f"Scores saved: {score_path}")
+        status = subprocess.run(score_args).returncode
+        if status == 0:
+            click.echo(f"Scores saved: {score_path}")
+        return status
+
+    # Queue task-sized jobs in repetition order. As the first repetition reaches
+    # its tail, jobs from the next repetition immediately occupy freed slots.
+    import concurrent.futures
+    task_statuses: list[tuple[int, str, int]] = []
+    remaining = {number: len(task_ids) for number in range(1, repetitions + 1)}
+    score_statuses: dict[int, int] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=effective_parallel) as pool:
+        futures = [
+            pool.submit(_run_task, number, task_id)
+            for number in range(1, repetitions + 1)
+            for task_id in task_ids
+        ]
+        for future in concurrent.futures.as_completed(futures):
+            number, task_id, status = future.result()
+            task_statuses.append((number, task_id, status))
+            remaining[number] -= 1
+            if remaining[number] == 0:
+                if any(s != 0 for n, _, s in task_statuses if n == number):
+                    score_statuses[number] = 1
+                else:
+                    score_statuses[number] = _score_repetition(number)
+    failed = [(number, task_id, status) for number, task_id, status in task_statuses if status]
+    failed.extend((number, "score", status) for number, status in score_statuses.items() if status)
     click.echo(f"Completed {repetitions} independent run+score repetition(s).")
+    if failed:
+        raise click.ClickException(
+            "failures: " + ", ".join(
+                f"run {number} {task_id} (exit {status})"
+                for number, task_id, status in failed
+            )
+        )
 
 
 @cli.command("benchflow-score")

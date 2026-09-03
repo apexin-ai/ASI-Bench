@@ -337,4 +337,6 @@ any dependency change.
 
 `asibench run-score` composes `run` and `score` for seed31415. It forwards
 `--parallel` to the runner and can repeat the complete workflow with
-`--repetitions`; each repetition has separate run and score output.
+`--repetitions`; each repetition has separate run and score output. Repeated
+task jobs share one bounded queue, so later repetitions fill slots released by
+the tail of an earlier repetition without multiplying the concurrency limit.
