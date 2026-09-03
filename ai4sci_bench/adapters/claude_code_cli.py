@@ -358,7 +358,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         """Return the real host Claude config dir (honors CLAUDE_CONFIG_DIR)."""
         config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
         if config_dir:
-            return Path(config_dir)
+            return Path(config_dir).expanduser()
         return Path.home() / ".claude"
 
     # ── Solve ──────────────────────────────────────────────────

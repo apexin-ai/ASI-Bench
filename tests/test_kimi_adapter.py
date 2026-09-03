@@ -297,7 +297,6 @@ def test_native_mode_homes_differ_per_instance(tmp_path):
     Kimi CLI writes sessions/ and logs/ under its home; a shared dir would
     leak state from one instance into the next.
     """
-    import os
     adapter = KimiCodeCLIAdapter(
         api_key="sk-test",
         api_base="https://api.kimi.com/coding/v1",

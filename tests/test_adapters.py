@@ -390,6 +390,31 @@ class TestClaudeCodeCLIAdapter:
             Path(env["HOME"]) / ".claude" / ".credentials.json"
         ).read_text() == '{"accessToken": "custom"}'
 
+    def test_isolated_claude_home_expands_host_config_dir(
+        self, sample_task_instance, tmp_dir,
+    ):
+        """A user-relative CLAUDE_CONFIG_DIR still resolves host credentials."""
+        host_home = tmp_dir / "host"
+        host_config = host_home / ".claude-custom"
+        host_config.mkdir(parents=True)
+        (host_config / ".credentials.json").write_text(
+            '{"accessToken": "expanded"}', encoding="utf-8",
+        )
+
+        adapter = ClaudeCodeCLIAdapter()
+        adapter.setup({"sandbox": "none", "repo_root": str(tmp_dir / "repo")})
+
+        with patch.dict(
+            "os.environ",
+            {"HOME": str(host_home), "CLAUDE_CONFIG_DIR": "~/.claude-custom"},
+            clear=True,
+        ):
+            env = adapter._build_run_env(sample_task_instance, task_env=None)
+
+        assert (
+            Path(env["HOME"]) / ".claude" / ".credentials.json"
+        ).read_text() == '{"accessToken": "expanded"}'
+
     def test_init(self):
         adapter = ClaudeCodeCLIAdapter(
             model="claude-sonnet-4-6",
