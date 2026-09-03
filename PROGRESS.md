@@ -443,3 +443,9 @@
   scope; cleanup code is ineffective unless the workflow owner invokes it in a
   `finally` block; predictable truncated names require a content hash.
 - Implementation commit: `bda8c3f`.
+- Review follow-up: Copilot correctly identified that a host
+  `CLAUDE_CONFIG_DIR` containing `~` was not expanded. Use `expanduser()` and
+  cover credential discovery through a user-relative config path; also remove
+  the unused Kimi test import. Targeted tests passed `424`; the full offline
+  suite passed `2264`, with `2 skipped` and `22 deselected`.
+- Review follow-up commit: `1bf84a0`.
