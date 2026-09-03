@@ -425,3 +425,21 @@
 - Review pending: upstream issue #5, PR #6 (branch
   `task-harness-home-isolation`, implementation commit
   `12b62b2cbfe5d54d18aae454ac405f13b91d1467`).
+
+## 2026-09: PR #6 execution-level isolation hardening
+
+- Problem: PR #6 keyed Claude homes only by `instance_id + prompt_level`, left
+  them on disk, used collision-prone truncated directory names, and initialized
+  Kimi's temporary root without synchronization. Normal orchestrator runs also
+  never invoked adapter teardown.
+- Resolution: add a unique Claude execution root with teardown cleanup, append
+  a SHA-256 suffix to sanitized run keys, lock Kimi root creation/cleanup, and
+  guarantee orchestrator teardown on success and failure.
+- Verification: added regressions for repeated identical run keys, sanitized-key
+  collisions, concurrent Kimi first use, and exceptional teardown. Targeted
+  adapter/runner tests passed `423`; the full offline suite passed `2263`, with
+  `2 skipped` and `22 deselected`.
+- Prevention: isolation identities must include both execution and instance
+  scope; cleanup code is ineffective unless the workflow owner invokes it in a
+  `finally` block; predictable truncated names require a content hash.
+- Implementation commit: `bda8c3f`.
