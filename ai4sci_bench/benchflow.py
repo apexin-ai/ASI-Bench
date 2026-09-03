@@ -13,11 +13,13 @@ import json
 import platform
 import subprocess
 import sys
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from ai4sci_bench.core.task import TaskLoader
+from ai4sci_bench.core.judge_api import JudgeAPIOverride, use_judge_api_override
 from ai4sci_bench.local_scoring import _detail_dict, _has_internal_error, _json_default
 
 PUBLIC_SEED = 31415
@@ -145,7 +147,11 @@ def _load_run_result(
     return path, payload, attempt_status
 
 
-def score_seed31415_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+def score_seed31415_manifest(
+    manifest: dict[str, Any],
+    *,
+    judge_api_override: JudgeAPIOverride | None = None,
+) -> dict[str, Any]:
     """Score one materialized seed31415 attempt for BenchFlow.
 
     Required manifest keys are ``task_id``, ``instance_id``, ``run_result``,
@@ -231,13 +237,22 @@ def score_seed31415_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             f"Could not load public scorer for {task_id}: {type(exc).__name__}: {exc}"
         ) from exc
 
-    gates, hard_ok, soft_failures, scores, final_score = _evaluate_gates_and_scores(
-        evaluation,
-        prediction_dir,
-        reference_dir,
-        parameters,
-        prompt_level=prompt_level,
+    # Keep the operator-selected Judge transport scoped to this evaluation.
+    # The manifest is an untrusted, persisted input and must never carry an
+    # API key or endpoint override.
+    judge_scope = (
+        use_judge_api_override(judge_api_override)
+        if judge_api_override is not None
+        else nullcontext()
     )
+    with judge_scope:
+        gates, hard_ok, soft_failures, scores, final_score = _evaluate_gates_and_scores(
+            evaluation,
+            prediction_dir,
+            reference_dir,
+            parameters,
+            prompt_level=prompt_level,
+        )
     all_details = [*gates, *scores]
     internal_error = _has_internal_error(all_details)
     max_score = float(sum(float(item.get("weight", 1.0)) for item in evaluation.get("scoring", [])))
@@ -293,13 +308,18 @@ def score_seed31415_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def score_manifest_file(manifest_path: str | Path, output_path: str | Path | None = None) -> Path:
+def score_manifest_file(
+    manifest_path: str | Path,
+    output_path: str | Path | None = None,
+    *,
+    judge_api_override: JudgeAPIOverride | None = None,
+) -> Path:
     path = Path(manifest_path)
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise BenchFlowScoringError(f"Invalid manifest JSON: {path}") from exc
-    result = score_seed31415_manifest(manifest)
+    result = score_seed31415_manifest(manifest, judge_api_override=judge_api_override)
     destination = Path(output_path) if output_path else path.with_name("benchflow_score.json")
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(result, indent=2, ensure_ascii=False, default=_json_default) + "\n", encoding="utf-8")

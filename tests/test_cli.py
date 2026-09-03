@@ -2,6 +2,7 @@
 
 import csv
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,6 +20,7 @@ from ai4sci_bench.cli import (
     _is_eval_result_json,
     _parse_eval_result,
     _run_generate_with_timeout,
+    _restore_run_score_dotenv_state,
     _validate_task_contracts,
     _resolve_tool_mode,
     _save_eval_result,
@@ -117,6 +119,195 @@ class TestRunSandboxAvailability:
         assert len(run_calls) == 6
         assert all("--parallel" in c and c[c.index("--parallel") + 1] == "1" for c in run_calls)
         assert len({c[c.index("--output-dir") + 1] for c in run_calls}) == 6
+
+    @pytest.mark.parametrize("command", ["score", "run-score", "benchflow-score"])
+    def test_scoring_help_exposes_runtime_judge_configuration(self, command):
+        result = CliRunner().invoke(cli, [command, "--help"])
+        assert result.exit_code == 0, result.output
+        for option in ("--judge-api-base", "--judge-api-key-env", "--judge-api-protocol"):
+            assert option in result.output
+        assert "never the key itself" in result.output
+
+    def test_run_score_forwards_runtime_judge_configuration(self, monkeypatch, tmp_path):
+        calls = []
+        tasks_dir = tmp_path / "tasks"
+        instances_dir = tmp_path / "instances"
+        task_dir = tasks_dir / "math" / "demo"
+        task_dir.mkdir(parents=True)
+        (task_dir / "task_meta.yaml").write_text(
+            "id: math.demo\nstatus: final\n", encoding="utf-8"
+        )
+        (instances_dir / "math.demo__seed31415").mkdir(parents=True)
+
+        def fake_run(cmd, **kwargs):
+            calls.append((cmd, kwargs))
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr("ai4sci_bench.cli.subprocess.run", fake_run)
+        result = CliRunner().invoke(cli, [
+            "run-score", "--instances-dir", str(instances_dir),
+            "--tasks-dir", str(tasks_dir), "--agent", "direct_llm",
+            "--judge-api-base", "https://api.tokenrouter.com/v1",
+            "--judge-api-key-env", "TOKENROUTER_API_KEY",
+            "--judge-api-protocol", "openai",
+            "--output-dir", str(tmp_path / "out"),
+        ], env={
+            "ASIBENCH_JUDGE_API_BASE": "https://api.tokenrouter.com/v1",
+            "ASIBENCH_JUDGE_API_KEY_ENV": "TOKENROUTER_API_KEY",
+            "ASIBENCH_JUDGE_API_PROTOCOL": "openai",
+            "TOKENROUTER_API_KEY": "test-secret",
+        })
+        assert result.exit_code == 0, result.output
+        run_cmd, run_kwargs = calls[0]
+        score_cmd, score_kwargs = calls[1]
+        assert run_cmd[3] == "run"
+        assert run_kwargs["env"]["PYTHON_DOTENV_DISABLED"] == "1"
+        assert run_kwargs["env"]["_ASIBENCH_RUN_SCORE_CHILD"] == "1"
+        assert "TOKENROUTER_API_KEY" not in run_kwargs["env"]
+        assert not {
+            "ASIBENCH_JUDGE_API_BASE",
+            "ASIBENCH_JUDGE_API_KEY_ENV",
+            "ASIBENCH_JUDGE_API_PROTOCOL",
+        } & run_kwargs["env"].keys()
+        assert score_kwargs == {}
+        assert score_cmd[score_cmd.index("--judge-api-base") + 1] == "https://api.tokenrouter.com/v1"
+        assert score_cmd[score_cmd.index("--judge-api-key-env") + 1] == "TOKENROUTER_API_KEY"
+        assert score_cmd[score_cmd.index("--judge-api-protocol") + 1] == "openai"
+
+    def test_run_score_keeps_conventional_provider_key_for_agent(
+        self, monkeypatch, tmp_path
+    ):
+        calls = []
+        tasks_dir = tmp_path / "tasks"
+        instances_dir = tmp_path / "instances"
+        task_dir = tasks_dir / "math" / "demo"
+        task_dir.mkdir(parents=True)
+        (task_dir / "task_meta.yaml").write_text(
+            "id: math.demo\nstatus: final\n", encoding="utf-8"
+        )
+        (instances_dir / "math.demo__seed31415").mkdir(parents=True)
+
+        def fake_run(cmd, **kwargs):
+            calls.append((cmd, kwargs))
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr("ai4sci_bench.cli.subprocess.run", fake_run)
+        result = CliRunner().invoke(cli, [
+            "run-score", "--instances-dir", str(instances_dir),
+            "--tasks-dir", str(tasks_dir), "--agent", "direct_llm",
+            "--judge-api-key-env", "GEMINI_API_KEY",
+            "--output-dir", str(tmp_path / "out"),
+        ], env={"GEMINI_API_KEY": "shared-provider-key"})
+
+        assert result.exit_code == 0, result.output
+        run_cmd, run_kwargs = calls[0]
+        assert run_cmd[3] == "run"
+        assert run_kwargs["env"]["GEMINI_API_KEY"] == "shared-provider-key"
+
+    @pytest.mark.parametrize("previous", [None, "0", "yes"])
+    def test_run_score_dotenv_disable_is_not_inherited_by_agent(
+        self, monkeypatch, previous
+    ):
+        monkeypatch.setenv("_ASIBENCH_RUN_SCORE_CHILD", "1")
+        monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
+        if previous is None:
+            monkeypatch.delenv(
+                "_ASIBENCH_RUN_SCORE_PREVIOUS_DOTENV_DISABLED", raising=False
+            )
+        else:
+            monkeypatch.setenv(
+                "_ASIBENCH_RUN_SCORE_PREVIOUS_DOTENV_DISABLED", previous
+            )
+
+        _restore_run_score_dotenv_state()
+
+        assert "_ASIBENCH_RUN_SCORE_CHILD" not in os.environ
+        assert "_ASIBENCH_RUN_SCORE_PREVIOUS_DOTENV_DISABLED" not in os.environ
+        if previous is None:
+            assert "PYTHON_DOTENV_DISABLED" not in os.environ
+        else:
+            assert os.environ["PYTHON_DOTENV_DISABLED"] == previous
+
+    def test_score_rejects_missing_runtime_judge_key_before_scoring(self, tmp_path):
+        result = CliRunner().invoke(cli, [
+            "score", "--repo", "seed31415",
+            "--results-dir", str(tmp_path / "results"),
+            "--instances-dir", str(tmp_path / "instances"),
+            "--judge-api-base", "https://api.tokenrouter.com/v1",
+            "--judge-api-key-env", "MISSING_TOKENROUTER_KEY",
+            "--judge-api-protocol", "openai",
+        ], env={"MISSING_TOKENROUTER_KEY": ""})
+        assert result.exit_code != 0
+        assert "unset or empty" in result.output
+
+    def test_score_accepts_runtime_judge_configuration_from_environment(
+        self, monkeypatch, tmp_path
+    ):
+        seen = []
+
+        def fake_score(*_args, judge_api_override=None, **_kwargs):
+            seen.append(judge_api_override)
+            return ({
+                "results": [],
+                "total_score": 0.0,
+                "total_max_score": 0.0,
+                "mean_percent": 0.0,
+                "scorer_error_count": 0,
+            }, tmp_path / "score.json")
+
+        monkeypatch.setattr(
+            "ai4sci_bench.local_scoring.score_seed31415_results",
+            fake_score,
+        )
+        result = CliRunner().invoke(cli, [
+            "score", "--repo", "seed31415",
+            "--results-dir", str(tmp_path / "results"),
+            "--instances-dir", str(tmp_path / "instances"),
+        ], env={
+            "ASIBENCH_JUDGE_API_BASE": "https://api.tokenrouter.com/v1/",
+            "ASIBENCH_JUDGE_API_KEY_ENV": "TOKENROUTER_API_KEY",
+            "ASIBENCH_JUDGE_API_PROTOCOL": "OPENAI",
+            "TOKENROUTER_API_KEY": "test-secret",
+        })
+
+        assert result.exit_code == 0, result.output
+        assert len(seen) == 1
+        assert seen[0].public_metadata() == {
+            "api_base": "https://api.tokenrouter.com/v1",
+            "api_protocol": "openai",
+            "api_key_env": "TOKENROUTER_API_KEY",
+        }
+        assert "test-secret" not in repr(seen[0])
+
+    def test_benchflow_score_forwards_runtime_judge_configuration(
+        self, monkeypatch, tmp_path
+    ):
+        manifest = tmp_path / "manifest.json"
+        manifest.write_text("{}", encoding="utf-8")
+        seen = []
+
+        def fake_score_manifest_file(_manifest, output, *, judge_api_override=None):
+            seen.append(judge_api_override)
+            return Path(output) if output else tmp_path / "benchflow_score.json"
+
+        monkeypatch.setattr(
+            "ai4sci_bench.benchflow.score_manifest_file",
+            fake_score_manifest_file,
+        )
+        result = CliRunner().invoke(cli, [
+            "benchflow-score", "--manifest", str(manifest),
+            "--judge-api-base", "https://api.example.test/v1",
+            "--judge-api-key-env", "JUDGE_KEY",
+            "--judge-api-protocol", "openai",
+        ], env={"JUDGE_KEY": "test-secret"})
+
+        assert result.exit_code == 0, result.output
+        assert len(seen) == 1
+        assert seen[0].public_metadata() == {
+            "api_base": "https://api.example.test/v1",
+            "api_protocol": "openai",
+            "api_key_env": "JUDGE_KEY",
+        }
 
 
 class TestBuildAgent:

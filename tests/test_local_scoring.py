@@ -9,6 +9,12 @@ import numpy as np
 from click.testing import CliRunner
 
 from ai4sci_bench.cli import cli
+from ai4sci_bench.core.judge_api import (
+    JudgeAPIOverride,
+    get_judge_api_override,
+    use_judge_api_override,
+)
+from ai4sci_bench.local_scoring import score_seed31415_results
 
 
 def _write_fixture(root: Path) -> tuple[Path, Path, Path]:
@@ -182,3 +188,54 @@ def test_seed31415_missing_reference_fails_clearly(tmp_path):
 
     assert result.exit_code != 0
     assert "reference" in result.output.lower()
+
+
+def test_local_scoring_scopes_runtime_judge_override(monkeypatch, tmp_path):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    override = JudgeAPIOverride(
+        api_base="https://api.tokenrouter.com/v1",
+        api_key_env="TOKENROUTER_API_KEY",
+        api_protocol="openai",
+    )
+    outer_override = JudgeAPIOverride(api_protocol="native")
+    seen: list[JudgeAPIOverride | None] = []
+
+    def fake_evaluate(*_args, **_kwargs):
+        seen.append(get_judge_api_override())
+        return ([], True, 0, [], 7.5)
+
+    monkeypatch.setattr(
+        "ai4sci_bench.runner.orchestrator._evaluate_gates_and_scores",
+        fake_evaluate,
+    )
+    with use_judge_api_override(outer_override):
+        assert get_judge_api_override() is outer_override
+        report, _destination = score_seed31415_results(
+            results_dir,
+            instances_dir,
+            tasks_dir,
+            judge_api_override=override,
+        )
+        assert get_judge_api_override() is outer_override
+
+    assert seen == [override]
+    assert report["total_score"] == 7.5
+
+
+def test_local_scoring_without_argument_preserves_outer_judge_scope(monkeypatch, tmp_path):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    outer_override = JudgeAPIOverride(api_protocol="native")
+    seen: list[JudgeAPIOverride | None] = []
+
+    def fake_evaluate(*_args, **_kwargs):
+        seen.append(get_judge_api_override())
+        return ([], True, 0, [], 7.5)
+
+    monkeypatch.setattr(
+        "ai4sci_bench.runner.orchestrator._evaluate_gates_and_scores",
+        fake_evaluate,
+    )
+    with use_judge_api_override(outer_override):
+        score_seed31415_results(results_dir, instances_dir, tasks_dir)
+
+    assert seen == [outer_override]

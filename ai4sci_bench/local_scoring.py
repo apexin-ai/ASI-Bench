@@ -7,6 +7,7 @@ ASI-Bench website and results must be submitted for scoring there.
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Any
 
 from ai4sci_bench.core.task import TaskLoader
 from ai4sci_bench.core.types import ScoreDetail
+from ai4sci_bench.core.judge_api import JudgeAPIOverride, use_judge_api_override
 
 PUBLIC_LOCAL_SCORING_REPO = "seed31415"
 PRIVATE_SCORING_REPO = "seed42"
@@ -78,6 +80,7 @@ def score_seed31415_results(
     tasks_dir: str | Path = "tasks",
     *,
     output_path: str | Path | None = None,
+    judge_api_override: JudgeAPIOverride | None = None,
 ) -> tuple[dict[str, Any], Path]:
     """Score produce-only results against public seed31415 references.
 
@@ -158,15 +161,25 @@ def score_seed31415_results(
 
         prompt_level = str(source.get("prompt_level") or "")
         parameters = _load_parameters(source, instance_dir)
-        gates, hard_ok, soft_failures, scores, final_score = (
-            _evaluate_gates_and_scores(
-                evaluation,
-                output_dir,
-                reference_dir,
-                parameters,
-                prompt_level=prompt_level or None,
-            )
+        # ``None`` means the caller did not supply an override; preserve an
+        # outer library scope or the documented ASIBENCH_JUDGE_* environment
+        # fallback.  Callers that need to suppress ambient settings can use an
+        # explicit ``use_judge_api_override(None)`` scope.
+        judge_scope = (
+            use_judge_api_override(judge_api_override)
+            if judge_api_override is not None
+            else nullcontext()
         )
+        with judge_scope:
+            gates, hard_ok, soft_failures, scores, final_score = (
+                _evaluate_gates_and_scores(
+                    evaluation,
+                    output_dir,
+                    reference_dir,
+                    parameters,
+                    prompt_level=prompt_level or None,
+                )
+            )
         all_details = [*gates, *scores]
         internal_error = _has_internal_error(all_details)
         scorer_error_count += int(internal_error)

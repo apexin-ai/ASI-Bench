@@ -396,6 +396,26 @@
   acceptance is required when a native CLI schema changes.
 - Implementation commit: `8bc8b8e405d1e97133d26fea7eab425249f5f0c4`.
 
+## 2026-09-03 — Runtime LLM/VLM Judge API routing
+
+- Problem: public Gemini-based scorers could use provider-default credentials,
+  but users could not safely select a custom Judge endpoint, key variable, and
+  protocol from `score` or `run-score`; gateway secrets risked being placed in
+  task configuration or command-line JSON.
+- Resolution: add `--judge-api-base`, `--judge-api-key-env`, and
+  `--judge-api-protocol` (plus `ASIBENCH_JUDGE_*` equivalents) to public scoring
+  entry points. Text, VLM, BenchFlow, and the CMOS custom scorer now share one
+  runtime resolver for native providers and OpenAI-compatible gateways such as
+  TokenRouter.
+- Prevention: only an environment-variable name crosses the CLI; secrets are
+  redacted from errors, retry logs, raw responses, and reports. `run-score`
+  removes dedicated Judge credentials from the agent-run child without
+  disabling an evaluated agent's own dotenv behavior.
+- Verification: focused Judge/local-score/BenchFlow tests passed `234 passed`;
+  the complete offline suite passed `2305 passed, 2 skipped, 22 deselected`
+  after rebasing onto `db94593`.
+- Implementation commit: `d64663a`.
+
 ## 2026-XX: Harness home isolation (claude host HOME, kimi per-instance home)
 
 - Problem: in host-side run modes (`--sandbox none|task|linux_ns`) the Claude

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -19,8 +18,10 @@ from ai4sci_bench.scorers._judge_common import (
     MAX_RETRIES,
     aggregate_judge_scores,
     evaluator_unavailable_result,
-    resolve_model,
-    resolve_scorer_api_params,
+    judge_completion_api_kwargs,
+    resolve_judge_api,
+    resolve_model,  # backward-compatible module-level import
+    sanitize_judge_error,
 )
 from ai4sci_bench.scorers._parse_utils import parse_judge_json
 
@@ -89,35 +90,54 @@ class MultimodalScorer(Scorer):
                     message=f"Unknown multimodal mode: {mode}",
                 )
         except Exception as e:
-            logger.error("Multimodal scorer error (mode=%s): %s", mode, e)
+            resolved_api = None
+            try:
+                resolved_api = resolve_judge_api(config)
+            except Exception:
+                pass
+            safe_error = sanitize_judge_error(
+                e,
+                secrets=(resolved_api.api_key if resolved_api else None,),
+            )
+            logger.error("Multimodal scorer error (mode=%s): %s", mode, safe_error)
             if mode == "vlm_judge":
                 return evaluator_unavailable_result(
                     scorer_name=scorer_name,
                     weight=config.get("weight", 1.0),
-                    error=e,
-                    model=resolve_model(config.get("model", DEFAULT_MODEL)),
+                    error=safe_error,
+                    model=(
+                        resolved_api.model
+                        if resolved_api
+                        else str(config.get("model", DEFAULT_MODEL))
+                    ),
+                    secrets=(resolved_api.api_key if resolved_api else None,),
+                    extra_details=(
+                        {"judge_api": resolved_api.public_metadata()}
+                        if resolved_api and resolved_api.public_metadata()
+                        else None
+                    ),
                 )
             return ScoreDetail(
                 scorer_name=scorer_name,
                 score=0.0,
                 max_score=config.get("weight", 1.0),
                 passed=False,
-                details={"error": str(e)},
-                message=f"Multimodal scorer error: {e}",
+                details={"error": safe_error},
+                message=f"Multimodal scorer error: {safe_error}",
             )
 
     def _vlm_judge(
         self, pred_dir: Path, ref_dir: Path, config: dict, scorer_name: str
     ) -> ScoreDetail:
         weight = config.get("weight", 1.0)
-        model = resolve_model(config.get("model", DEFAULT_MODEL))
         rubric = config.get("rubric", DEFAULT_VLM_RUBRIC)
         num_judges = config.get("num_judges", 1)
         temperature = config.get("temperature", 0.0)
         max_tokens = config.get("max_tokens", 1024)
         max_score_value = config.get("max_score_value", 10)
-        api_base, api_key = resolve_scorer_api_params(config)
         threshold = config.get("threshold", 0.5)
+
+        resolved_api = resolve_judge_api(config)
 
         if num_judges < 3:
             logger.warning(
@@ -180,10 +200,15 @@ class MultimodalScorer(Scorer):
         raw_responses: list[str] = []
 
         for i in range(num_judges):
-            logger.debug("VLM judge %d/%d with model %s", i + 1, num_judges, model)
+            logger.debug(
+                "VLM judge %d/%d with model %s",
+                i + 1,
+                num_judges,
+                resolved_api.model,
+            )
             raw = self._call_vlm_with_retry(
-                model, user_content, temperature, max_tokens,
-                api_key=api_key, api_base=api_base,
+                resolved_api.model, user_content, temperature, max_tokens,
+                api_key=resolved_api.api_key, api_base=resolved_api.api_base,
             )
             raw_responses.append(raw)
             score_val = parse_judge_json(raw, max_score=max_score_value)
@@ -193,16 +218,22 @@ class MultimodalScorer(Scorer):
             scores=scores,
             raw_responses=raw_responses,
             scorer_name=scorer_name,
-            model=model,
+            model=resolved_api.model,
             num_judges=num_judges,
             max_score_value=max_score_value,
             weight=weight,
             threshold=threshold,
+            secrets=(resolved_api.api_key,),
+            extra_details=(
+                {"judge_api": resolved_api.public_metadata()}
+                if resolved_api.public_metadata()
+                else None
+            ),
         )
 
         logger.info(
             "VLM judge result: model=%s, judges=%d, scores=%s, median=%.2f, passed=%s",
-            model, num_judges, scores, result.details["median_score"], result.passed,
+            resolved_api.model, num_judges, scores, result.details["median_score"], result.passed,
         )
 
         return result
@@ -217,15 +248,12 @@ class MultimodalScorer(Scorer):
         api_base: str | None = None,
     ) -> str:
         last_error: Exception | None = None
-        extra_kwargs: dict[str, Any] = {}
-        if api_key:
-            extra_kwargs["api_key"] = api_key
-        elif model.startswith("openrouter/"):
-            env_key = os.environ.get("OPENROUTER_API_KEY")
-            if env_key:
-                extra_kwargs["api_key"] = env_key
-        if api_base:
-            extra_kwargs["api_base"] = api_base
+        extra_kwargs: dict[str, Any] = judge_completion_api_kwargs(
+            model=model,
+            api_base=api_base,
+            api_key=api_key,
+        )
+        effective_api_key = extra_kwargs.get("api_key")
         for attempt in range(MAX_RETRIES):
             try:
                 response = litellm.completion(
@@ -243,9 +271,13 @@ class MultimodalScorer(Scorer):
                 last_error = e
                 if attempt < MAX_RETRIES - 1:
                     wait = BACKOFF_BASE ** attempt
+                    safe_error = sanitize_judge_error(
+                        e,
+                        secrets=(api_key, effective_api_key),
+                    )
                     logger.warning(
                         "VLM API call attempt %d failed: %s, retrying in %.1fs",
-                        attempt + 1, e, wait,
+                        attempt + 1, safe_error, wait,
                     )
                     time.sleep(wait)
         raise last_error  # type: ignore[misc]

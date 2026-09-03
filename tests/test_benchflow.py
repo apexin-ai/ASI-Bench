@@ -4,6 +4,11 @@ from pathlib import Path
 import pytest
 
 from ai4sci_bench.benchflow import BenchFlowScoringError, _sha256_tree, score_seed31415_manifest
+from ai4sci_bench.core.judge_api import (
+    JudgeAPIOverride,
+    get_judge_api_override,
+    use_judge_api_override,
+)
 
 
 def _manifest(tmp_path: Path, *, seed=31415, instance_id="demo__seed31415"):
@@ -198,3 +203,104 @@ def test_benchflow_rejects_prediction_dir_not_owned_by_run_result(tmp_path):
 
     with pytest.raises(BenchFlowScoringError, match="persisted output directory"):
         score_seed31415_manifest(manifest)
+
+
+def test_benchflow_scopes_runtime_judge_override_to_evaluation(monkeypatch, tmp_path):
+    """BenchFlow must expose the operator override only while scorers run."""
+    manifest = _manifest(tmp_path)
+    task_dir = Path(manifest["tasks_dir"]) / "demo"
+    task_dir.mkdir()
+
+    class FakeLoader:
+        def __init__(self, _tasks_dir):
+            pass
+
+        def load_task_by_id(self, _task_id):
+            return {"_task_dir": str(task_dir), "evaluation": {"scoring": [{"weight": 10}]}}
+
+    override = JudgeAPIOverride(
+        api_base="https://api.tokenrouter.com/v1",
+        api_key_env="TOKENROUTER_API_KEY",
+        api_protocol="openai",
+    )
+    outer_override = JudgeAPIOverride(api_protocol="native")
+    seen: list[JudgeAPIOverride | None] = []
+
+    monkeypatch.setattr("ai4sci_bench.benchflow.TaskLoader", FakeLoader)
+    monkeypatch.setattr("ai4sci_bench.scorers.custom.load_custom_scorer", lambda _task_dir: None)
+
+    def fake_evaluate(*_args, **_kwargs):
+        seen.append(get_judge_api_override())
+        return ([], True, 0, [], 7.5)
+
+    monkeypatch.setattr(
+        "ai4sci_bench.runner.orchestrator._evaluate_gates_and_scores",
+        fake_evaluate,
+    )
+
+    with use_judge_api_override(outer_override):
+        assert get_judge_api_override() is outer_override
+        result = score_seed31415_manifest(manifest, judge_api_override=override)
+        assert get_judge_api_override() is outer_override
+
+    assert seen == [override]
+    assert result["score"] == 7.5
+
+
+def test_benchflow_score_manifest_file_accepts_runtime_override(monkeypatch, tmp_path):
+    """The file wrapper must pass the override through to manifest scoring."""
+    from ai4sci_bench.benchflow import score_manifest_file
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps({"sentinel": True}), encoding="utf-8")
+    override = JudgeAPIOverride(
+        api_base="https://api.example.test/v1",
+        api_key_env="JUDGE_KEY",
+        api_protocol="openai",
+    )
+    seen: list[JudgeAPIOverride | None] = []
+
+    def fake_score(manifest, *, judge_api_override=None):
+        assert manifest == {"sentinel": True}
+        seen.append(judge_api_override)
+        return {"status": "completed"}
+
+    monkeypatch.setattr("ai4sci_bench.benchflow.score_seed31415_manifest", fake_score)
+    destination = score_manifest_file(
+        manifest_path,
+        judge_api_override=override,
+    )
+
+    assert seen == [override]
+    assert json.loads(destination.read_text(encoding="utf-8")) == {"status": "completed"}
+
+
+def test_benchflow_without_argument_preserves_outer_judge_scope(monkeypatch, tmp_path):
+    manifest = _manifest(tmp_path)
+    task_dir = Path(manifest["tasks_dir"]) / "demo"
+    task_dir.mkdir()
+
+    class FakeLoader:
+        def __init__(self, _tasks_dir):
+            pass
+
+        def load_task_by_id(self, _task_id):
+            return {"_task_dir": str(task_dir), "evaluation": {"scoring": []}}
+
+    outer_override = JudgeAPIOverride(api_protocol="native")
+    seen: list[JudgeAPIOverride | None] = []
+    monkeypatch.setattr("ai4sci_bench.benchflow.TaskLoader", FakeLoader)
+    monkeypatch.setattr("ai4sci_bench.scorers.custom.load_custom_scorer", lambda _task_dir: None)
+
+    def fake_evaluate(*_args, **_kwargs):
+        seen.append(get_judge_api_override())
+        return ([], True, 0, [], 0.0)
+
+    monkeypatch.setattr(
+        "ai4sci_bench.runner.orchestrator._evaluate_gates_and_scores",
+        fake_evaluate,
+    )
+    with use_judge_api_override(outer_override):
+        score_seed31415_manifest(manifest)
+
+    assert seen == [outer_override]

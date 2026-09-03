@@ -47,6 +47,28 @@ load_dotenv()
 
 logger = get_logger(__name__)
 
+_RUN_SCORE_CHILD_ENV = "_ASIBENCH_RUN_SCORE_CHILD"
+_RUN_SCORE_PREVIOUS_DOTENV_DISABLED_ENV = (
+    "_ASIBENCH_RUN_SCORE_PREVIOUS_DOTENV_DISABLED"
+)
+
+
+def _restore_run_score_dotenv_state() -> None:
+    """Restore python-dotenv behavior before the evaluated agent is started.
+
+    ``run-score`` temporarily disables dotenv while its ``run`` child imports
+    ASI-Bench.  This prevents the child from reloading a dedicated Judge key
+    that was deliberately removed from its environment.  The marker is then
+    consumed here so an agent's own use of python-dotenv keeps working.
+    """
+    if os.environ.pop(_RUN_SCORE_CHILD_ENV, None) != "1":
+        return
+    previous = os.environ.pop(_RUN_SCORE_PREVIOUS_DOTENV_DISABLED_ENV, None)
+    if previous is None:
+        os.environ.pop("PYTHON_DOTENV_DISABLED", None)
+    else:
+        os.environ["PYTHON_DOTENV_DISABLED"] = previous
+
 
 def _load_prediction_task_info(instance_dir: Path, task_id: str) -> dict[str, Any]:
     """Load framework metadata for re-eval, with backward compatibility."""
@@ -549,8 +571,30 @@ def _format_file_size(size_bytes: int) -> str:
               help="GitHub task catalog containing task_eval.yaml and scorers")
 @click.option("--output", "output_path", default=None,
               help="Local score report JSON (default: <results-dir>/local_score_seed31415.json)")
+@click.option(
+    "--judge-api-base",
+    default=None,
+    envvar="ASIBENCH_JUDGE_API_BASE",
+    help="Runtime LLM/VLM Judge endpoint override (or ASIBENCH_JUDGE_API_BASE).",
+)
+@click.option(
+    "--judge-api-key-env",
+    default=None,
+    envvar="ASIBENCH_JUDGE_API_KEY_ENV",
+    metavar="ENV_VAR",
+    help="Environment-variable name containing the Judge API key; never the key itself.",
+)
+@click.option(
+    "--judge-api-protocol",
+    type=click.Choice(["native", "openai"], case_sensitive=False),
+    default=None,
+    envvar="ASIBENCH_JUDGE_API_PROTOCOL",
+    help="Protocol spoken by --judge-api-base (native or OpenAI-compatible).",
+)
 def score_cmd(repo: str, results_dir: str, instances_dir: str,
-              tasks_dir: str, output_path: str | None):
+              tasks_dir: str, output_path: str | None,
+              judge_api_base: str | None, judge_api_key_env: str | None,
+              judge_api_protocol: str | None):
     """Score seed31415 locally with its public references and GitHub scorers.
 
     \b
@@ -563,6 +607,10 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
         PRIVATE_SCORING_REPO,
         score_seed31415_results,
     )
+    from ai4sci_bench.core.judge_api import (
+        JudgeAPIConfigurationError,
+        resolve_judge_api_override,
+    )
 
     if repo == PRIVATE_SCORING_REPO:
         raise click.ClickException(
@@ -570,13 +618,19 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
             "Use `asibench submit --results-dir ...` for official scoring."
         )
     try:
+        judge_api_override = resolve_judge_api_override(
+            judge_api_base,
+            judge_api_key_env,
+            judge_api_protocol,
+        )
         report, destination = score_seed31415_results(
             results_dir,
             instances_dir,
             tasks_dir,
             output_path=output_path,
+            judge_api_override=judge_api_override,
         )
-    except LocalScoringError as exc:
+    except (JudgeAPIConfigurationError, LocalScoringError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     click.echo("ASI-Bench public local scoring (seed31415; non-official)")
@@ -613,9 +667,46 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
 @click.option("--sandbox", default="none", show_default=True)
 @click.option("--timeout", default=DEFAULT_TIMEOUT_SECONDS, type=int, show_default=True)
 @click.option("--output-dir", default="run-score-results/", show_default=True)
+@click.option(
+    "--judge-api-base",
+    default=None,
+    envvar="ASIBENCH_JUDGE_API_BASE",
+    help="Runtime LLM/VLM Judge endpoint override (or ASIBENCH_JUDGE_API_BASE).",
+)
+@click.option(
+    "--judge-api-key-env",
+    default=None,
+    envvar="ASIBENCH_JUDGE_API_KEY_ENV",
+    metavar="ENV_VAR",
+    help="Environment-variable name containing the Judge API key; never the key itself.",
+)
+@click.option(
+    "--judge-api-protocol",
+    type=click.Choice(["native", "openai"], case_sensitive=False),
+    default=None,
+    envvar="ASIBENCH_JUDGE_API_PROTOCOL",
+    help="Protocol spoken by --judge-api-base (native or OpenAI-compatible).",
+)
 def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
-               prompt_levels, parallel, repetitions, sandbox, timeout, output_dir):
+               prompt_levels, parallel, repetitions, sandbox, timeout, output_dir,
+               judge_api_base, judge_api_key_env, judge_api_protocol):
     """Run agents and then score each run (seed31415 local scoring)."""
+    from ai4sci_bench.core.judge_api import (
+        JUDGE_API_BASE_ENV,
+        JUDGE_API_KEY_ENV,
+        JUDGE_API_PROTOCOL_ENV,
+        JudgeAPIConfigurationError,
+        resolve_judge_api_override,
+    )
+
+    try:
+        judge_api_override = resolve_judge_api_override(
+            judge_api_base,
+            judge_api_key_env,
+            judge_api_protocol,
+        )
+    except JudgeAPIConfigurationError as exc:
+        raise click.ClickException(str(exc)) from exc
     if repetitions > 1 and Path(output_dir).exists() and any(Path(output_dir).iterdir()):
         raise click.ClickException("--output-dir must be empty or absent when using --repetitions")
     if agent and agent_cmd:
@@ -639,6 +730,40 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
     effective_parallel = auto_limit_workers(parallel, sandbox=sandbox)
     base = Path(output_dir)
 
+    # A dedicated scoring credential must not be ambient authority for the
+    # agent under test.  The child would otherwise inherit both the exported
+    # value and the ASIBENCH_JUDGE_* selector, and its CLI import would reload
+    # them from .env.  Conventional provider variables stay available for
+    # backward compatibility when the agent and Judge intentionally share a
+    # provider; operators who need isolation should use a dedicated key name.
+    agent_run_env = os.environ.copy()
+    for name in (
+        JUDGE_API_BASE_ENV,
+        JUDGE_API_KEY_ENV,
+        JUDGE_API_PROTOCOL_ENV,
+    ):
+        agent_run_env.pop(name, None)
+    shared_provider_key_envs = {
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+    }
+    if (
+        judge_api_override is not None
+        and judge_api_override.api_key_env is not None
+        and judge_api_override.api_key_env not in shared_provider_key_envs
+    ):
+        agent_run_env.pop(judge_api_override.api_key_env, None)
+    previous_dotenv_disabled = agent_run_env.get("PYTHON_DOTENV_DISABLED")
+    if previous_dotenv_disabled is not None:
+        agent_run_env[
+            _RUN_SCORE_PREVIOUS_DOTENV_DISABLED_ENV
+        ] = previous_dotenv_disabled
+    agent_run_env[_RUN_SCORE_CHILD_ENV] = "1"
+    agent_run_env["PYTHON_DOTENV_DISABLED"] = "1"
+
     def _run_task(number: int, task_id: str) -> tuple[int, str, int]:
         run_dir = base / f"run_{number}" if repetitions > 1 else base
         job_dir = run_dir / ".jobs" / task_id.replace(".", "_")
@@ -654,7 +779,7 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
         if agent_config != "{}":
             run_args += ["--agent-config", agent_config]
         click.echo(f"\n=== Run {number}/{repetitions}: {task_id} ===")
-        run_status = subprocess.run(run_args).returncode
+        run_status = subprocess.run(run_args, env=agent_run_env).returncode
         if run_status != 0:
             return number, task_id, run_status
         source = job_dir / task_id
@@ -671,6 +796,12 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
                       "--repo", "seed31415", "--results-dir", str(run_dir),
                       "--instances-dir", instances_dir, "--tasks-dir", tasks_dir,
                       "--output", str(score_path)]
+        if judge_api_base:
+            score_args += ["--judge-api-base", judge_api_base]
+        if judge_api_key_env:
+            score_args += ["--judge-api-key-env", judge_api_key_env]
+        if judge_api_protocol:
+            score_args += ["--judge-api-protocol", judge_api_protocol]
         status = subprocess.run(score_args).returncode
         if status == 0:
             click.echo(f"Scores saved: {score_path}")
@@ -714,7 +845,33 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
               help="BenchFlow seed31415 manifest JSON")
 @click.option("--output", "output_path", default=None, type=click.Path(dir_okay=False),
               help="Stable score result JSON (default: beside manifest)")
-def benchflow_score_cmd(manifest_path: str, output_path: str | None):
+@click.option(
+    "--judge-api-base",
+    default=None,
+    envvar="ASIBENCH_JUDGE_API_BASE",
+    help="Runtime LLM/VLM Judge endpoint override (or ASIBENCH_JUDGE_API_BASE).",
+)
+@click.option(
+    "--judge-api-key-env",
+    default=None,
+    envvar="ASIBENCH_JUDGE_API_KEY_ENV",
+    metavar="ENV_VAR",
+    help="Environment-variable name containing the Judge API key; never the key itself.",
+)
+@click.option(
+    "--judge-api-protocol",
+    type=click.Choice(["native", "openai"], case_sensitive=False),
+    default=None,
+    envvar="ASIBENCH_JUDGE_API_PROTOCOL",
+    help="Protocol spoken by --judge-api-base (native or OpenAI-compatible).",
+)
+def benchflow_score_cmd(
+    manifest_path: str,
+    output_path: str | None,
+    judge_api_base: str | None,
+    judge_api_key_env: str | None,
+    judge_api_protocol: str | None,
+):
     """Score one materialized seed31415 attempt for BenchFlow.
 
     This command never generates instances or accepts seed42 references. The
@@ -722,10 +879,23 @@ def benchflow_score_cmd(manifest_path: str, output_path: str | None):
     and public task bundle.
     """
     from ai4sci_bench.benchflow import BenchFlowScoringError, score_manifest_file
+    from ai4sci_bench.core.judge_api import (
+        JudgeAPIConfigurationError,
+        resolve_judge_api_override,
+    )
 
     try:
-        destination = score_manifest_file(manifest_path, output_path)
-    except BenchFlowScoringError as exc:
+        judge_api_override = resolve_judge_api_override(
+            judge_api_base,
+            judge_api_key_env,
+            judge_api_protocol,
+        )
+        destination = score_manifest_file(
+            manifest_path,
+            output_path,
+            judge_api_override=judge_api_override,
+        )
+    except (BenchFlowScoringError, JudgeAPIConfigurationError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"BenchFlow seed31415 score: {destination}")
 
@@ -1204,6 +1374,8 @@ def run(
     from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator, RunConfig
     from ai4sci_bench.runner.parallel import auto_limit_workers
     from ai4sci_bench.runner.sandbox_support import print_sandbox_banner
+
+    _restore_run_score_dotenv_state()
 
     if tool_mode and allow_external_tools:
         raise click.ClickException(

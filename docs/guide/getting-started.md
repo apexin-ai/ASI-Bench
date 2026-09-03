@@ -118,6 +118,56 @@ the seed31415 Hugging Face dataset and the public scoring contracts in a GitHub
 checkout. It writes `local_score_seed31415.json` separately and does not modify
 the produce-only result. These scores are non-official.
 
+### Configure LLM/VLM Judge access
+
+Tasks whose scoring contracts use an LLM or VLM Judge may need a provider key.
+Keep the secret in an ignored `.env` file or the process environment. Never put
+it in `task_eval.yaml` or pass it as a command-line value.
+
+The following runtime options are available on `asibench score`,
+`asibench run-score`, and `asibench benchflow-score`:
+
+- `--judge-api-base` selects a custom endpoint.
+- `--judge-api-key-env` gives the **name** of the environment variable holding
+  the secret; it never accepts the secret itself.
+- `--judge-api-protocol` is `native` or `openai` for an OpenAI-compatible API.
+
+For native Gemini, set `GEMINI_API_KEY=...` in `.env`; the task's existing
+`google/gemini-*` model uses the Google Gemini API. Supplying
+`--judge-api-key-env GEMINI_API_KEY` is optional but makes credential selection
+explicit and fails early if it is missing.
+
+For TokenRouter, store `TOKENROUTER_API_KEY=...` in `.env` and run:
+
+```bash
+asibench score --repo seed31415 \
+  --results-dir out_seed31415/ \
+  --instances-dir hf_instances_seed31415/ \
+  --tasks-dir /path/to/ASI-Bench/tasks/ \
+  --judge-api-base https://api.tokenrouter.com/v1 \
+  --judge-api-key-env TOKENROUTER_API_KEY \
+  --judge-api-protocol openai
+```
+
+This route automatically adapts a task model such as
+`google/gemini-3.5-flash` to the OpenAI-compatible LiteLLM route, so the public
+task configuration stays unchanged. A custom endpoint requires all three
+settings. The equivalent variables are `ASIBENCH_JUDGE_API_BASE`,
+`ASIBENCH_JUDGE_API_KEY_ENV`, and `ASIBENCH_JUDGE_API_PROTOCOL`; the value of
+`ASIBENCH_JUDGE_API_KEY_ENV` is still a variable name such as
+`TOKENROUTER_API_KEY`, never the key. `run-score` forwards these settings to
+each scoring subprocess, while `benchflow-score` applies them to its materialized
+attempt. When an override is used, reports retain only the endpoint, protocol,
+and variable name.
+
+`run-score` also keeps a dedicated nonstandard Judge variable (for example,
+`TOKENROUTER_API_KEY`) and the `ASIBENCH_JUDGE_*` selectors out of the agent-run
+subprocess. Standard provider variables such as `GEMINI_API_KEY` remain shared
+for compatibility with agents that use the same provider. Choose a dedicated
+Judge variable when the agent must not receive the scoring credential. The
+ASI-Bench `run` child cannot reload the removed key from the project `.env`, but
+normal dotenv behavior is restored before the evaluated agent starts.
+
 `asibench score --repo seed42` always fails: seed42 references are private.
 Use `asibench submit` for seed42.
 

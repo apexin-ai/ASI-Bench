@@ -42,6 +42,32 @@ uv run pytest -q -m integration
 uv run pytest -q -m e2e
 ```
 
+## Runtime Judge API configuration
+
+`score`, `run-score`, and `benchflow-score` share credential-safe runtime
+overrides for text and image Judges. Offline coverage verifies CLI help and
+forwarding, fail-fast validation, native-provider key selection,
+OpenAI-compatible model routing, text/VLM parity, scoped BenchFlow/local-score
+overrides, agent-subprocess credential isolation, and secret redaction:
+
+```bash
+uv run pytest -q \
+  tests/test_cli.py \
+  tests/test_judge_common.py \
+  tests/test_llm_judge.py \
+  tests/test_benchflow.py \
+  tests/test_local_scoring.py
+```
+
+The key option takes an environment-variable name, never key material. A custom
+endpoint must include all three settings: `--judge-api-base`,
+`--judge-api-key-env`, and `--judge-api-protocol`. Tests must use dummy secrets,
+mock all model calls, and assert that neither exceptions nor persisted score
+details contain the secret. Native Gemini coverage uses a key-only override;
+TokenRouter coverage expects the OpenAI-compatible
+`openai/google/gemini-*` LiteLLM route. Real-provider smoke tests belong under
+the opt-in `integration` or `e2e` markers.
+
 ## pi / opencode native adapters
 
 The `pi_cli` and `opencode_cli` adapters provide first-class support for the
@@ -376,3 +402,9 @@ any dependency change.
 `--repetitions`; each repetition has separate run and score output. Repeated
 task jobs share one bounded queue, so later repetitions fill slots released by
 the tail of an earlier repetition without multiplying the concurrency limit.
+Runtime Judge endpoint, key-variable name, and protocol settings are forwarded
+to every score subprocess without placing the secret on its command line.
+The ASI-Bench agent-run child disables project `.env` reload during framework
+startup and removes the Judge selectors plus a dedicated nonstandard Judge key.
+It restores normal dotenv behavior before the evaluated agent starts;
+conventional provider keys remain compatible.

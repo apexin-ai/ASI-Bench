@@ -186,6 +186,62 @@ class TestLLMJudgeScorer:
         assert result.passed is True
 
     @patch("ai4sci_bench.scorers.llm_judge.litellm")
+    def test_runtime_judge_override_uses_openai_compatible_route(self, mock_litellm, tmp_path):
+        pred_dir = tmp_path / "pred"
+        pred_dir.mkdir()
+        (pred_dir / "output.txt").write_text("Output")
+        mock_litellm.completion.return_value = _make_litellm_response(8.0)
+
+        with patch.dict(os.environ, {"TOKENROUTER_API_KEY": "tokenrouter-secret"}, clear=False):
+            from ai4sci_bench.core.judge_api import resolve_judge_api_override, use_judge_api_override
+            override = resolve_judge_api_override(
+                "https://api.tokenrouter.com/v1", "TOKENROUTER_API_KEY", "openai"
+            )
+            with use_judge_api_override(override):
+                result = get_scorer("llm_judge").score(pred_dir, tmp_path, {
+                    "pred_file": "output.txt",
+                    "model": "google/gemini-3.5-flash",
+                    "weight": 10.0,
+                })
+
+        kwargs = mock_litellm.completion.call_args.kwargs
+        assert kwargs["model"] == "openai/google/gemini-3.5-flash"
+        assert kwargs["api_base"] == "https://api.tokenrouter.com/v1"
+        assert kwargs["api_key"] == "tokenrouter-secret"
+        assert result.details["judge_api"] == {
+            "api_base": "https://api.tokenrouter.com/v1",
+            "api_protocol": "openai",
+            "api_key_env": "TOKENROUTER_API_KEY",
+        }
+        assert "tokenrouter-secret" not in str(result.details)
+
+    @patch("ai4sci_bench.scorers.llm_judge.litellm")
+    def test_native_provider_environment_key_is_redacted(self, mock_litellm, tmp_path):
+        pred_dir = tmp_path / "pred"
+        pred_dir.mkdir()
+        (pred_dir / "output.txt").write_text("Output")
+        secret = "native-gemini-secret"
+        mock_litellm.completion.return_value = _make_litellm_response(
+            8.0, reasoning=f"provider echoed {secret}"
+        )
+
+        from ai4sci_bench.core.judge_api import use_judge_api_override
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY": secret}, clear=False):
+            with use_judge_api_override(None):
+                result = get_scorer("llm_judge").score(pred_dir, tmp_path, {
+                    "pred_file": "output.txt",
+                    "model": "google/gemini-3.5-flash",
+                    "weight": 10.0,
+                })
+
+        kwargs = mock_litellm.completion.call_args.kwargs
+        assert kwargs["api_key"] == secret
+        assert secret not in str(result.details)
+        assert "<redacted>" in result.details["raw_responses"][0]
+        assert result.details["judge_api"] == {"api_key_env": "GEMINI_API_KEY"}
+
+    @patch("ai4sci_bench.scorers.llm_judge.litellm")
     def test_api_key_not_passed_when_none(self, mock_litellm, tmp_path):
         pred_dir = tmp_path / "pred"
         pred_dir.mkdir()
@@ -223,6 +279,29 @@ class TestLLMJudgeScorer:
         call_args = mock_litellm.completion.call_args
         assert call_args.kwargs["model"] == "openrouter/anthropic/claude-opus-4-6"
         assert call_args.kwargs["api_key"] == "sk-or-env-test"
+
+    def test_openrouter_fallback_key_is_redacted_from_retry_log(self, caplog):
+        secret = "sk-or-retry-secret"
+        scorer = get_scorer("llm_judge")
+        with (
+            patch.dict(os.environ, {"OPENROUTER_API_KEY": secret}, clear=False),
+            patch(
+                "ai4sci_bench.scorers.llm_judge.litellm.completion",
+                side_effect=Exception(f"request rejected for {secret}"),
+            ),
+            patch("ai4sci_bench.scorers.llm_judge.time.sleep"),
+            caplog.at_level("WARNING"),
+            pytest.raises(Exception),
+        ):
+            scorer._call_with_retry(
+                "openrouter/google/gemini-3.5-flash",
+                "judge prompt",
+                0.0,
+                100,
+            )
+
+        assert secret not in caplog.text
+        assert "<redacted>" in caplog.text
 
     @patch("ai4sci_bench.scorers.llm_judge.litellm")
     def test_explicit_api_key_overrides_env(self, mock_litellm, tmp_path):
@@ -361,6 +440,32 @@ class TestMultimodalScorer:
         assert result.details["median_score"] == 8.0
 
     @patch("ai4sci_bench.scorers.multimodal.litellm")
+    def test_vlm_runtime_judge_override_matches_text_route(self, mock_litellm, tmp_path):
+        pred_dir = tmp_path / "pred"
+        pred_dir.mkdir()
+        _create_minimal_png(pred_dir / "plot.png")
+        mock_litellm.completion.return_value = _make_litellm_response(8.0)
+
+        with patch.dict(os.environ, {"TOKENROUTER_API_KEY": "tokenrouter-secret"}, clear=False):
+            from ai4sci_bench.core.judge_api import resolve_judge_api_override, use_judge_api_override
+            override = resolve_judge_api_override(
+                "https://api.tokenrouter.com/v1", "TOKENROUTER_API_KEY", "openai"
+            )
+            with use_judge_api_override(override):
+                result = get_scorer("multimodal").score(tmp_path / "pred", tmp_path, {
+                    "mode": "vlm_judge",
+                    "model": "google/gemini-3.5-flash",
+                    "pred_image": "plot.png",
+                    "weight": 10.0,
+                })
+
+        kwargs = mock_litellm.completion.call_args.kwargs
+        assert kwargs["model"] == "openai/google/gemini-3.5-flash"
+        assert kwargs["api_base"] == "https://api.tokenrouter.com/v1"
+        assert kwargs["api_key"] == "tokenrouter-secret"
+        assert result.details["judge_api"]["api_protocol"] == "openai"
+
+    @patch("ai4sci_bench.scorers.multimodal.litellm")
     def test_vlm_judge_multi_judge(self, mock_litellm, tmp_path):
         pred_dir = tmp_path / "pred"
         pred_dir.mkdir()
@@ -382,6 +487,29 @@ class TestMultimodalScorer:
 
         assert result.details["median_score"] == 6.0
         assert mock_litellm.completion.call_count == 3
+
+    def test_vlm_openrouter_fallback_key_is_redacted_from_retry_log(self, caplog):
+        secret = "sk-or-vlm-retry-secret"
+        scorer = get_scorer("multimodal")
+        with (
+            patch.dict(os.environ, {"OPENROUTER_API_KEY": secret}, clear=False),
+            patch(
+                "ai4sci_bench.scorers.multimodal.litellm.completion",
+                side_effect=Exception(f"request rejected for {secret}"),
+            ),
+            patch("ai4sci_bench.scorers.multimodal.time.sleep"),
+            caplog.at_level("WARNING"),
+            pytest.raises(Exception),
+        ):
+            scorer._call_vlm_with_retry(
+                "openrouter/google/gemini-3.5-flash",
+                [],
+                0.0,
+                100,
+            )
+
+        assert secret not in caplog.text
+        assert "<redacted>" in caplog.text
 
     @patch("ai4sci_bench.scorers.multimodal.litellm")
     def test_vlm_api_error_marked_unavailable(self, mock_litellm, tmp_path):

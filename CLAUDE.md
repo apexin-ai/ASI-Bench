@@ -62,6 +62,12 @@
 - 持久化元数据的路径脱敏必须保留完整 HTTP(S) API endpoint，只替换 URL
   之外的宿主机绝对路径；agent 执行失败必须报告为 `attempt_status:
   execution_failed`，不得与 scorer 完成或低分混淆。
+- `score`、`run-score`、`benchflow-score` 的 LLM/VLM Judge runtime override
+  使用 `--judge-api-base`、`--judge-api-key-env`、`--judge-api-protocol`；key
+  参数只接受环境变量名，不得把 secret 写入 CLI、`task_eval.yaml`、日志或报告。
+  OpenAI-compatible endpoint 必须统一改写模型路由，文本/VLM 行为一致；
+  `run-score` 必须将 override 转发给每个评分子进程，并从 agent 子进程移除
+  Judge selector 及专用的非标准 key 环境变量。
 - `run-score` 串联 seed31415 的 `run` 与 `score`；支持 `--parallel` 和
   `--repetitions`，重复流程使用独立输出目录和进程；所有 repetition 的 task
   共用一个有界队列，前一轮尾部释放的槽位须立即由后一轮 task 补位。

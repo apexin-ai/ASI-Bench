@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -22,8 +21,11 @@ from ai4sci_bench.scorers._judge_common import (
     SUPPORTED_MODELS,
     aggregate_judge_scores,
     evaluator_unavailable_result,
+    judge_completion_api_kwargs,
     resolve_model,
-    resolve_scorer_api_params,
+    resolve_judge_api,
+    resolve_scorer_api_params,  # backward-compatible module-level import
+    sanitize_judge_error,
 )
 from ai4sci_bench.scorers._parse_utils import parse_judge_json
 
@@ -61,13 +63,11 @@ class LLMJudgeScorer(Scorer):
     def score(self, pred_dir: Path, ref_dir: Path, config: dict) -> ScoreDetail:
         scorer_name = "llm_judge"
         weight = config.get("weight", 1.0)
-        model = resolve_model(config.get("model", DEFAULT_MODEL))
         rubric = config.get("rubric", DEFAULT_RUBRIC)
         num_judges = config.get("num_judges", 1)
         temperature = config.get("temperature", 0.0)
         max_tokens = config.get("max_tokens", 1024)
         max_score_value = config.get("max_score_value", 10)
-        api_base, api_key = resolve_scorer_api_params(config)
         threshold = config.get("threshold", 0.5)
         max_chars = config.get("max_chars", 10000)
 
@@ -107,35 +107,53 @@ class LLMJudgeScorer(Scorer):
             extra_ref_contents,
         )
 
+        resolved_api = None
         try:
+            resolved_api = resolve_judge_api(config)
             scores, raw_responses, _parse_failures = self._call_judges(
-                model=model,
+                model=resolved_api.model,
                 prompt=judge_prompt,
                 num_judges=num_judges,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 max_score_value=max_score_value,
-                api_key=api_key,
-                api_base=api_base,
+                api_key=resolved_api.api_key,
+                api_base=resolved_api.api_base,
             )
         except Exception as e:
-            logger.error("LLM judge call failed: %s", e)
+            safe_error = sanitize_judge_error(
+                e,
+                secrets=(resolved_api.api_key if resolved_api else None,),
+            )
+            logger.error("LLM judge call failed: %s", safe_error)
             return evaluator_unavailable_result(
                 scorer_name=scorer_name,
                 weight=weight,
-                error=e,
-                model=model,
+                error=safe_error,
+                model=resolved_api.model if resolved_api else str(config.get("model", DEFAULT_MODEL)),
+                secrets=(resolved_api.api_key if resolved_api else None,),
+                extra_details=(
+                    {"judge_api": resolved_api.public_metadata()}
+                    if resolved_api and resolved_api.public_metadata()
+                    else None
+                ),
             )
 
         result = aggregate_judge_scores(
             scores=scores,
             raw_responses=raw_responses,
             scorer_name=scorer_name,
-            model=model,
+            model=resolved_api.model,
             num_judges=num_judges,
             max_score_value=max_score_value,
             weight=weight,
             threshold=threshold,
+            secrets=(resolved_api.api_key,),
+            extra_details=(
+                {"judge_api": resolved_api.public_metadata()}
+                if resolved_api.public_metadata()
+                else None
+            ),
         )
 
         if hasattr(self, "_judge_cost_accumulator") and self._judge_cost_accumulator.get("num_invocations", 0) > 0:
@@ -143,7 +161,7 @@ class LLMJudgeScorer(Scorer):
 
         logger.info(
             "LLM judge result: model=%s, judges=%d, scores=%s, median=%.2f, passed=%s",
-            model, num_judges, scores, result.details["median_score"], result.passed,
+            resolved_api.model, num_judges, scores, result.details["median_score"], result.passed,
         )
 
         return result
@@ -257,22 +275,12 @@ class LLMJudgeScorer(Scorer):
         api_base: str | None = None,
     ) -> str:
         last_error: Exception | None = None
-        extra_kwargs: dict[str, Any] = {}
-        if api_key:
-            extra_kwargs["api_key"] = api_key
-        elif api_base:
-            # Support OpenAI-compatible gateways that are authenticated with
-            # OPENROUTER_API_KEY but are not addressed via LiteLLM's
-            # openrouter/... provider shim.
-            env_key = os.environ.get("OPENROUTER_API_KEY")
-            if env_key:
-                extra_kwargs["api_key"] = env_key
-        elif model.startswith("openrouter/"):
-            env_key = os.environ.get("OPENROUTER_API_KEY")
-            if env_key:
-                extra_kwargs["api_key"] = env_key
-        if api_base:
-            extra_kwargs["api_base"] = api_base
+        extra_kwargs: dict[str, Any] = judge_completion_api_kwargs(
+            model=model,
+            api_base=api_base,
+            api_key=api_key,
+        )
+        effective_api_key = extra_kwargs.get("api_key")
         for attempt in range(MAX_RETRIES):
             try:
                 response = litellm.completion(
@@ -294,9 +302,13 @@ class LLMJudgeScorer(Scorer):
                 last_error = e
                 if attempt < MAX_RETRIES - 1:
                     wait = BACKOFF_BASE ** attempt
+                    safe_error = sanitize_judge_error(
+                        e,
+                        secrets=(api_key, effective_api_key),
+                    )
                     logger.warning(
                         "Judge API call attempt %d failed: %s, retrying in %.1fs",
-                        attempt + 1, e, wait,
+                        attempt + 1, safe_error, wait,
                     )
                     time.sleep(wait)
         raise last_error  # type: ignore[misc]

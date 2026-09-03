@@ -168,6 +168,63 @@ asibench score \
 The command writes a separate `local_score_seed31415.json` and never overwrites
 the produce-only result. Local scores are reproducible but non-official.
 
+#### Configure an LLM/VLM Judge API
+
+Some seed31415 scoring contracts use an LLM or VLM Judge. Judge credentials and
+transport overrides are runtime operator settings: keep the secret in an
+ignored `.env` file or process environment, never in `task_eval.yaml` or a
+command-line argument. `score`, `run-score`, and `benchflow-score` expose the
+same options:
+
+| Option | Environment equivalent | Meaning |
+|---|---|---|
+| `--judge-api-base` | `ASIBENCH_JUDGE_API_BASE` | Optional custom Judge endpoint |
+| `--judge-api-key-env` | `ASIBENCH_JUDGE_API_KEY_ENV` | **Name** of the variable containing the key, not the key itself |
+| `--judge-api-protocol` | `ASIBENCH_JUDGE_API_PROTOCOL` | `native` or `openai` for an OpenAI-compatible endpoint |
+
+For native Google Gemini, put `GEMINI_API_KEY=...` in `.env`. Existing
+`google/gemini-*` task models then use the Gemini API directly. To select and
+validate that credential explicitly, add only its variable name:
+
+```bash
+asibench score \
+  --repo seed31415 \
+  --results-dir out_seed31415/ \
+  --instances-dir hf_instances_seed31415/ \
+  --tasks-dir /path/to/ASI-Bench/tasks/ \
+  --judge-api-key-env GEMINI_API_KEY
+```
+
+For TokenRouter or another OpenAI-compatible gateway, put the secret in `.env`
+as `TOKENROUTER_API_KEY=...`, then provide all three transport settings:
+
+```bash
+asibench score \
+  --repo seed31415 \
+  --results-dir out_seed31415/ \
+  --instances-dir hf_instances_seed31415/ \
+  --tasks-dir /path/to/ASI-Bench/tasks/ \
+  --judge-api-base https://api.tokenrouter.com/v1 \
+  --judge-api-key-env TOKENROUTER_API_KEY \
+  --judge-api-protocol openai
+```
+
+The OpenAI-compatible route automatically sends a task model such as
+`google/gemini-3.5-flash` as `openai/google/gemini-3.5-flash`; the public task
+configuration does not need to be copied or edited. Alternatively, place the
+three `ASIBENCH_JUDGE_*` settings shown in `.env.example` in `.env` and run any
+of the three scoring commands without repeating the flags. Public score details
+record only the endpoint, protocol, and key-variable name—not the secret.
+
+During `run-score`, a dedicated nonstandard Judge variable such as
+`TOKENROUTER_API_KEY` and all `ASIBENCH_JUDGE_*` selectors are removed from the
+agent-run subprocess; they remain available to the scoring subprocess. Standard
+provider variables such as `GEMINI_API_KEY` remain shared for backward
+compatibility. Use a dedicated Judge variable when the evaluated agent must not
+receive the scoring credential. ASI-Bench also prevents its `run` child from
+reloading the removed key from the project `.env`, then restores normal dotenv
+behavior before starting the evaluated agent.
+
 For `seed42`, repeat the pull and run with separate directories using the
 required Docker OS sandbox, then submit for private-reference scoring. Because
 generic `--agent-cmd` does not support `os`, use an OS-compatible built-in
@@ -206,6 +263,7 @@ seed42 GT is not public. Local benchmark runs never calculate official scores.
 | Produce-only reports | Unscored placeholders are never displayed as `0.0`; all-unscored per-task score tables are omitted |
 | Submission | seed42 requires verified `--sandbox os` results; `submit` uploads a draft by default and `--no-upload` creates a local bundle only |
 | Local scoring | `score --repo seed31415` writes a separate non-official JSON report; seed42 is rejected |
+| Judge API | `score`, `run-score`, and `benchflow-score` accept credential-safe runtime overrides for native providers and OpenAI-compatible gateways |
 | Custom agents | `--agent-cmd` supports the `none` and `linux_ns` sandboxes for local runs; official seed42 submission requires an `os`-compatible built-in adapter |
 | Built-in agents | Use `--agent` with `--agent-config`; compatible adapters can use Docker-based `os` isolation |
 
@@ -491,7 +549,10 @@ For a one-step run followed by local scoring on seed31415, use
 the same task/agent settings plus `--parallel` and `--repetitions`; repeated
 runs are written below `run_N/` and scored independently. `--parallel` is a
 single global task-worker limit: when one repetition reaches its final tasks,
-tasks from the next repetition immediately fill released worker slots.
+tasks from the next repetition immediately fill released worker slots. Judge
+API options are validated once and forwarded to every scoring subprocess.
+`benchflow-score` accepts the same three Judge API options for a materialized
+BenchFlow attempt.
 
 - **Public execution framework:** agent adapters, sandboxes, instance loading,
   output collection, and submission packaging are auditable in this repository.

@@ -37,7 +37,13 @@ from ai4sci_bench.core.logger import get_logger
 from ai4sci_bench.core.scorer import Scorer, register_scorer
 from ai4sci_bench.core.types import ScoreDetail
 from ai4sci_bench.runner.task_image import TaskImageBuilder
-from ai4sci_bench.scorers.llm_judge import JUDGE_SYSTEM_PROMPT, _resolve_model
+from ai4sci_bench.scorers.llm_judge import JUDGE_SYSTEM_PROMPT
+from ai4sci_bench.scorers._judge_common import (
+    judge_completion_api_kwargs,
+    resolve_judge_api,
+    resolve_model,
+    sanitize_judge_error,
+)
 
 load_dotenv()
 
@@ -87,16 +93,24 @@ def _run_ngspice_in_task_image(work_dir: Path, netlist_name: str, timeout_s: int
 
 
 def _resolve_gateway_api_key(api_key: Optional[str], api_base: Optional[str], model: str) -> Optional[str]:
+    """Backward-compatible credential helper for external custom scorers.
+
+    Built-in CMOS judge paths use :func:`resolve_judge_api` instead.  Keep this
+    helper for older task-local imports; new code must resolve credentials via
+    the shared runtime configuration so custom endpoints never inherit an
+    unrelated provider key.
+    """
     if api_key:
         return api_key
+    # Never guess a credential for an explicitly supplied endpoint.  A
+    # TokenRouter (or another gateway) may be configured while an unrelated
+    # OPENROUTER_API_KEY is present in the shell.  The shared resolver owns
+    # provider-key lookup for active scorer paths; this fallback is retained
+    # only for legacy callers that pass an OpenRouter model with no endpoint.
     if api_base:
-        env_key = os.environ.get("OPENROUTER_API_KEY")
-        if env_key:
-            return env_key
+        return None
     if model.startswith("openrouter/"):
-        env_key = os.environ.get("OPENROUTER_API_KEY")
-        if env_key:
-            return env_key
+        return os.environ.get("OPENROUTER_API_KEY") or None
     return None
 
 TRUST_METRICS = [
@@ -493,6 +507,28 @@ def _build_judge_prompt(rubric: str, pred_content: str, ref_content: Optional[st
     return "\n".join(parts)
 
 
+def _sanitize_judge_payload(value: Any, *, secrets: Tuple[Optional[str], ...]) -> Any:
+    """Recursively redact Judge credentials from persisted response payloads.
+
+    Judge output is provider-controlled and may echo request metadata (including
+    an API key) inside a reasoning string or an unexpected nested field.  The
+    scorer only needs a small JSON subset, but sanitizing recursively keeps
+    future additions from accidentally reintroducing a credential leak.
+    """
+    if isinstance(value, str):
+        return sanitize_judge_error(value, secrets=secrets)
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_judge_payload(item, secrets=secrets)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_judge_payload(item, secrets=secrets) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_judge_payload(item, secrets=secrets) for item in value)
+    return value
+
+
 def _call_vector_judges(
     *,
     pred_dir: Path,
@@ -507,6 +543,7 @@ def _call_vector_judges(
     max_chars: int,
     api_key: Optional[str] = None,
     api_base: Optional[str] = None,
+    api_protocol: Optional[str] = None,
 ) -> Dict[str, Any]:
     pred_content = _read_text(pred_dir / pred_file, max_chars=max_chars)
     if pred_content is None:
@@ -522,14 +559,24 @@ def _call_vector_judges(
 
     ref_content = _read_text(ref_dir / ref_file, max_chars=max_chars) if ref_file else None
     prompt = _build_judge_prompt(rubric, pred_content, ref_content)
-    resolved_model = _resolve_model(model)
+    # Resolve the model according to the selected transport.  In particular,
+    # an OpenAI-compatible gateway (TokenRouter, LiteLLM proxy, etc.) needs the
+    # ``openai/`` LiteLLM route even when the task names a native Gemini model.
+    resolved_model = resolve_model(model, api_protocol=api_protocol)
 
     raw_responses: List[str] = []
     parsed_responses: List[Dict[str, Any]] = []
     score_samples: List[float] = []
     subscore_samples: Dict[str, List[float]] = {metric: [] for metric in TRUST_METRICS}
 
-    resolved_api_key = _resolve_gateway_api_key(api_key, api_base, resolved_model)
+    request_kwargs = judge_completion_api_kwargs(
+        model=resolved_model,
+        api_base=api_base,
+        api_key=api_key,
+    )
+    # Keep the legacy OpenRouter fallback compatible for direct callers, but
+    # include the effective credential in the redaction set if it was used.
+    effective_api_key = request_kwargs.get("api_key")
     for _ in range(max(1, num_judges)):
         response = litellm.completion(
             model=resolved_model,
@@ -539,20 +586,29 @@ def _call_vector_judges(
             ],
             temperature=temperature,
             max_tokens=max_tokens,
-            api_key=resolved_api_key,
-            api_base=api_base,
+            **request_kwargs,
         )
         raw = response.choices[0].message.content or ""
-        raw_responses.append(raw)
+        # Keep persisted reports free of the configured credential while
+        # parsing the provider response itself unchanged.
+        raw_responses.append(
+            sanitize_judge_error(raw, secrets=(api_key, effective_api_key))
+        )
         parsed = _extract_json_object(raw)
         if not parsed:
             continue
 
+        # Parse numeric fields from the original response, but persist only a
+        # recursively sanitized representation.  A provider can echo the key
+        # in ``reasoning`` even when the raw response itself is redacted.
+        safe_parsed = _sanitize_judge_payload(
+            parsed, secrets=(api_key, effective_api_key)
+        )
         subscores = _normalize_subscores(parsed)
         parsed_responses.append(
             {
                 "score": max(0.0, min(12.0, float(parsed.get("score", 0.0)))),
-                "reasoning": str(parsed.get("reasoning", "") or ""),
+                "reasoning": str(safe_parsed.get("reasoning", "") or ""),
                 "subscores": subscores,
             }
         )
@@ -664,16 +720,17 @@ Write `score.json` in the current directory with exactly this schema:
             score_file = workspace / "score.json"
             if score_file.exists():
                 raw = score_file.read_text(encoding="utf-8", errors="replace") + "\n" + raw
-            raw_responses.append(raw)
+            raw_responses.append(sanitize_judge_error(raw))
             parsed = _extract_json_object(raw)
             if not parsed:
                 continue
 
+            safe_parsed = _sanitize_judge_payload(parsed, secrets=())
             subscores = _normalize_subscores(parsed)
             parsed_responses.append(
                 {
                     "score": max(0.0, min(12.0, float(parsed.get("score", 0.0)))),
-                    "reasoning": str(parsed.get("reasoning", "") or ""),
+                    "reasoning": str(safe_parsed.get("reasoning", "") or ""),
                     "subscores": subscores,
                 }
             )
@@ -714,12 +771,11 @@ def _metric_trust_report(
     subscore_threshold = float(trust_cfg.get("subscore_threshold", 1.5))
     ref_file = str(trust_cfg.get("ref_file", "testbench_reference_ref.md"))
     pred_file = str(trust_cfg.get("pred_file", "simulation.py"))
-    from ai4sci_bench.scorers._judge_common import resolve_scorer_api_params
-    api_base, api_key = resolve_scorer_api_params(trust_cfg)
 
     if judge_agent == "grounded":
         return _grounded_metric_trust_report(pred_dir, ref_dir, trust_cfg, subscore_threshold)
 
+    resolved_api = None
     try:
         if judge_agent == "codex":
             codex_model = str(trust_cfg.get("model", "gpt-5.4"))
@@ -753,6 +809,10 @@ def _metric_trust_report(
                 timeout=timeout,
             )
         else:
+            # Resolve endpoint, protocol, and the operator-selected key in one
+            # place.  This applies ASIBENCH_JUDGE_* runtime overrides to this
+            # task-local scorer just as it does to the generic llm_judge.
+            resolved_api = resolve_judge_api(trust_cfg)
             testbench = _call_vector_judges(
                 pred_dir=pred_dir,
                 ref_dir=ref_dir,
@@ -764,8 +824,9 @@ def _metric_trust_report(
                 temperature=temperature,
                 max_tokens=max_tokens,
                 max_chars=max_chars,
-                api_key=api_key,
-                api_base=api_base,
+                api_key=resolved_api.api_key,
+                api_base=resolved_api.api_base,
+                api_protocol=resolved_api.api_protocol,
             )
             extraction = _call_vector_judges(
                 pred_dir=pred_dir,
@@ -778,15 +839,20 @@ def _metric_trust_report(
                 temperature=temperature,
                 max_tokens=max_tokens,
                 max_chars=max_chars,
-                api_key=api_key,
-                api_base=api_base,
+                api_key=resolved_api.api_key,
+                api_base=resolved_api.api_base,
+                api_protocol=resolved_api.api_protocol,
             )
     except Exception as exc:
-        logger.warning("Trust judge failed: %s", exc)
+        safe_error = sanitize_judge_error(
+            exc,
+            secrets=(resolved_api.api_key if resolved_api is not None else None,),
+        )
+        logger.warning("Trust judge failed: %s", safe_error)
         return {
             "enabled": True,
             "failed": True,
-            "error": str(exc),
+            "error": safe_error,
             "subscore_threshold": subscore_threshold,
             "testbench": {
                 "median_subscores": {metric: 0.0 for metric in TRUST_METRICS},
@@ -799,6 +865,11 @@ def _metric_trust_report(
                 "parsed_responses": [],
             },
             "trusted_metrics": {metric: False for metric in TRUST_METRICS},
+            **(
+                {"judge_api": resolved_api.public_metadata()}
+                if resolved_api is not None and resolved_api.public_metadata()
+                else {}
+            ),
         }
 
     if (
@@ -836,6 +907,24 @@ def _metric_trust_report(
             ) / 2.0 >= subscore_threshold
         )
         for metric in TRUST_METRICS
+    }
+
+    # Preserve both judge payloads and the derived trust decision.  Without
+    # this return the non-grounded LLM/Codex path falls through with ``None``;
+    # callers then silently treat every metric as untrusted.
+    return {
+        "enabled": True,
+        "failed": False,
+        "error": None,
+        "subscore_threshold": subscore_threshold,
+        "testbench": testbench,
+        "extraction": extraction,
+        "trusted_metrics": trusted_metrics,
+        **(
+            {"judge_api": resolved_api.public_metadata()}
+            if resolved_api is not None and resolved_api.public_metadata()
+            else {}
+        ),
     }
 
 
@@ -1264,8 +1353,6 @@ def _netlist_strict_gate_report(
     temperature = float(strict_cfg.get("temperature", 0.0))
     max_tokens = int(strict_cfg.get("max_tokens", 220))
     max_chars = int(strict_cfg.get("max_chars", 12000))
-    from ai4sci_bench.scorers._judge_common import resolve_scorer_api_params
-    api_base, api_key = resolve_scorer_api_params(strict_cfg)
     netlist_file = str(strict_cfg.get("pred_file", "opamp_netlist.cir"))
     expected_pins = strict_cfg.get("expected_pins") or ["vdd", "gnd", "inp", "inn", "out"]
 
@@ -1333,28 +1420,40 @@ def _netlist_strict_gate_report(
         }
 
     prompt = _build_judge_prompt(NETLIST_STRICT_GATE_RUBRIC, pred_content, None)
-    resolved_model = _resolve_model(model)
     raw_responses: List[str] = []
     parsed_responses: List[Dict[str, Any]] = []
     score_samples: List[float] = []
     pass_votes: List[bool] = []
 
+    # Resolve the runtime-selected endpoint only for the LLM branch.  The
+    # deterministic ``code_only`` path above must remain usable without any
+    # judge credentials.
+    resolved_api = None
     try:
-        resolved_api_key = _resolve_gateway_api_key(api_key, api_base, resolved_model)
+        resolved_api = resolve_judge_api(strict_cfg)
+        request_kwargs = judge_completion_api_kwargs(
+            model=resolved_api.model,
+            api_base=resolved_api.api_base,
+            api_key=resolved_api.api_key,
+        )
         for _ in range(max(1, num_judges)):
             response = litellm.completion(
-                model=resolved_model,
+                model=resolved_api.model,
                 messages=[
                     {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=temperature,
                 max_tokens=max_tokens,
-                api_key=resolved_api_key,
-                api_base=api_base,
+                **request_kwargs,
             )
             raw = response.choices[0].message.content or ""
-            raw_responses.append(raw)
+            raw_responses.append(
+                sanitize_judge_error(
+                    raw,
+                    secrets=(resolved_api.api_key if resolved_api is not None else None,),
+                )
+            )
             parsed = _extract_json_object(raw)
             if not parsed:
                 continue
@@ -1362,17 +1461,25 @@ def _netlist_strict_gate_report(
             if pass_flag is None:
                 continue
             score = max(0.0, min(8.0, float(parsed.get("score", 0.0))))
+            safe_parsed = _sanitize_judge_payload(
+                parsed,
+                secrets=(resolved_api.api_key if resolved_api is not None else None,),
+            )
             parsed_responses.append(
                 {
                     "score": score,
                     "pass": pass_flag,
-                    "reasoning": str(parsed.get("reasoning", "") or ""),
+                    "reasoning": str(safe_parsed.get("reasoning", "") or ""),
                 }
             )
             score_samples.append(score)
             pass_votes.append(pass_flag)
     except Exception as exc:
-        logger.warning("Strict netlist gate judge failed: %s", exc)
+        safe_error = sanitize_judge_error(
+            exc,
+            secrets=(resolved_api.api_key if resolved_api is not None else None,),
+        )
+        logger.warning("Strict netlist gate judge failed: %s", safe_error)
         return {
             "available": True,
             "passed": False,
@@ -1380,8 +1487,13 @@ def _netlist_strict_gate_report(
             "pass_votes": [],
             "raw_responses": raw_responses,
             "parsed_responses": parsed_responses,
-            "error": str(exc),
-            "model": resolved_model,
+            "error": safe_error,
+            "model": resolved_api.model if resolved_api else model,
+            **(
+                {"judge_api": resolved_api.public_metadata()}
+                if resolved_api is not None and resolved_api.public_metadata()
+                else {}
+            ),
         }
 
     if not parsed_responses:
@@ -1393,7 +1505,12 @@ def _netlist_strict_gate_report(
             "raw_responses": raw_responses,
             "parsed_responses": parsed_responses,
             "error": "No valid strict-gate judge responses",
-            "model": resolved_model,
+            "model": resolved_api.model if resolved_api else model,
+            **(
+                {"judge_api": resolved_api.public_metadata()}
+                if resolved_api is not None and resolved_api.public_metadata()
+                else {}
+            ),
         }
 
     true_votes = sum(1 for vote in pass_votes if vote)
@@ -1406,7 +1523,12 @@ def _netlist_strict_gate_report(
         "raw_responses": raw_responses,
         "parsed_responses": parsed_responses,
         "error": None,
-        "model": resolved_model,
+        "model": resolved_api.model if resolved_api else model,
+        **(
+            {"judge_api": resolved_api.public_metadata()}
+            if resolved_api is not None and resolved_api.public_metadata()
+            else {}
+        ),
         "interface_contract": interface_check,
         "structural_contract": structural_check,
     }

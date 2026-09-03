@@ -3,5 +3,7 @@ __pycache__/
 *.pyo
 .pytest_cache/
 .venv/
+.env
+.env.local
 .ai4sci-bench/
 .asibench/
