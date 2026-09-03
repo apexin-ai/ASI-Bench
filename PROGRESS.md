@@ -424,4 +424,4 @@
   container runs stay comparable.
 - Review pending: upstream issue #5, PR #6 (branch
   `task-harness-home-isolation`, implementation commit
-  `12b62b2331f9ce7c1cf3a2337786463e7d41c399`).
+  `12b62b2cbfe5d54d18aae454ac405f13b91d1467`).
