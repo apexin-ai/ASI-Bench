@@ -89,6 +89,18 @@ class FailingAgent(AgentAdapter):
 
 
 class TestBenchmarkOrchestrator:
+    def test_run_tears_down_agent_when_pipeline_fails(self, tmp_path, monkeypatch):
+        agent = MagicMock(spec=AgentAdapter)
+        orchestrator = BenchmarkOrchestrator(RunConfig(
+            agent=agent, tasks_dir=str(tmp_path), output_dir=str(tmp_path / "out"),
+        ))
+        monkeypatch.setattr(
+            orchestrator, "_load_tasks", MagicMock(side_effect=RuntimeError("boom")),
+        )
+        with pytest.raises(RuntimeError, match="boom"):
+            orchestrator.run()
+        agent.teardown.assert_called_once_with()
+
     def test_prepare_instances_with_fixed_params(self, sample_task_dir, tmp_dir):
         """Fixed params should generate exactly one instance per prompt level."""
         metadata = yaml.safe_load((sample_task_dir / "task.yaml").read_text())

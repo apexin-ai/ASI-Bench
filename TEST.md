@@ -118,8 +118,9 @@ sequentially executed instances:
   fresh `HOME=/home/agent`, so harness session state is destroyed with the
   container.
 - **Host-side runs** (`--sandbox none|task|linux_ns`):
-  - `claude_code_cli` builds an isolated per-run `HOME` under
-    `.ai4sci-bench/claude_home/<run_key>/` (tool_mode ≠ unrestricted), copying
+  - `claude_code_cli` builds an isolated per-run `HOME` under a unique
+    `.ai4sci-bench/claude_home/execution_*/<run_key-hash>/` root
+    (tool_mode ≠ unrestricted), copying
     only `.credentials.json` and `settings.json` and setting
     `HOME`/`USERPROFILE`/`CLAUDE_CONFIG_DIR`. Sessions, `~/.claude.json`, and
     ambient user config are excluded.
@@ -136,10 +137,11 @@ uv run pytest -q tests/test_adapters.py tests/test_kimi_adapter.py \
 
 Coverage includes: isolated HOME construction and auth mirroring, exclusion
 of session/memory surfaces (`.claude/projects/`, `~/.claude.json`), distinct
-homes per instance + prompt level, `CLAUDE_CONFIG_DIR` override semantics,
+homes per instance + prompt level and across repeated executions of the same
+run key, collision-resistant run-key paths, `CLAUDE_CONFIG_DIR` override semantics,
 unrestricted-mode opt-out, per-instance kimi homes for both host env and
-`--sandbox os` rw mounts, explicit `kimi_home` passthrough, and teardown
-cleanup of the whole home root.
+`--sandbox os` rw mounts, concurrent Kimi root initialization, explicit
+`kimi_home` passthrough, and teardown cleanup of the whole home root.
 
 ## CLI Task Draft upload and browser confirmation
 

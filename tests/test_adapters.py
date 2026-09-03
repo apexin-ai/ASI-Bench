@@ -16,6 +16,7 @@ from ai4sci_bench.adapters.cli_agent import CLIAgentAdapter
 from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
 from ai4sci_bench.adapters.direct_llm import DirectLLMAdapter
 from ai4sci_bench.adapters.codex_cli import CodexCLIAdapter
+from ai4sci_bench.adapters.subprocess_base import safe_run_key
 from ai4sci_bench.runner.task_env import TaskEnvironment
 
 
@@ -32,6 +33,17 @@ class TestAdapterPackageExports:
         assert hasattr(adapters, "ClaudeCodeCLIAdapter")
         assert hasattr(adapters, "CLIAgentAdapter")
         assert hasattr(adapters, "CodexCLIAdapter")
+
+
+def test_safe_run_key_keeps_colliding_prefixes_distinct():
+    left = "a" * 200 + "__b1"
+    right = "a" * 200 + "__b2"
+    assert safe_run_key(left) != safe_run_key(right)
+    assert len(safe_run_key(left)) <= 120
+
+
+def test_safe_run_key_distinguishes_replaced_characters():
+    assert safe_run_key("task/a") != safe_run_key("task?a")
 
 
 class TestAgentAdapterInterface:
@@ -310,6 +322,27 @@ class TestClaudeCodeCLIAdapter:
         assert env_b2["HOME"] != env_b3["HOME"]
         assert Path(env_b2["HOME"]).is_dir()
         assert Path(env_b3["HOME"]).is_dir()
+
+    def test_same_run_key_gets_fresh_home_in_next_execution(
+        self, sample_task_instance, tmp_dir,
+    ):
+        repo_root = tmp_dir / "repo"
+        first = ClaudeCodeCLIAdapter()
+        first.setup({"sandbox": "none", "repo_root": str(repo_root)})
+        home_one = Path(first._build_run_env(sample_task_instance, None)["HOME"])
+        stale = home_one / ".claude" / "memory.md"
+        stale.write_text("previous execution memory", encoding="utf-8")
+        first.teardown()
+        assert not home_one.exists()
+
+        second = ClaudeCodeCLIAdapter()
+        second.setup({"sandbox": "none", "repo_root": str(repo_root)})
+        try:
+            home_two = Path(second._build_run_env(sample_task_instance, None)["HOME"])
+            assert home_two != home_one
+            assert not (home_two / ".claude" / "memory.md").exists()
+        finally:
+            second.teardown()
 
     def test_unrestricted_mode_keeps_ambient_claude_home(self, sample_task_instance, tmp_dir):
         """Unrestricted mode is explicit opt-in to ambient Claude state."""

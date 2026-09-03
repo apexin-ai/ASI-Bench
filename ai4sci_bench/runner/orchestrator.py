@@ -350,31 +350,34 @@ class BenchmarkOrchestrator:
 
     def run(self, task_ids: list[str] | None = None) -> RunReport:
         """Run the full benchmark pipeline."""
-        tasks = self._load_tasks(task_ids or self.config.tasks)
-        instances = self._prepare_instances(tasks)
+        try:
+            tasks = self._load_tasks(task_ids or self.config.tasks)
+            instances = self._prepare_instances(tasks)
 
-        # Save run metadata for reproducibility
-        metadata = self._collect_run_metadata(tasks)
-        save_run_metadata(self.output_dir, metadata)
+            # Save run metadata for reproducibility
+            metadata = self._collect_run_metadata(tasks)
+            save_run_metadata(self.output_dir, metadata)
 
-        # Load completed results for resume support
-        completed_ids = set()
-        if self.config.resume:
-            completed_ids = self._load_completed_ids()
+            # Load completed results for resume support
+            completed_ids = set()
+            if self.config.resume:
+                completed_ids = self._load_completed_ids()
 
-        # Use parallel runner
-        runner = ParallelRunner(max_workers=self.config.parallel)
-        results = runner.run_instances(
-            instances,
-            run_fn=self._run_single_instance,
-            completed_ids=completed_ids,
-        )
+            # Use parallel runner
+            runner = ParallelRunner(max_workers=self.config.parallel)
+            results = runner.run_instances(
+                instances,
+                run_fn=self._run_single_instance,
+                completed_ids=completed_ids,
+            )
 
-        latest_metadata = self._collect_run_metadata(tasks)
-        if latest_metadata != metadata:
-            save_run_metadata(self.output_dir, latest_metadata)
+            latest_metadata = self._collect_run_metadata(tasks)
+            if latest_metadata != metadata:
+                save_run_metadata(self.output_dir, latest_metadata)
 
-        return self._aggregate(results)
+            return self._aggregate(results)
+        finally:
+            self.agent.teardown()
 
     def _run_single_instance(self, instance: TaskInstance) -> EvalResult:
         """Run agent, evaluate, analyze, and save for one instance.

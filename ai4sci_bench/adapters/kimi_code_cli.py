@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
 import time
 import warnings
 from pathlib import Path
@@ -134,6 +135,7 @@ class KimiCodeCLIAdapter(SubprocessAgentAdapter):
             self._uses_native_provider = False
 
         self._temp_kimi_home: str | None = None
+        self._kimi_home_lock = threading.Lock()
         self._os_sandbox: object | None = None
         self._sandbox_image_identity: str | None = None
 
@@ -202,24 +204,25 @@ class KimiCodeCLIAdapter(SubprocessAgentAdapter):
             # User-provided persistent dir: use as-is, don't overwrite their config.
             return self.kimi_home
 
-        root = self._temp_kimi_home
-        if root is None:
-            root = tempfile.mkdtemp(prefix="kimi_home_")
-            os.chmod(root, 0o700)
-            self._temp_kimi_home = root
-            logger.info("kimi_code_cli: generated home root at %s", root)
+        with self._kimi_home_lock:
+            root = self._temp_kimi_home
+            if root is None:
+                root = tempfile.mkdtemp(prefix="kimi_home_")
+                os.chmod(root, 0o700)
+                self._temp_kimi_home = root
+                logger.info("kimi_code_cli: generated home root at %s", root)
 
-        if task_instance is None:
-            home = Path(root)
-        else:
-            home = Path(root) / safe_run_key(task_instance.run_key)
-        home.mkdir(mode=0o700, exist_ok=True)
-        try:
-            os.chmod(home, 0o700)
-        except OSError:
-            pass
+            if task_instance is None:
+                home = Path(root)
+            else:
+                home = Path(root) / safe_run_key(task_instance.run_key)
+            home.mkdir(mode=0o700, exist_ok=True)
+            try:
+                os.chmod(home, 0o700)
+            except OSError:
+                pass
 
-        self._write_kimi_config_if_missing(home)
+            self._write_kimi_config_if_missing(home)
         if task_instance is not None:
             logger.info(
                 "kimi_code_cli: using per-instance KIMI_CODE_HOME at %s", home,
@@ -314,9 +317,10 @@ class KimiCodeCLIAdapter(SubprocessAgentAdapter):
             self._os_sandbox = OSSandbox(self.repo_root)
 
     def teardown(self) -> None:
-        if self._temp_kimi_home is not None:
-            shutil.rmtree(self._temp_kimi_home, ignore_errors=True)
-            self._temp_kimi_home = None
+        with self._kimi_home_lock:
+            if self._temp_kimi_home is not None:
+                shutil.rmtree(self._temp_kimi_home, ignore_errors=True)
+                self._temp_kimi_home = None
 
     # ── Env override ───────────────────────────────────────────
 

@@ -9,6 +9,7 @@ parsing, working directory, and shell mode.
 from __future__ import annotations
 
 import signal as _signal_module
+import hashlib
 import subprocess
 import time
 from abc import abstractmethod
@@ -57,10 +58,13 @@ def safe_run_key(run_key: str, max_length: int = 120) -> str:
     Used to key per-run isolated homes (e.g. ``.ai4sci-bench/codex_home``)
     so that concurrent or sequential instance runs never share state.
     """
-    return "".join(
+    digest = hashlib.sha256(run_key.encode("utf-8")).hexdigest()[:12]
+    readable = "".join(
         ch if ch.isalnum() or ch in "._-" else "_"
         for ch in run_key
-    )[:max_length]
+    )
+    prefix_length = max(0, max_length - len(digest) - 2)
+    return f"{readable[:prefix_length]}--{digest}"[-max_length:]
 
 
 _SIGNAL_HINTS: dict[int, str] = {

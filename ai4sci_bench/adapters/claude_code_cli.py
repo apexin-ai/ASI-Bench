@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import shutil
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -128,6 +129,8 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         self._sandbox_image_identity: str | None = None
         self._proxy: object | None = None
         self._proxy_lock = threading.Lock()
+        self._claude_home_root: Path | None = None
+        self._claude_home_lock = threading.Lock()
 
     @staticmethod
     def _read_env_secret(env_name: str | None) -> str | None:
@@ -280,6 +283,10 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         if self._proxy is not None:
             self._proxy.stop()  # type: ignore[union-attr]
             self._proxy = None
+        with self._claude_home_lock:
+            if self._claude_home_root is not None:
+                shutil.rmtree(self._claude_home_root, ignore_errors=True)
+                self._claude_home_root = None
 
     # ── Env override ───────────────────────────────────────────
 
@@ -313,14 +320,16 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         mounts (``CLAUDE_AUTH_FILENAMES``) are copied in; everything else
         starts empty for this instance + prompt level run.
         """
-        home = (
-            self.repo_root
-            / ".ai4sci-bench"
-            / "claude_home"
-            / safe_run_key(task_instance.run_key)
-        )
-        claude_dir = home / ".claude"
-        claude_dir.mkdir(parents=True, exist_ok=True)
+        with self._claude_home_lock:
+            if self._claude_home_root is None:
+                parent = self.repo_root / ".ai4sci-bench" / "claude_home"
+                parent.mkdir(parents=True, exist_ok=True)
+                self._claude_home_root = Path(tempfile.mkdtemp(
+                    prefix="execution_", dir=parent,
+                ))
+            home = self._claude_home_root / safe_run_key(task_instance.run_key)
+            claude_dir = home / ".claude"
+            claude_dir.mkdir(parents=True, exist_ok=True)
         try:
             os.chmod(home, 0o700)
             os.chmod(claude_dir, 0o700)

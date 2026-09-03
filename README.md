@@ -284,8 +284,9 @@ the next model request. Direct endpoints outside the framework proxy remain the
 responsibility of the connected agent.
 
 Harness session state (transcripts, history, auto-memory) never carries over
-between instances: the OS sandbox gives each run a one-shot container with a
-fresh `HOME`, and host-side runs build isolated per-run homes for
+between instances or repeated executions of the same instance: the OS sandbox
+gives each run a one-shot container with a fresh `HOME`, and host-side runs
+build execution-scoped, isolated per-run homes for
 `claude_code_cli` / `codex_cli` and a per-instance `KIMI_CODE_HOME` for
 `kimi_code_cli` (an explicitly configured `kimi_home` stays shared by choice).
 See TEST.md (“Per-run harness home isolation”) for details.

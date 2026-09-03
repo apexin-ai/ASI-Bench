@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import warnings
+import concurrent.futures
+import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -370,6 +373,33 @@ def test_teardown_removes_all_instance_homes():
 
     assert not os.path.exists(root)
     assert adapter._temp_kimi_home is None
+
+
+def test_concurrent_first_use_creates_one_managed_root(monkeypatch):
+    created = []
+    real_mkdtemp = tempfile.mkdtemp
+
+    def slow_mkdtemp(*args, **kwargs):
+        time.sleep(0.02)
+        path = real_mkdtemp(*args, **kwargs)
+        created.append(path)
+        return path
+
+    monkeypatch.setattr(
+        "ai4sci_bench.adapters.kimi_code_cli.tempfile.mkdtemp", slow_mkdtemp,
+    )
+    adapter = KimiCodeCLIAdapter(
+        api_key="sk-test", api_base="https://api.kimi.com/coding/v1",
+    )
+    try:
+        instances = [_RunKeyStub(f"task__instance_{i}__b1") for i in range(12)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+            homes = list(pool.map(adapter._build_api_env, instances))
+        assert len(created) == 1
+        root = Path(adapter._temp_kimi_home)
+        assert all(Path(env["KIMI_CODE_HOME"]).is_relative_to(root) for env in homes)
+    finally:
+        adapter.teardown()
 
 
 # ── build_command uses "bench-model" alias only when native ────
