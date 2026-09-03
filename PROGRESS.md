@@ -395,3 +395,33 @@
   cache key must include its parent image and installation recipe; real Docker
   acceptance is required when a native CLI schema changes.
 - Implementation commit: `8bc8b8e405d1e97133d26fea7eab425249f5f0c4`.
+
+## 2026-XX: Harness home isolation (claude host HOME, kimi per-instance home)
+
+- Problem: in host-side run modes (`--sandbox none|task|linux_ns`) the Claude
+  Code CLI shared the ambient `HOME` across sequentially executed instances
+  (session transcripts, `~/.claude.json` project history, auto-memory, user
+  hooks/MCP all visible), and `kimi_code_cli` reused one adapter-level
+  `KIMI_CODE_HOME` (with `sessions/` + `logs/`) for every instance, both on
+  the host and via the `--sandbox os` rw mount. Only the OS-sandbox path was
+  inherently safe (one-shot `--rm` container, fresh `HOME=/home/agent`).
+- Resolution: `claude_code_cli` now builds a per-run isolated HOME under
+  `.ai4sci-bench/claude_home/<run_key>/` copying only `.credentials.json` +
+  `settings.json` (same surface as the OS-sandbox auth mounts) and forcing
+  `HOME`/`USERPROFILE`/`CLAUDE_CONFIG_DIR` when `tool_mode != unrestricted`;
+  `kimi_code_cli` now keys auto-generated homes by `run_key` under a temp
+  root removed at teardown (explicit `kimi_home` stays shared by choice);
+  `safe_run_key()` was hoisted into `subprocess_base.py` and codex refactored
+  onto it (behavior-equivalent).
+- Verification: 9 new unit tests (auth mirroring, memory-surface exclusion,
+  per-run keying, `CLAUDE_CONFIG_DIR` override, unrestricted opt-out, kimi
+  per-instance env/mounts, teardown); full suite `uv run pytest -q` →
+  2258 passed, 2 skipped.
+- Prevention: whenever a new harness adapter is added, enumerate every state
+  directory it writes (sessions, history, memory, config) and decide per
+  directory whether it must be per-run, shared-by-explicit-choice, or
+  ephemeral; prefer mirroring the OS-sandbox auth surface so host and
+  container runs stay comparable.
+- Review pending: upstream issue #5, PR #6 (branch
+  `task-harness-home-isolation`, implementation commit
+  `12b62b2331f9ce7c1cf3a2337786463e7d41c399`).
