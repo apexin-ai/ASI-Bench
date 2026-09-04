@@ -416,6 +416,23 @@
   after rebasing onto `db94593`.
 - Implementation commit: `d64663a`.
 
+## 2026-09-04 — BenchFlow workflow migration
+
+- Problem: the standalone `JiangyuZhou1/ASI-Bench-benchflow` repository carried
+  a complete operator workflow, while the public main branch documented only
+  the manifest boundary. Directly replacing files from the fork would also
+  remove newer Judge routing, run-score, and harness-isolation changes.
+- Resolution: confirm that main already contains the BenchFlow schema-v2
+  adapter, strict attempt-status handling, CLI, and tests, then migrate only
+  the missing end-to-end README workflow. Adapt the clone URL to the canonical
+  repository and retain the newer runtime Judge API contract.
+- Verification: `tests/test_benchflow.py tests/test_cli.py` passed `152`; CLI
+  help and the persisted result/output naming contract were checked against
+  the documented commands.
+- Prevention: when importing from a long-lived fork, compare commit ancestry
+  and feature-specific trees rather than copying the fork wholesale.
+- Documentation commit: `ac8bd96`.
+
 ## 2026-XX: Harness home isolation (claude host HOME, kimi per-instance home)
 
 - Problem: in host-side run modes (`--sandbox none|task|linux_ns`) the Claude
