@@ -445,6 +445,10 @@
 - Prevention: README should provide feature discovery and route detailed
   operational workflows to focused guides.
 - Documentation commit: `b068978`.
+- Follow-up: move the short README overview out of `Contribute a task` and
+  place it under Quick start → `Score locally or submit`, where the scoring
+  integration belongs. Rename the heading to `BenchFlow integration`.
+- Follow-up commit: `547d196`.
 
 ## 2026-XX: Harness home isolation (claude host HOME, kimi per-instance home)
 
