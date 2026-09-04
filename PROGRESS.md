@@ -433,6 +433,19 @@
   and feature-specific trees rather than copying the fork wholesale.
 - Documentation commit: `ac8bd96`.
 
+## 2026-09-04 — BenchFlow guide split
+
+- Problem: the complete BenchFlow workflow made the top-level README much
+  longer than the surrounding feature summaries.
+- Resolution: keep a short BenchFlow overview and link in README, move the
+  installation, run, manifest, scoring, status, retry, and Judge API details to
+  `docs/guide/benchflow.md`, and add the guide to the documentation index.
+- Verification: all local Markdown links from README and the guide index
+  resolve; BenchFlow/CLI regression tests passed `152`.
+- Prevention: README should provide feature discovery and route detailed
+  operational workflows to focused guides.
+- Documentation commit: `b068978`.
+
 ## 2026-XX: Harness home isolation (claude host HOME, kimi per-instance home)
 
 - Problem: in host-side run modes (`--sandbox none|task|linux_ns`) the Claude
