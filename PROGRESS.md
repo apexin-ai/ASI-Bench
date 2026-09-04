@@ -503,3 +503,18 @@
   the unused Kimi test import. Targeted tests passed `424`; the full offline
   suite passed `2264`, with `2 skipped` and `22 deselected`.
 - Review follow-up commit: `1bf84a0`.
+
+## 2026-09: PyPI 0.1.5 release
+
+- Problem: PyPI remained at `0.1.4` while `main` already contained the new
+  BenchFlow adapter, Judge API routing, execution isolation hardening, and
+  updated BenchFlow documentation.
+- Resolution: bump the package and lockfile versions to `0.1.5`, validate the
+  complete offline suite, and publish through the repository's tagged GitHub
+  Release workflow.
+- Verification: `uv run --project . python -m pytest -q` passed with `2305`
+  tests, `2 skipped`, and `22 deselected`; `uv build` and strict Twine checks
+  passed for both distributions.
+- Prevention: publish from an annotated version tag only after the locked test
+  suite and distribution metadata checks pass.
+- Version bump commit: `1dc79cd`.
