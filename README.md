@@ -168,6 +168,16 @@ asibench score \
 The command writes a separate `local_score_seed31415.json` and never overwrites
 the produce-only result. Local scores are reproducible but non-official.
 
+#### BenchFlow integration
+
+BenchFlow owns scheduling and agent execution, while
+`asibench benchflow-score` scores one already-materialized seed31415 attempt.
+The score is local and non-official; seed42 is not accepted by this interface.
+
+See the **[BenchFlow integration guide](docs/guide/benchflow.md)** for the
+end-to-end run, schema-v2 manifest, scoring command, status fields, retries,
+and Judge API configuration.
+
 #### Configure an LLM/VLM Judge API
 
 Some seed31415 scoring contracts use an LLM or VLM Judge. Judge credentials and
@@ -458,16 +468,6 @@ formal task may therefore include an evaluator-only `*_eval_runtime.py` helper,
 but never a GT generator, reference builder, or seed-to-instance entry point.
 The public `submission_sandbox.py` is execution isolation infrastructure and
 contains neither task answers nor generation logic.
-
-### BenchFlow seed31415 scoring
-
-BenchFlow owns scheduling and agent execution, while
-`asibench benchflow-score` scores one already-materialized seed31415 attempt.
-The score is local and non-official; seed42 is not accepted by this interface.
-
-See the **[BenchFlow integration guide](docs/guide/benchflow.md)** for the
-end-to-end run, schema-v2 manifest, scoring command, status fields, retries,
-and Judge API configuration.
 
 The native `pi_cli` and `opencode_cli` adapters retain verified CLI facts
 (`pi` 0.84.3 and `opencode` 1.17.15). At startup the runner probes the actual
