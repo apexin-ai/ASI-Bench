@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asibench"
-version = "0.1.4"
+version = "0.1.5"
 description = "LLM Agent benchmark for AI for Science"
 authors = [{ name = "Apex Intelligence" }]
 readme = "README.md"
