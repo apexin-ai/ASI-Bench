@@ -330,6 +330,7 @@ class BenchmarkOrchestrator:
         setup_cfg: dict[str, Any] = {
             "sandbox": config.sandbox,
             "repo_root": str(self.repo_root),
+            "output_dir": str(config.output_dir),
         }
         if config.timeout is not None:
             setup_cfg["timeout"] = config.timeout

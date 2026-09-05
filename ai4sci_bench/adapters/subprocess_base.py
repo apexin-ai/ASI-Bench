@@ -125,6 +125,7 @@ class SubprocessAgentAdapter(AgentAdapter):
         self.sandbox = sandbox
         self._supported_sandbox_modes = supported_sandbox_modes
         self.repo_root = resolve_runtime_root()
+        self.live_log_dir: Path | None = None
         self.task_env_manager: TaskEnvironmentManager | None = None
         self._linux_ns_sandbox: LinuxNSSandbox | None = None
 
@@ -138,6 +139,8 @@ class SubprocessAgentAdapter(AgentAdapter):
             component=self.__class__.__name__,
         )
         self.repo_root = Path(config.get("repo_root", self.repo_root))
+        output_dir = config.get("output_dir")
+        self.live_log_dir = Path(output_dir) / "live" if output_dir else None
         self.task_env_manager = (
             TaskEnvironmentManager(self.repo_root)
             if self.sandbox in ("task", "linux_ns")
@@ -217,6 +220,8 @@ class SubprocessAgentAdapter(AgentAdapter):
                 env=env,
                 shell=use_shell,
                 input=stdin_input,
+                live_stdout_path=(self.live_log_dir / f"{task_instance.instance_id}.stdout" if self.live_log_dir else None),
+                live_stderr_path=(self.live_log_dir / f"{task_instance.instance_id}.stderr" if self.live_log_dir else None),
             )
             elapsed = time.time() - t0
             raw_stdout = result.stdout

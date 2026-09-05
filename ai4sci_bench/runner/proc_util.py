@@ -16,6 +16,7 @@ spurious logout problem documented in ``docs/cc_session_stability_fix.md``.
 from __future__ import annotations
 
 import subprocess
+import threading
 from pathlib import Path
 
 # Grace period (seconds) a child gets after SIGTERM before we escalate to
@@ -33,6 +34,8 @@ def run_subprocess_with_graceful_timeout(
     shell: bool = False,
     input: str | None = None,
     grace: int = GRACEFUL_SHUTDOWN_SECONDS,
+    live_stdout_path: str | Path | None = None,
+    live_stderr_path: str | Path | None = None,
 ) -> subprocess.CompletedProcess:
     """Run a subprocess, escalating SIGTERM → grace → SIGKILL on timeout.
 
@@ -62,8 +65,26 @@ def run_subprocess_with_graceful_timeout(
         encoding="utf-8",
         errors="replace",
     )
+    live_files = [(proc.stdout, live_stdout_path), (proc.stderr, live_stderr_path)]
+    threads = []
+    for stream, path in live_files:
+        if stream is None or path is None:
+            continue
+        live_path = Path(path)
+        live_path.parent.mkdir(parents=True, exist_ok=True)
+        live_path.write_text("", encoding="utf-8")
+        def copy_live(source=stream, destination=live_path):
+            with destination.open("a", encoding="utf-8") as output:
+                for line in source:
+                    output.write(line)
+                    output.flush()
+        thread = threading.Thread(target=copy_live, daemon=True)
+        thread.start()
+        threads.append(thread)
     try:
         stdout, stderr = proc.communicate(input=input, timeout=timeout)
+        for thread in threads:
+            thread.join()
         return subprocess.CompletedProcess(
             args=cmd,
             returncode=proc.returncode,
@@ -81,6 +102,8 @@ def run_subprocess_with_graceful_timeout(
             forced = True
             proc.kill()
             stdout, stderr = proc.communicate()
+        for thread in threads:
+            thread.join()
         exc = subprocess.TimeoutExpired(
             cmd, timeout, output=stdout or "", stderr=stderr or ""
         )
