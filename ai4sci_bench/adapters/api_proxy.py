@@ -700,6 +700,24 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
             if key in body and body[key] is not None:
                 kwargs[key] = body[key]
 
+        # Claude sends Anthropic tool definitions while the SGLang target
+        # expects OpenAI chat-completions tools.
+        tools = kwargs.get("tools")
+        if isinstance(tools, list):
+            converted = []
+            for tool in tools:
+                if not isinstance(tool, dict):
+                    continue
+                if tool.get("type") == "function" and isinstance(tool.get("function"), dict):
+                    converted.append(tool)
+                    continue
+                converted.append({"type": "function", "function": {
+                    "name": tool.get("name", ""),
+                    "description": tool.get("description", ""),
+                    "parameters": tool.get("input_schema", {"type": "object"}),
+                }})
+            kwargs["tools"] = converted
+
         return kwargs
 
     def _handle_non_streaming(self, response: Any) -> None:
