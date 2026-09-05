@@ -535,3 +535,24 @@
 - Prevention: keep adapter capability recommendations tied to regression tests
   so documentation changes when harness behavior or public adapter names do.
 - Implementation commit: `147ac23`.
+
+## 2026-09: Agentic difficulty-evidence policy
+
+- Problem: `difficulty-check` silently defaulted to the single-turn
+  `direct_llm` adapter (and its legacy default model), allowing an otherwise
+  easy iterative task to appear difficult because the baseline could not
+  inspect, execute, and repair its work. Task Draft validation checked only the
+  OS sandbox and reports did not expose complete effective agent provenance.
+- Resolution: require explicit position-matched `--agent` / `--agent-config`
+  values with a model; require at least one supported multi-turn harness;
+  retain `direct_llm` only as an optional additional baseline; reject
+  direct-only Task Draft evidence before authentication; and record agent,
+  model, effort, measured CLI/adapter version, framework version, and sandbox
+  in difficulty reports. Update the Codex CLI and Codex judge defaults to
+  `gpt-5.6-sol` and synchronize the CLI/package version display with 0.1.5.
+- Verification: policy, report, submission, adapter, judge, documentation, and
+  static-validation tests passed `682`; the full offline suite is run before
+  integration.
+- Prevention: difficulty evidence must identify both model and harness, and a
+  no-tool/single-turn baseline must never be the sole formal difficulty gate.
+- Implementation commit: `47bf572`.
