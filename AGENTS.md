@@ -39,8 +39,10 @@
 - Task 贡献的 `difficulty-check` 必须记录 B1–B4，但只以 B3/B4 平均分严格
   小于 40 为通过条件；B1/B2 不限分且报告为 `RECORDED`，CLI 不得允许把
   B3/B4 阈值调高到 40 以上，catalog flagged 也只检查 B3/B4。该检查必须在
-  Docker `os` 沙箱运行，Task Draft 的每组 `local_test_results` 必须记录
-  `sandbox: os`，并在联网前校验。
+  Docker `os` 沙箱运行，不设默认 agent；每个 `--agent` 必须对应显式含
+  `model` 的 `--agent-config`，且至少包含一个多轮 harness。`direct_llm` 只能作为
+  附加 baseline。Task Draft 的每组 `local_test_results` 必须记录 `sandbox: os`
+  和 agent，且至少一组来自多轮 harness，并在联网前校验。
 - `task_submission.yaml` 保存 Portal-only 作者证据，随 Revision 冻结供审核，但不得
   导出进 benchmark Task 仓库；正式任务目录仍不得公开该文件，只有 `_template` 可包含。
 - `--instances-dir` 是只读输入；运行专属的 `framework_task_info.json` 必须写入
