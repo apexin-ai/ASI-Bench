@@ -95,6 +95,12 @@ File-exchange agents configured with `--agent-cmd` support `none` and
 Every run records provenance (agent, model, effort, sandbox, framework version) so
 results are reproducible and comparable.
 
+If a result is below expectations, see
+[Troubleshooting results below expectations](troubleshooting-results.md). In
+particular, `direct_llm` is a single-turn, no-tool baseline; tasks that require
+inspection, execution, and iterative repair may be better evaluated with an
+agentic harness such as `codex_cli`, `claude_code_cli`, or `kimi_code_cli`.
+
 For official submissions, the Portal requires the recorded effective sandbox to
 be `os`. Other modes remain available for local development and seed31415 local
 scoring, but are not accepted for seed42 submission.

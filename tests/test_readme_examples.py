@@ -12,6 +12,9 @@ AUTHOR_GUIDE = (ROOT / "docs" / "guide" / "authoring-a-task.md").read_text(encod
 GETTING_STARTED = (ROOT / "docs" / "guide" / "getting-started.md").read_text(
     encoding="utf-8"
 )
+TROUBLESHOOTING = (ROOT / "docs" / "guide" / "troubleshooting-results.md").read_text(
+    encoding="utf-8"
+)
 EXAMPLE_TASKS = (
     "astronomy.nbody_close_encounters",
     "math.homotopy_poly_roots",
@@ -87,6 +90,15 @@ def test_agent_docs_distinguish_new_models_from_new_harnesses():
 
     assert re.search(r"first-class built-in\s+integration", README, re.IGNORECASE)
     assert re.search(r"compatible\s+adapters", GETTING_STARTED, re.IGNORECASE)
+
+
+def test_docs_explain_low_direct_llm_scores_and_agentic_alternatives():
+    assert "docs/guide/troubleshooting-results.md" in README
+    assert "troubleshooting-results.md" in GETTING_STARTED
+    assert "single-turn" in TROUBLESHOOTING
+    assert "no agentic tools" in TROUBLESHOOTING
+    for adapter in ("codex_cli", "claude_code_cli", "kimi_code_cli"):
+        assert f"`{adapter}`" in TROUBLESHOOTING
 
 
 def test_readme_fences_do_not_swallow_markdown_sections():

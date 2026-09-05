@@ -11,6 +11,9 @@ These guides are the source of truth for the docs; the website renders them.
   explicit fixed-seed Hugging Face contracts, and the submission portal.
 - **[How scoring works](how-scoring-works.md)** — public seed31415 local scoring,
   private seed42 website scoring, and official-score boundaries.
+- **[Troubleshoot results below expectations](troubleshooting-results.md)** —
+  distinguish failures from low scores, understand the single-turn
+  `direct_llm` baseline, and decide when to try a multi-turn CLI agent.
 - **[BenchFlow integration](benchflow.md)** — run and score materialized
   seed31415 attempts through the schema-v2 BenchFlow boundary.
 - **[Contribute a task](authoring-a-task.md)** — propose a new task: what a good task

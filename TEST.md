@@ -224,6 +224,20 @@ uv run pytest -q \
   tests/test_public_task_policy.py
 ```
 
+## User-facing result troubleshooting
+
+The documentation regression checks require README and Getting Started to link
+the result troubleshooting guide. They also lock the explanation that
+`direct_llm` is a single-turn, no-agentic-tools baseline and name the supported
+agentic alternatives used for iterative tasks:
+
+```bash
+uv run pytest -q tests/test_readme_examples.py
+```
+
+When changing adapter behavior or names, update the troubleshooting guide and
+this regression together so recommendations continue to match the code.
+
 ## Public local scoring and retired internal surfaces
 
 The public distribution intentionally excludes the former internal orchestration

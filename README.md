@@ -284,6 +284,12 @@ seed42 GT is not public. Local benchmark runs never calculate official scores.
 See [Getting Started](docs/guide/getting-started.md) for agent configuration,
 sandbox selection, and platform-specific commands.
 
+If a run completes but scores below expectations, follow the
+[result troubleshooting guide](docs/guide/troubleshooting-results.md). It
+explains why `direct_llm` is a single-turn, no-tool baseline, when to consider
+multi-turn CLI agents, and how to diagnose execution, evaluation, artifact,
+environment, timeout, and score-variance issues.
+
 ### Package and CLI compatibility
 
 - `asibench` is the only published Python distribution and the canonical CLI.
