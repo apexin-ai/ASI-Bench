@@ -632,20 +632,24 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
         is_stream = body.get("stream", False)
 
         kwargs = self._build_litellm_kwargs(body)
-        # Always call upstream non-streaming: litellm's anthropic_interface
-        # has async/sync generator mismatches with some providers (DeepSeek)
-        # that break streaming. We synthesize SSE events from the response.
-        kwargs["stream"] = False
 
         try:
-            response = self._call_litellm_anthropic(kwargs)
+            if is_stream:
+                # Keep the upstream request streaming.  The old implementation
+                # waited for the complete generation and only then synthesized
+                # SSE, which inflated TTFT and caused clients to disconnect.
+                import litellm
+                kwargs["stream"] = True
+                response = litellm.completion(**kwargs)
+            else:
+                response = self._call_litellm_anthropic(kwargs)
         except Exception as e:
             logger.exception("litellm proxy: upstream call failed")
             self._send_anthropic_error(502, f"Upstream error: {type(e).__name__}: {e}")
             return
 
         if is_stream:
-            self._handle_synthetic_streaming(response)
+            self._handle_streaming(response)
         else:
             self._handle_non_streaming(response)
 
@@ -819,6 +823,68 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
             pass
         except Exception:
             logger.exception("litellm proxy: synthetic streaming error")
+
+    def _handle_streaming(self, response: Any) -> None:
+        """Translate LiteLLM OpenAI chunks to Anthropic SSE immediately."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        started = False
+        index = 0
+        try:
+            for item in response:
+                chunk = item.model_dump() if hasattr(item, "model_dump") else item
+                if not isinstance(chunk, dict):
+                    chunk = dict(chunk)
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                choice = choices[0] or {}
+                delta = choice.get("delta") or {}
+                if not started:
+                    self._write_sse("message_start", {"type": "message_start", "message": {
+                        "id": chunk.get("id", "msg_proxy"), "type": "message", "role": "assistant",
+                        "content": [], "model": chunk.get("model", self.litellm_model),
+                        "stop_reason": None, "stop_sequence": None,
+                        "usage": {"input_tokens": 0, "output_tokens": 0},
+                    }})
+                    started = True
+                reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+                if reasoning:
+                    self._write_sse("content_block_start", {"type": "content_block_start", "index": index,
+                        "content_block": {"type": "thinking", "thinking": ""}})
+                    self._write_sse("content_block_delta", {"type": "content_block_delta", "index": index,
+                        "delta": {"type": "thinking_delta", "thinking": reasoning}})
+                text = delta.get("content")
+                if text:
+                    self._write_sse("content_block_start", {"type": "content_block_start", "index": index,
+                        "content_block": {"type": "text", "text": ""}})
+                    self._write_sse("content_block_delta", {"type": "content_block_delta", "index": index,
+                        "delta": {"type": "text_delta", "text": text}})
+                tool_calls = delta.get("tool_calls") or []
+                for tool in tool_calls:
+                    function = tool.get("function") or {}
+                    self._write_sse("content_block_start", {"type": "content_block_start", "index": index,
+                        "content_block": {"type": "tool_use", "id": tool.get("id", f"toolu_{index}"),
+                                           "name": function.get("name", ""), "input": {}}})
+                    if function.get("arguments"):
+                        self._write_sse("content_block_delta", {"type": "content_block_delta", "index": index,
+                            "delta": {"type": "input_json_delta", "partial_json": function["arguments"]}})
+                    index += 1
+                finish = choice.get("finish_reason")
+                if finish:
+                    self._write_sse("message_delta", {"type": "message_delta",
+                        "delta": {"stop_reason": "tool_use" if finish == "tool_calls" else "end_turn",
+                                   "stop_sequence": None}, "usage": {"output_tokens": 0}})
+            if started:
+                self._write_sse("message_stop", {"type": "message_stop"})
+        except (BrokenPipeError, ConnectionResetError):
+            logger.info("litellm proxy: downstream client disconnected during streaming")
+        except Exception:
+            logger.exception("litellm proxy: streaming translation error")
 
     def _write_sse(self, event: str, data: dict) -> None:
         line = f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
