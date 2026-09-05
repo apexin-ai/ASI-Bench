@@ -188,12 +188,19 @@ uv run pytest -q tests/test_cli_task_submit.py tests/test_token_login.py \
 Task-author difficulty checks run and record B1–B4, but only B3/B4 control the
 verdict. Their mean scores must be strictly below the default ceiling of 40;
 B1/B2 are serialized as ungated `RECORDED` rows. The command defaults to and
-requires the Docker `os` sandbox. The CLI rejects a threshold above 40, and
-catalog flagging likewise ignores B1/B2. Cover the terminal,
-JSON, Markdown, CSV, persistence, and catalog contracts with:
+requires the Docker `os` sandbox. It has no default agent: every explicit agent
+requires a position-matched config with `model`, and at least one supported
+multi-turn harness is mandatory. A direct-LLM-only check is rejected. Reports
+record the effective model, effort, measured agent CLI/adapter version,
+framework version, and sandbox. Task Draft validation independently rejects
+missing agent names and direct-LLM-only evidence before authentication or
+network access. The CLI rejects a threshold above 40, and catalog flagging
+likewise ignores B1/B2. Cover the terminal, JSON, Markdown, CSV, persistence,
+submission evidence, and catalog contracts with:
 
 ```bash
-uv run pytest -q tests/test_difficulty_check.py tests/test_static_validator.py
+uv run pytest -q tests/test_difficulty_check.py tests/test_static_validator.py \
+  tests/test_cli_task_submit.py
 ```
 
 ## Pull filtering and custom pre-submit paths

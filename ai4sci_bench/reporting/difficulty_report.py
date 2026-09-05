@@ -52,12 +52,20 @@ class VerdictRow:
     instances: int
     enforced: bool
     passed: bool
+    model: str = "unknown"
+    effort: str = "N/A"
+    agent_version: str = "unknown"
+    framework_version: str = "unknown"
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "agent": self.agent,
             "agent_name": self.agent_name,
             "agent_config": dict(self.agent_config),
+            "model": self.model,
+            "effort": self.effort,
+            "agent_version": self.agent_version,
+            "framework_version": self.framework_version,
             "prompt_level": self.prompt_level,
             "mean_score": round(self.mean_score, 2),
             "max_score": round(self.max_score, 2),
@@ -103,6 +111,10 @@ class DifficultyReport:
             block = by_agent.setdefault(key, {
                 "agent": row.agent_name,
                 "agent_config": dict(row.agent_config),
+                "model": row.model,
+                "effort": row.effort,
+                "agent_version": row.agent_version,
+                "framework_version": row.framework_version,
                 "scores": {},
             })
             block["scores"][row.prompt_level] = {
@@ -116,7 +128,7 @@ class DifficultyReport:
 
 def build_report(
     task_id: str,
-    agent_runs: Sequence[tuple[str, str, dict[str, Any], list[EvalResult]]],
+    agent_runs: Sequence[tuple],
     threshold: int,
     *,
     tool_mode: str = "restricted",
@@ -127,13 +139,24 @@ def build_report(
 ) -> DifficultyReport:
     """Aggregate raw results into a DifficultyReport.
 
-    ``agent_runs`` is a sequence of ``(agent_label, agent_name, agent_config, results)``
-    tuples. Each tuple's EvalResults may span multiple prompt levels — we re-extract
-    the level from each EvalResult and aggregate per (agent, level).
+    ``agent_runs`` accepts legacy
+    ``(agent_label, agent_name, agent_config, results)`` tuples and provenance-rich
+    ``(agent_label, agent_name, agent_config, agent_details, results)`` tuples.
     """
     rows: list[VerdictRow] = []
     overall = True
-    for agent_label, agent_name, agent_config, results in agent_runs:
+    for agent_run in agent_runs:
+        if len(agent_run) == 4:
+            agent_label, agent_name, agent_config, results = agent_run
+            agent_details: dict[str, Any] = {}
+        elif len(agent_run) == 5:
+            agent_label, agent_name, agent_config, agent_details, results = agent_run
+        else:
+            raise ValueError("agent_runs entries must contain 4 or 5 values")
+        model = str(agent_details.get("model") or agent_config.get("model") or "unknown")
+        effort = str(agent_details.get("effort") or agent_config.get("effort") or "N/A")
+        agent_version = str(agent_details.get("agent_version") or "unknown")
+        framework_version = str(agent_details.get("framework_version") or "unknown")
         by_level: dict[str, list[float]] = {}
         for r in results:
             level = r.prompt_level.value if hasattr(r.prompt_level, "value") else str(r.prompt_level)
@@ -155,6 +178,10 @@ def build_report(
                 instances=len(scores),
                 enforced=enforced,
                 passed=passed,
+                model=model,
+                effort=effort,
+                agent_version=agent_version,
+                framework_version=framework_version,
             ))
 
     rows.sort(key=lambda r: (r.agent, r.prompt_level))
@@ -182,6 +209,19 @@ def format_terminal(report: DifficultyReport, *, use_color: bool = True) -> str:
         title_bar,
         "",
     ]
+
+    seen_agents: set[tuple[str, str, str, str]] = set()
+    for row in report.rows:
+        identity = (row.agent_name, row.model, row.effort, row.agent_version)
+        if identity in seen_agents:
+            continue
+        seen_agents.add(identity)
+        lines.append(
+            f"  Agent config: agent={row.agent_name}, model={row.model}, "
+            f"effort={row.effort}, version={row.agent_version}"
+        )
+    if seen_agents:
+        lines.append("")
 
     agent_w = max([len("Agent")] + [len(r.agent) for r in report.rows]) if report.rows else len("Agent")
     header = (
@@ -243,9 +283,26 @@ def format_markdown(report: DifficultyReport) -> str:
         "**B1/B2:** recorded only | "
         f"**Tool mode:** `{report.tool_mode}` | **Sandbox:** `{report.sandbox}`",
         "",
+    ]
+    seen_agents: set[tuple[str, str, str, str]] = set()
+    lines.extend([
+        "| Agent harness | Model | Effort | Agent version | Framework version | Sandbox |",
+        "|---------------|-------|--------|---------------|-------------------|---------|",
+    ])
+    for row in report.rows:
+        identity = (row.agent_name, row.model, row.effort, row.agent_version)
+        if identity in seen_agents:
+            continue
+        seen_agents.add(identity)
+        lines.append(
+            f"| `{row.agent_name}` | `{row.model}` | `{row.effort}` | "
+            f"`{row.agent_version}` | `{row.framework_version}` | `{report.sandbox}` |"
+        )
+    lines.extend([
+        "",
         "| Agent | Level | Mean | Max | Min | Verdict |",
         "|-------|-------|------|-----|-----|---------|",
-    ]
+    ])
     for row in report.rows:
         v = "RECORDED" if not row.enforced else ("PASS" if row.passed else "**FAIL**")
         lines.append(
@@ -289,6 +346,9 @@ BATCH_CSV_FIELDS: tuple[str, ...] = (
     "agent",
     "agent_name",
     "model",
+    "effort",
+    "agent_version",
+    "framework_version",
     "prompt_level",
     "mean_score",
     "max_score",
@@ -300,11 +360,6 @@ BATCH_CSV_FIELDS: tuple[str, ...] = (
     "tool_mode",
     "sandbox",
 )
-
-
-def _model_from_config(cfg: dict[str, Any]) -> str:
-    """Extract a printable model name from an agent config; fall back to empty string."""
-    return str(cfg.get("model", "") or "")
 
 
 def format_batch_csv(reports: Sequence[DifficultyReport]) -> str:
@@ -325,7 +380,10 @@ def format_batch_csv(reports: Sequence[DifficultyReport]) -> str:
                 "task_version": report.task_version,
                 "agent": row.agent,
                 "agent_name": row.agent_name,
-                "model": _model_from_config(row.agent_config),
+                "model": row.model,
+                "effort": row.effort,
+                "agent_version": row.agent_version,
+                "framework_version": row.framework_version,
                 "prompt_level": row.prompt_level,
                 "mean_score": round(row.mean_score, 2),
                 "max_score": round(row.max_score, 2),

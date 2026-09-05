@@ -16,6 +16,8 @@ from pathlib import Path
 
 import yaml
 
+from ai4sci_bench.tracking.difficulty_scores import DIFFICULTY_AGENTIC_AGENTS
+
 _ALLOWED_EXTENSIONS = frozenset({
     ".py", ".md", ".yaml", ".yml", ".txt", ".npy", ".dat", ".csv", ".json",
 })
@@ -227,6 +229,18 @@ def validate_task_os_evidence(task_dir: str | Path) -> str | None:
                 "sandbox: os; Task contribution evidence must be produced with "
                 "`asibench difficulty-check --sandbox os`."
             )
+        agent = result.get("agent")
+        if not isinstance(agent, str) or not agent.strip():
+            return (
+                f"task_submission.yaml local_test_results[{index}] must record "
+                "the explicit difficulty-check agent."
+            )
+    if not any(result.get("agent") in DIFFICULTY_AGENTIC_AGENTS for result in results):
+        return (
+            "task_submission.yaml must include at least one local_test_results "
+            "entry from a supported multi-turn agent harness; direct_llm may "
+            "only be recorded as an additional single-turn baseline."
+        )
     return None
 
 

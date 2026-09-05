@@ -56,6 +56,10 @@ def test_task_author_docs_keep_local_b1_b4_submission_gate():
         assert re.search(r"strictly\s+below\s+40", text)
         assert "B1" in text and "B2" in text
         assert re.search(r"no\s+score\s+ceiling", text)
+        assert "--agent codex_cli" in text
+        assert "gpt-5.6-sol" in text
+        assert "direct_llm" in text
+        assert "multi-turn" in text
     assert "not a hard gate" not in README
     assert "do not gate creation of a draft" not in AUTHOR_GUIDE
     assert "requirement, not an optional note" in AUTHOR_GUIDE

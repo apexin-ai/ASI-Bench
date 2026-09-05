@@ -698,8 +698,8 @@ class TestClaudeToolConstantIntegrity:
 
 
 class TestDefaultModels:
-    def test_codex_default_model_is_gpt55(self):
-        assert CodexCLIAdapter().model == "gpt-5.5"
+    def test_codex_default_model_is_gpt56_sol(self):
+        assert CodexCLIAdapter().model == "gpt-5.6-sol"
 
     def test_claude_default_model_is_opus(self):
         assert ClaudeCodeCLIAdapter().model == "claude-opus-4-6"

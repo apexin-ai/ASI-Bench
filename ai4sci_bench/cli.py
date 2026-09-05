@@ -16,6 +16,7 @@ from typing import Any
 import click
 from dotenv import load_dotenv
 
+from ai4sci_bench import __version__
 from ai4sci_bench.branding import DEFAULT_PULL_DIR, OFFICIAL_HF_REPO_ALIASES
 from ai4sci_bench.core.logger import get_logger, setup_logging
 from ai4sci_bench.core.result_schema import (
@@ -114,6 +115,24 @@ def _get_cli_version(binary: str) -> str:
             if not version:
                 version = result.stderr.strip()
             return f"{version}  ({path})" if version else "unknown"
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _get_container_cli_version(image: str, binary: str) -> str:
+    """Measure the CLI version from the exact Docker image used by an OS run."""
+    try:
+        result = subprocess.run(
+            ["docker", "run", "--rm", "--entrypoint", binary, image, "--version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return (result.stdout or result.stderr).strip() or "unknown"
     except Exception:
         pass
     return "unknown"
@@ -238,7 +257,7 @@ def _redact_agent_config(value: Any) -> Any:
 
 
 @click.group()
-@click.version_option(version="0.1.3")
+@click.version_option(version=__version__)
 def cli():
     """ASI-Bench: LLM Agent benchmark for AI for Science."""
     pass
@@ -3845,11 +3864,10 @@ def _parse_agent_config(raw: str) -> dict:
 @click.option("--status", "status_filter", default=None,
               type=click.Choice(["in_development", "test", "sample", "final"]),
               help="Run difficulty-check against every task of the given status (batch re-eval).")
-@click.option("--agent", "agents", multiple=True, default=("direct_llm",),
-              show_default=True,
-              help="Agent(s) to use for difficulty evaluation (repeatable).")
+@click.option("--agent", "agents", multiple=True,
+              help="Agent(s) to use for difficulty evaluation (required; repeatable).")
 @click.option("--agent-config", "agent_configs", multiple=True,
-              help="Agent config JSON, one per --agent (matched by position).")
+              help="Required agent config JSON with model, one per --agent (matched by position).")
 @click.option("--prompt-levels", default="b1,b2,b3,b4", show_default=True,
               help="Prompt levels to evaluate.")
 @click.option("--threshold", default=40, show_default=True,
@@ -3886,9 +3904,10 @@ def difficulty_check(
 ):
     """Check whether a task is hard enough for the benchmark.
 
-    Runs the specified agent(s) without external tools, records all requested
-    levels, compares B3/B4 mean scores against the threshold, and prints a
-    pass/fail verdict. B1/B2 scores do not affect the verdict.
+    Runs the explicitly configured agent(s) in restricted tool mode, records
+    all requested levels, compares B3/B4 mean scores against the threshold,
+    and prints a pass/fail verdict. Local agentic tools remain available while
+    external/search tools are disabled. B1/B2 scores do not affect the verdict.
 
     Exit codes:
       0 — all tasks passed (hard enough)
@@ -3914,7 +3933,10 @@ def difficulty_check(
         write_markdown,
     )
     from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator, RunConfig
-    from ai4sci_bench.tracking.difficulty_scores import append_evaluation
+    from ai4sci_bench.tracking.difficulty_scores import (
+        DIFFICULTY_AGENTIC_AGENTS,
+        append_evaluation,
+    )
 
     if (task_id is None) == (status_filter is None):
         raise click.ClickException("Provide exactly one of --task or --status.")
@@ -3922,21 +3944,39 @@ def difficulty_check(
         raise click.ClickException(
             "Task contribution difficulty-check requires --sandbox os (Docker)."
         )
+    if not agents:
+        raise click.ClickException(
+            "difficulty-check requires at least one explicit --agent."
+        )
 
     parsed_levels = [lvl.strip() for lvl in prompt_levels.split(",") if lvl.strip()]
     if not parsed_levels:
         raise click.ClickException("--prompt-levels must list at least one level.")
 
-    if agent_configs and len(agent_configs) != len(agents):
+    if not agent_configs:
+        raise click.ClickException(
+            "difficulty-check requires one explicit --agent-config per --agent; "
+            "each config must include model."
+        )
+    if len(agent_configs) != len(agents):
         raise click.ClickException(
             f"--agent-config count ({len(agent_configs)}) must match --agent count ({len(agents)})"
         )
-    if not agent_configs:
-        agent_configs = tuple("{}" for _ in agents)
-
     parsed_configs: list[dict[str, Any]] = []
-    for raw in agent_configs:
-        parsed_configs.append(_parse_agent_config(raw))
+    for name, raw in zip(agents, agent_configs):
+        parsed = _parse_agent_config(raw)
+        if not str(parsed.get("model") or "").strip():
+            raise click.ClickException(
+                f"Agent '{name}' requires an explicit model in --agent-config."
+            )
+        parsed_configs.append(parsed)
+
+    if not any(name in DIFFICULTY_AGENTIC_AGENTS for name in agents):
+        supported = ", ".join(sorted(DIFFICULTY_AGENTIC_AGENTS))
+        raise click.ClickException(
+            "Formal difficulty evidence requires at least one multi-turn agent "
+            f"harness. direct_llm may only be an additional baseline. Supported: {supported}"
+        )
 
     # Always restrict tool access during difficulty checks
     resolved_tool_mode = "restricted"
@@ -3981,6 +4021,7 @@ def difficulty_check(
     batch_reports: list[DifficultyReport] = []
     failures = 0
     aborts: list[tuple[str, str]] = []  # (task_id, reason) for infra-failure aborts
+    agent_version_cache: dict[tuple[str, str], str] = {}
 
     for tid in task_id_list:
         try:
@@ -3996,7 +4037,7 @@ def difficulty_check(
         include_dev = task_status == "in_development"
         include_abandoned = task_status == "abandoned"
 
-        agent_runs: list[tuple[str, str, dict[str, Any], list]] = []
+        agent_runs: list[tuple[str, str, dict[str, Any], dict[str, str], list]] = []
         agent_specs = _build_agents_for_run()
 
         with tempfile.TemporaryDirectory(prefix=f"difficulty_{tid}_") as tmp_root:
@@ -4026,14 +4067,41 @@ def difficulty_check(
                     orchestrator = BenchmarkOrchestrator(config)
                 except ValueError as exc:
                     raise click.ClickException(str(exc)) from exc
+                cli_binary = _AGENT_CLI_BINARY.get(name)
+                if cli_binary:
+                    image = getattr(adapter, "sandbox_image_identity", None)
+                    version_key = (cli_binary, str(image or "host"))
+                    if version_key not in agent_version_cache:
+                        agent_version_cache[version_key] = (
+                            _get_container_cli_version(image, cli_binary)
+                            if sandbox == "os" and image
+                            else _get_cli_version(cli_binary)
+                        )
+                    version = agent_version_cache[version_key]
+                else:
+                    version = f"asibench {__version__}"
+                agent_details = {
+                    "model": str(getattr(adapter, "model", cfg.get("model", "unknown"))),
+                    "effort": str(getattr(adapter, "effort", "N/A")),
+                    "agent_version": version,
+                    "framework_version": __version__,
+                }
                 run_report = orchestrator.run([tid])
-                agent_runs.append((label, name, dict(cfg), list(run_report.results)))
+                agent_runs.append(
+                    (
+                        label,
+                        name,
+                        _redact_agent_config(dict(cfg)),
+                        agent_details,
+                        list(run_report.results),
+                    )
+                )
 
         # Detect agent infrastructure failure — if any instance crashed (subprocess
         # error, API failure, timeout), this evaluation didn't actually happen.
         # Treat as ABORT: skip score persistence, skip report writing, no verdict.
         infra_failed = []
-        for label, name, cfg, results in agent_runs:
+        for label, name, cfg, agent_details, results in agent_runs:
             for r in results:
                 if r.status in (RunStatus.FAILED, RunStatus.TIMEOUT):
                     err = "unknown"

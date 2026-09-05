@@ -84,15 +84,18 @@ asibench task create --domain physics --name my_task
 Fill in `task_meta.yaml`, the four prompts, `generate_gt.py`, and the evaluation
 config, using `tasks/_template/` as a reference.
 
-Run the full pre-submit validation, then test the same model with the same run
-settings against all four prompt levels:
+Run the full pre-submit validation, then explicitly select a multi-turn agent,
+model, and run settings for all four prompt levels:
 
 ```bash
 # schema, required files, ground-truth generation, and scorer self-check
 asibench validate --pre-submit tasks/physics/my_task/
 
-# defaults to B1, B2, B3, and B4
-asibench difficulty-check --task physics.my_task --sandbox os
+# B1, B2, B3, and B4 run by default
+asibench difficulty-check --task physics.my_task \
+  --agent codex_cli \
+  --agent-config '{"model":"gpt-5.6-sol","effort":"medium"}' \
+  --sandbox os
 ```
 
 `--pre-submit` runs your generator and feeds its reference output through your
@@ -110,6 +113,16 @@ Task contribution trials must run in the Docker OS sandbox. The command defaults
 to `--sandbox os` and rejects `none`, `task`, and `linux_ns`. Record
 `sandbox: os` on every entry in `task_submission.yaml.local_test_results`; the
 CLI validates this evidence before contacting the Portal.
+
+`difficulty-check` intentionally has no default agent or model. Each repeated
+`--agent` requires a position-matched `--agent-config` containing `model`, and
+formal evidence must include at least one supported multi-turn harness such as
+`codex_cli`, `claude_code_cli`, or `kimi_code_cli`. `direct_llm` remains useful
+as an optional single-turn baseline but cannot be the only difficulty agent.
+When multiple agents are supplied, every gated agent/B3/B4 mean must remain
+strictly below 40. JSON, Markdown, CSV, and persisted score reports record the
+agent, effective model, effort, measured agent version, framework version, and
+sandbox.
 
 The difficulty gate applies only to the low-guidance levels: every B3 and B4
 mean score must be strictly below 40. B1 and B2 are required evidence but have

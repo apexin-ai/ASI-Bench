@@ -92,7 +92,7 @@ class TestAgentJudgeCommands:
         assert "exec" in cmd
         assert "--model" in cmd
         idx = cmd.index("--model")
-        assert cmd[idx + 1] == "gpt-5.5"
+        assert cmd[idx + 1] == "gpt-5.6-sol"
         assert "--effort" not in cmd
         assert "--sandbox" in cmd
         idx = cmd.index("--sandbox")

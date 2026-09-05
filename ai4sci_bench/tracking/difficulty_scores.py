@@ -45,6 +45,23 @@ from typing import Any, Iterable
 _VALID_VERDICTS = {"pass", "fail"}
 _VALID_TRIGGERS = {"manual", "ci", "re-evaluation"}
 
+# Harnesses that can inspect the workspace, execute tools, observe results, and
+# revise their solution within one benchmark attempt.  A direct_llm run remains
+# useful as an optional single-turn baseline, but cannot be the sole source of
+# formal Task difficulty evidence.
+DIFFICULTY_AGENTIC_AGENTS = frozenset({
+    "antigravity_cli",
+    "claude_code_cli",
+    "codewhale",
+    "codex_cli",
+    "hermes",
+    "kimi_code_cli",
+    "mimo_code_cli",
+    "openhands",
+    "opencode_cli",
+    "pi_cli",
+})
+
 
 def score_file_path(scores_dir: Path | str, task_id: str) -> Path:
     """Return the canonical path for a task's score file."""

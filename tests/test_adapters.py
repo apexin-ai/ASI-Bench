@@ -1289,7 +1289,7 @@ class TestCodexCLIAdapter:
 
     def test_init_defaults(self):
         adapter = CodexCLIAdapter()
-        assert adapter.model == "gpt-5.5"
+        assert adapter.model == "gpt-5.6-sol"
         assert adapter.full_auto is True
         assert adapter.timeout_seconds == 10800
         assert adapter.allow_external_tools is False
@@ -3067,6 +3067,20 @@ class TestAgentBanner:
         from ai4sci_bench.cli import _get_cli_version
         result = _get_cli_version("nonexistent_binary_xyz_123")
         assert result == "not found"
+
+    @patch("ai4sci_bench.cli.subprocess.run")
+    def test_get_container_cli_version_uses_exact_image(self, mock_run):
+        from ai4sci_bench.cli import _get_container_cli_version
+
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout="codex-cli 1.2.3\n", stderr="",
+        )
+
+        assert _get_container_cli_version("asibench-agent:abc", "codex") == "codex-cli 1.2.3"
+        assert mock_run.call_args.args[0] == [
+            "docker", "run", "--rm", "--entrypoint", "codex",
+            "asibench-agent:abc", "--version",
+        ]
 
     def test_get_cli_version_codex(self):
         from ai4sci_bench.cli import _get_cli_version

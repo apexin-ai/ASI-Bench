@@ -244,7 +244,7 @@ adapter:
 asibench run \
   --instances-dir hf_instances_seed42/ \
   --agent codex_cli \
-  --agent-config '{"model": "gpt-5.5"}' \
+  --agent-config '{"model": "gpt-5.6-sol"}' \
   --sandbox os \
   --output-dir out_seed42/
 asibench login
@@ -388,8 +388,11 @@ asibench task create --domain physics --name my_new_task
 # 3. Required pre-submit validation
 asibench validate --pre-submit tasks/physics/my_new_task/
 
-# 4. Required same-model trial across B1, B2, B3, and B4
-asibench difficulty-check --task physics.my_new_task --sandbox os
+# 4. Required explicit multi-turn-agent trial across B1, B2, B3, and B4
+asibench difficulty-check --task physics.my_new_task \
+  --agent codex_cli \
+  --agent-config '{"model":"gpt-5.6-sol","effort":"medium"}' \
+  --sandbox os
 
 # 5. Upload an exact Draft snapshot, then review and submit it in the Portal
 asibench task submit --task-dir tasks/physics/my_new_task/
@@ -401,9 +404,12 @@ asibench task submit --task-dir tasks/physics/my_new_task/
   agent-visible inputs and required artifacts, reproducible reference generation,
   evaluation gates and weighted scorers, runtime dependencies, and local-testing
   evidence.
-- Complete `validate --pre-submit` and a same-model `difficulty-check` across
-  B1–B4 in the Docker OS sandbox before submission. `difficulty-check` defaults
-  to and requires `--sandbox os`.
+- Complete `validate --pre-submit` and an explicitly configured
+  `difficulty-check` across B1–B4 in the Docker OS sandbox before submission.
+  The command has no default agent: every `--agent` needs a matching
+  `--agent-config` with an explicit model, and formal evidence must contain at
+  least one multi-turn harness such as `codex_cli`, `claude_code_cli`, or
+  `kimi_code_cli`. `direct_llm` may be added only as a single-turn baseline.
 - Record all four scores on the 0–100 scale.
   B1 and B2 have no score ceiling; every B3 and B4 mean score must be strictly
   below 40. The CLI marks

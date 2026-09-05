@@ -40,7 +40,7 @@ asibench score --repo seed31415 \
 
 # 3b. Run seed42 separately in the required Docker OS sandbox
 asibench run --instances-dir hf_instances_seed42/ \
-  --agent codex_cli --agent-config '{"model":"gpt-5.5"}' \
+  --agent codex_cli --agent-config '{"model":"gpt-5.6-sol"}' \
   --sandbox os --output-dir out_seed42/
 asibench login
 

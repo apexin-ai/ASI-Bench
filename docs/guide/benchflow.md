@@ -53,7 +53,7 @@ asibench run \
   --prompt-levels "$PROMPT_LEVEL" \
   --tasks-dir "$TASKS_DIR" \
   --agent codex_cli \
-  --agent-config '{"model":"gpt-5.5"}' \
+  --agent-config '{"model":"gpt-5.6-sol"}' \
   --sandbox linux_ns \
   --output-dir "$RUN_DIR" \
   --fail-on-agent-error

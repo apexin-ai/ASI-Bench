@@ -34,6 +34,8 @@ def _task_dir(root: Path) -> Path:
         "local_test_results:\n"
         "  - provider: Test\n"
         "    family: test-model\n"
+        "    agent: codex_cli\n"
+        "    model: gpt-5.6-sol\n"
         "    sandbox: os\n"
         "    results:\n"
         "      - {prompt_level: b1, score: 80}\n"
@@ -220,6 +222,30 @@ def test_submit_task_rejects_non_os_local_test_before_network(tmp_path, monkeypa
     assert result.ok is False
     assert "--sandbox os" in (result.error or "")
     assert "local_test_results[0]" in (result.error or "")
+
+
+def test_submit_task_rejects_direct_llm_only_evidence_before_network(
+    tmp_path, monkeypatch,
+):
+    task_dir = _task_dir(tmp_path / "task")
+    submission_path = task_dir / "task_submission.yaml"
+    submission_path.write_text(
+        submission_path.read_text().replace("agent: codex_cli", "agent: direct_llm"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        task_submit,
+        "_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("network must not start")
+        ),
+    )
+
+    result = submit_task(task_dir, "https://portal.example", "asi_pat_x")
+
+    assert result.ok is False
+    assert "multi-turn" in (result.error or "")
+    assert "direct_llm" in (result.error or "")
 
 
 def test_cli_task_submit_rejects_non_os_evidence_before_authentication(

@@ -1027,7 +1027,7 @@ class TestCLIHelperEdgeCases:
 
         agent = _build_agent(None, "codex_cli", {})
         assert isinstance(agent, CodexCLIAdapter)
-        assert agent.model == "gpt-5.5"
+        assert agent.model == "gpt-5.6-sol"
 
     def test_build_agent_codex_cli_with_config(self):
         """_build_agent passes config to CodexCLIAdapter."""

@@ -70,7 +70,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
 
     def __init__(
         self,
-        model: str = "gpt-5.5",
+        model: str = "gpt-5.6-sol",
         full_auto: bool = True,
         timeout_seconds: int = 10800,
         allow_external_tools: bool = False,

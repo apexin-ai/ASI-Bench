@@ -19,7 +19,7 @@ from ai4sci_bench.scorers._parse_utils import parse_judge_json
 
 logger = get_logger(__name__)
 
-_DEFAULT_MODELS = {"codex": "gpt-5.5", "claude_code": "claude-opus-4-6"}
+_DEFAULT_MODELS = {"codex": "gpt-5.6-sol", "claude_code": "claude-opus-4-6"}
 _SUPPORTED_AGENT_TYPES = frozenset(_DEFAULT_MODELS.keys())
 
 JUDGE_INSTRUCTIONS_TEMPLATE = """\
@@ -64,7 +64,7 @@ class AgentJudgeScorer(Scorer):
                 f"Supported: {sorted(_SUPPORTED_AGENT_TYPES)}"
             )
 
-        model = config.get("model", _DEFAULT_MODELS.get(agent_type, "gpt-5.5"))
+        model = config.get("model", _DEFAULT_MODELS.get(agent_type, "gpt-5.6-sol"))
         rubric = config.get("rubric", "")
         timeout = config.get("timeout", 300)
         max_score_value = config.get("max_score_value", 10)

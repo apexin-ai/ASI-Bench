@@ -19,8 +19,9 @@ feasibility_checklist:
     - {id: self_contained_inputs, status: unsure}
     - {id: machine_checkable_scoring, status: unsure}
 
-# Set true only after one approved model has completed the same B1-B4 run in
-# the required Docker OS sandbox (`asibench difficulty-check --sandbox os`).
+# Set true only after at least one approved multi-turn agent has completed the
+# same B1-B4 run in the required Docker OS sandbox. difficulty-check requires
+# explicit --agent and --agent-config '{"model":"..."}' values.
 local_testing_done: false
 local_test_results: []
 
@@ -28,7 +29,12 @@ local_test_results: []
 # local_test_results:
 #   - provider: GPT
 #     family: "5.6"
-#     version: base
+#     version: sol
+#     agent: codex_cli
+#     model: gpt-5.6-sol
+#     effort: medium
+#     agent_version: "codex-cli 1.x"
+#     framework_version: "0.1.5"
 #     sandbox: os
 #     results:
 #       - {prompt_level: b1, score: 90}

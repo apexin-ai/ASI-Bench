@@ -50,7 +50,7 @@ For example:
 asibench run \
   --instances-dir hf_instances_seed31415/ \
   --agent codex_cli \
-  --agent-config '{"model":"gpt-5.5"}' \
+  --agent-config '{"model":"gpt-5.6-sol"}' \
   --sandbox linux_ns \
   --output-dir out_codex/
 ```
@@ -98,7 +98,7 @@ asibench run-score \
   --instances-dir hf_instances_seed31415/ \
   --tasks-dir /path/to/ASI-Bench/tasks/ \
   --agent codex_cli \
-  --agent-config '{"model":"gpt-5.5"}' \
+  --agent-config '{"model":"gpt-5.6-sol"}' \
   --sandbox linux_ns \
   --repetitions 3 \
   --output-dir repeated_results/

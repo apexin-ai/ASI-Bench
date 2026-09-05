@@ -36,6 +36,12 @@ from ai4sci_bench.tracking.difficulty_scores import (
 )
 
 
+DIFFICULTY_AGENT_ARGS = [
+    "--agent", "codex_cli",
+    "--agent-config", '{"model":"gpt-5.6-sol","effort":"medium"}',
+]
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -250,6 +256,31 @@ class TestFindFlaggedTasks:
 
 
 class TestBuildReport:
+    def test_records_effective_agent_provenance(self):
+        results = [_make_result(task_id="physics.foo", level="b3", score=12.0)]
+        details = {
+            "model": "gpt-5.6-sol",
+            "effort": "high",
+            "agent_version": "codex-cli 1.2.3",
+            "framework_version": "0.1.5",
+        }
+        report = build_report(
+            "physics.foo",
+            [("codex", "codex_cli", {"model": "gpt-5.6-sol"}, details, results)],
+            threshold=40,
+            sandbox="os",
+        )
+
+        row = report.rows[0]
+        assert row.model == "gpt-5.6-sol"
+        assert row.effort == "high"
+        assert row.agent_version == "codex-cli 1.2.3"
+        assert row.framework_version == "0.1.5"
+        assert row.as_dict()["model"] == "gpt-5.6-sol"
+        assert report.to_per_agent_results()[0]["agent_version"] == "codex-cli 1.2.3"
+        assert "gpt-5.6-sol" in format_terminal(report, use_color=False)
+        assert "codex-cli 1.2.3" in format_markdown(report)
+
     def test_all_passing(self):
         results = [
             _make_result(task_id="physics.foo", level="b1", score=35.0),
@@ -314,6 +345,21 @@ class TestBuildReport:
         report = build_report("x.y", [("m", "direct_llm", {}, results)], threshold=50)
         assert report.overall_pass is False
         assert report.rows[0].passed is False
+
+    def test_every_agent_b3_b4_row_must_pass(self):
+        direct_results = [_make_result(task_id="x.y", level="b3", score=10.0)]
+        agentic_results = [_make_result(task_id="x.y", level="b3", score=55.0)]
+        report = build_report(
+            "x.y",
+            [
+                ("direct", "direct_llm", {"model": "gpt-5.6-sol"}, direct_results),
+                ("codex", "codex_cli", {"model": "gpt-5.6-sol"}, agentic_results),
+            ],
+            threshold=40,
+        )
+
+        assert report.overall_pass is False
+        assert [row.passed for row in report.rows] == [False, True]
 
     def test_to_per_agent_results_shape(self):
         results = [
@@ -442,6 +488,40 @@ class TestDifficultyCheckCLI:
         assert "B3/B4" in result.output
         assert "40" in result.output
         assert "default: os" in result.output
+        assert "default: direct_llm" not in result.output
+
+    def test_requires_explicit_agent_and_config(self, tmp_path):
+        result = CliRunner().invoke(cli, [
+            "difficulty-check", "--task", "x.y", "--tasks-dir", str(tmp_path),
+        ])
+        assert result.exit_code != 0
+        assert "--agent" in result.output
+
+        result = CliRunner().invoke(cli, [
+            "difficulty-check", "--task", "x.y", "--agent", "codex_cli",
+            "--tasks-dir", str(tmp_path),
+        ])
+        assert result.exit_code != 0
+        assert "--agent-config" in result.output
+
+    def test_requires_explicit_model_in_every_agent_config(self, tmp_path):
+        result = CliRunner().invoke(cli, [
+            "difficulty-check", "--task", "x.y",
+            "--agent", "codex_cli", "--agent-config", '{"effort":"high"}',
+            "--tasks-dir", str(tmp_path),
+        ])
+        assert result.exit_code != 0
+        assert "model" in result.output
+
+    def test_direct_llm_cannot_be_the_only_difficulty_agent(self, tmp_path):
+        result = CliRunner().invoke(cli, [
+            "difficulty-check", "--task", "x.y",
+            "--agent", "direct_llm",
+            "--agent-config", '{"model":"gpt-5.6-sol"}',
+            "--tasks-dir", str(tmp_path),
+        ])
+        assert result.exit_code != 0
+        assert "multi-turn" in result.output
 
     def test_rejects_non_os_sandbox(self):
         result = CliRunner().invoke(cli, [
@@ -517,8 +597,8 @@ class TestDifficultyCheckCLI:
             result = runner.invoke(cli, [
                 "difficulty-check",
                 "--task", "physics.demo",
-                "--agent", "direct_llm",
-                "--agent-config", '{"model":"claude-opus-4-6"}',
+                "--agent", "codex_cli",
+                "--agent-config", '{"model":"gpt-5.6-sol","effort":"high"}',
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-color",
@@ -537,6 +617,11 @@ class TestDifficultyCheckCLI:
         assert data["task_version"] == "2.3"
         assert data["evaluations"][-1]["verdict"] == "pass"
         assert data["evaluations"][-1]["tool_mode"] == "restricted"
+        agent_result = data["evaluations"][-1]["results"][0]
+        assert agent_result["model"] == "gpt-5.6-sol"
+        assert agent_result["effort"] == "high"
+        assert agent_result["agent_version"]
+        assert agent_result["framework_version"]
 
     def test_failing_run_exits_nonzero(self, tmp_path):
         tasks_dir = tmp_path / "tasks"
@@ -551,6 +636,7 @@ class TestDifficultyCheckCLI:
                 "--task", "physics.easy",
                 "--prompt-levels", "b1,b3",
                 "--threshold", "40",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-color",
@@ -577,6 +663,7 @@ class TestDifficultyCheckCLI:
                 "difficulty-check",
                 "--task", "math.foo",
                 "--prompt-levels", "b1",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--output", str(out_json),
@@ -601,6 +688,7 @@ class TestDifficultyCheckCLI:
                 "difficulty-check",
                 "--task", "math.foo",
                 "--prompt-levels", "b1",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-save-scores",
@@ -623,6 +711,7 @@ class TestDifficultyCheckCLI:
                 "difficulty-check",
                 "--status", "test",
                 "--prompt-levels", "b3",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-color",
@@ -645,6 +734,7 @@ class TestDifficultyCheckCLI:
         result = runner.invoke(cli, [
             "difficulty-check",
             "--status", "final",
+            *DIFFICULTY_AGENT_ARGS,
             "--tasks-dir", str(tasks_dir),
             "--scores-dir", str(tmp_path / "scores"),
             "--no-color",
@@ -735,6 +825,7 @@ class TestInfrastructureFailureHandling:
                 "difficulty-check",
                 "--task", "physics.demo",
                 "--prompt-levels", "b3",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-color",
@@ -765,6 +856,7 @@ class TestInfrastructureFailureHandling:
                 "difficulty-check",
                 "--task", "physics.demo",
                 "--prompt-levels", "b3",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-color",
@@ -792,6 +884,7 @@ class TestInfrastructureFailureHandling:
                 "difficulty-check",
                 "--task", "physics.demo",
                 "--prompt-levels", "b3",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--output", str(report_path),
@@ -1335,6 +1428,7 @@ class TestDifficultyCheckCSVCLI:
                 "difficulty-check",
                 "--task", "physics.demo",
                 "--prompt-levels", "b1,b3",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--csv-output", str(csv_path),
@@ -1362,6 +1456,7 @@ class TestDifficultyCheckCSVCLI:
                 "difficulty-check",
                 "--status", "test",
                 "--prompt-levels", "b3",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--csv-output", str(csv_path),
@@ -1391,6 +1486,7 @@ class TestDifficultyCheckCSVCLI:
                 "--status", "final",
                 "--prompt-levels", "b3",
                 "--threshold", "40",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-color",
@@ -1416,6 +1512,7 @@ class TestDifficultyCheckCSVCLI:
                 "difficulty-check",
                 "--status", "test",
                 "--prompt-levels", "b3",
+                *DIFFICULTY_AGENT_ARGS,
                 "--tasks-dir", str(tasks_dir),
                 "--scores-dir", str(scores_dir),
                 "--no-save-scores",
