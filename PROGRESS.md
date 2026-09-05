@@ -518,3 +518,20 @@
 - Prevention: publish from an annotated version tag only after the locked test
   suite and distribution metadata checks pass.
 - Version bump commit: `1dc79cd`.
+
+## 2026-09: Results-below-expectations troubleshooting
+
+- Problem: user documentation listed `direct_llm` alongside agentic adapters
+  without explaining that it is a single-turn, no-tool baseline, so users could
+  mistake an unsuitable harness choice for unexpectedly weak model performance.
+- Resolution: add a dedicated troubleshooting guide that separates execution,
+  evaluation, and genuine low-score cases; explains when iterative CLI agents
+  are a better fit; and covers artifacts, provenance, environment, timeout,
+  transient API failures, and repeated-run variance. Link it from README,
+  Getting Started, and the guide index.
+- Verification: the documentation regression test passed and all relative
+  Markdown links under README/docs resolved locally; the full offline suite is
+  run before integration.
+- Prevention: keep adapter capability recommendations tied to regression tests
+  so documentation changes when harness behavior or public adapter names do.
+- Implementation commit: `147ac23`.
