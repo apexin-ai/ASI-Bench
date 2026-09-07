@@ -284,37 +284,6 @@ seed42 GT is not public. Local benchmark runs never calculate official scores.
 See [Getting Started](docs/guide/getting-started.md) for agent configuration,
 sandbox selection, and platform-specific commands.
 
-### Scientific MCP tools
-
-ASI-Bench ships an operator-configured catalog for COMSOL, OpenFOAM, MATLAB,
-Simulink, MWORKS, PyNite, EnergyPlus, Text2Sim, NetLogo, AFSIM, Blender,
-FreeCAD, AutoCAD, Fusion 360, SketchUp, PubChem, and GNS3. The catalog records
-the upstream source, prerequisites, and an editable launch template; it does
-not bundle commercial applications, licenses, third-party source code, or
-credentials.
-
-```bash
-asibench mcp catalog
-asibench mcp init --servers netlogo,pubchem --output science-mcp.json
-# Edit placeholder paths/environment values before checking.
-asibench mcp check --config science-mcp.json
-
-asibench run --agent codex_cli \
-  --agent-config '{"model":"gpt-5.6-sol"}' \
-  --mcp-config science-mcp.json \
-  --instances-dir hf_instances_seed31415/ \
-  --sandbox none --output-dir out_with_mcp/
-```
-
-`--mcp-config` implies `--tool-mode search`, accepts the portable
-`{"mcpServers": {...}}` format, and is limited to `claude_code_cli` and
-`codex_cli`. It loads only the named servers into each run's isolated harness
-home; ambient user MCP configuration remains excluded. It is intentionally
-rejected with `--sandbox os`: GUI applications, licensed host binaries, local
-sockets, and Docker-based MCP servers need deployment-specific mounts/network
-policy that the benchmark cannot infer safely. MCP-enabled runs have external
-tool authority and are not equivalent to the default restricted baseline.
-
 If a run completes but scores below expectations, follow the
 [result troubleshooting guide](docs/guide/troubleshooting-results.md). It
 explains why `direct_llm` is a single-turn, no-tool baseline, when to consider

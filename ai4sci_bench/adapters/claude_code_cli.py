@@ -17,7 +17,6 @@ from ai4sci_bench.adapters.subprocess_base import (
     safe_run_key,
 )
 from ai4sci_bench.core.types import AgentOutput, CostInfo, RunStatus, TaskInstance, ToolMode
-from ai4sci_bench.mcp_config import claude_mcp_tool_patterns, load_mcp_config
 from ai4sci_bench.runner.os_sandbox import OSSandbox
 
 logger = logging.getLogger(__name__)
@@ -82,7 +81,6 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         api_base_env: str | None = None,
         api_protocol: str | None = None,
         supports_image_input: bool = False,
-        mcp_config: str | None = None,
     ):
         super().__init__(
             timeout_seconds=timeout_seconds,
@@ -104,10 +102,6 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         self.api_base_env = api_base_env
         self.api_protocol = api_protocol
         self.supports_image_input = supports_image_input
-        self.mcp_config = str(Path(mcp_config).expanduser().resolve()) if mcp_config else None
-        self.mcp_servers = load_mcp_config(self.mcp_config) if self.mcp_config else {}
-        if self.mcp_servers and self.tool_mode != ToolMode.SEARCH:
-            raise ValueError("mcp_config requires tool_mode='search'")
         if self.api_base is not None and api_protocol is None:
             raise ValueError(
                 "api_protocol is required when api_base is set. "
@@ -282,8 +276,6 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
     def setup(self, config: dict) -> None:
         super().setup(config)
         self.permission_mode = config.get("permission_mode", self.permission_mode)
-        if self.mcp_servers and self.sandbox == "os":
-            raise ValueError("Explicit MCP config is not supported with --sandbox os")
         if self.sandbox == "os":
             self._os_sandbox = OSSandbox(self.repo_root)
 
@@ -441,15 +433,11 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         if self.tool_mode == ToolMode.UNRESTRICTED:
             return
         tools = CLAUDE_SEARCH_TOOLS if self.tool_mode == ToolMode.SEARCH else CLAUDE_CORE_TOOLS
-        if self.mcp_servers:
-            tools += "," + claude_mcp_tool_patterns(self.mcp_servers)
         cmd += [
             "--tools", tools,
             "--strict-mcp-config",
             "--disable-slash-commands",
         ]
-        if self.mcp_config:
-            cmd += ["--mcp-config", self.mcp_config]
 
     def _build_os_agent_cmd(self, workspace) -> list[str]:
         """Build the claude CLI command for execution inside a Docker container.

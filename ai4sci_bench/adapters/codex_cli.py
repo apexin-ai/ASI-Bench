@@ -19,7 +19,6 @@ from ai4sci_bench.adapters.subprocess_base import (
     safe_run_key,
 )
 from ai4sci_bench.core.types import AgentOutput, CostInfo, RunStatus, TaskInstance, ToolMode
-from ai4sci_bench.mcp_config import codex_mcp_toml, load_mcp_config
 from ai4sci_bench.runner.os_sandbox import OSSandbox
 
 logger = logging.getLogger(__name__)
@@ -82,7 +81,6 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         provider: str | None = None,
         codex_home: str | None = None,
         supports_image_input: bool = False,
-        mcp_config: str | None = None,
     ):
         super().__init__(
             timeout_seconds=timeout_seconds,
@@ -103,10 +101,6 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         self.provider = provider
         self.codex_home = codex_home
         self.supports_image_input = supports_image_input
-        self.mcp_config = str(Path(mcp_config).expanduser().resolve()) if mcp_config else None
-        self.mcp_servers = load_mcp_config(self.mcp_config) if self.mcp_config else {}
-        if self.mcp_servers and self.tool_mode != ToolMode.SEARCH:
-            raise ValueError("mcp_config requires tool_mode='search'")
         self._uses_native_provider = (
             provider is not None and api_key is not None and api_base is not None
         )
@@ -212,8 +206,6 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
 
     def setup(self, config: dict) -> None:
         super().setup(config)
-        if self.mcp_servers and self.sandbox == "os":
-            raise ValueError("Explicit MCP config is not supported with --sandbox os")
         if self.sandbox == "os":
             self._os_sandbox = OSSandbox(self.repo_root)
 
@@ -401,9 +393,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         # sufficient (verified: Appendix F.3).
         # Also ignore ambient execpolicy rules so benchmark runs are not
         # silently tightened by host- or repo-local Codex policies.
-        if not self.mcp_servers:
-            cmd += ["--ignore-user-config"]
-        cmd += ["--ignore-rules"]
+        cmd += ["--ignore-user-config", "--ignore-rules"]
         for feature in CODEX_RESTRICTED_DISABLE_FEATURES:
             cmd += ["--disable", feature]
         if self.tool_mode == ToolMode.RESTRICTED:
@@ -545,15 +535,6 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
             api_config = Path(api_codex_home) / "config.toml"
             if api_config.is_file():
                 shutil.copy2(api_config, codex_dir / "config.toml")
-
-        if self.mcp_servers:
-            config_path = codex_dir / "config.toml"
-            existing = config_path.read_text(encoding="utf-8") if config_path.is_file() else ""
-            separator = "" if not existing or existing.endswith("\n") else "\n"
-            config_path.write_text(
-                existing + separator + "\n" + codex_mcp_toml(self.mcp_servers),
-                encoding="utf-8",
-            )
 
         return home
 
