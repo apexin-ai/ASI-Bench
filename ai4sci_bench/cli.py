@@ -263,6 +263,76 @@ def cli():
     pass
 
 
+@cli.group("mcp")
+def mcp_group():
+    """Inspect and prepare explicit scientific MCP server configurations."""
+
+
+@mcp_group.command("catalog")
+def mcp_catalog():
+    """List bundled scientific MCP server templates and prerequisites."""
+    from ai4sci_bench.mcp_config import load_science_mcp_catalog
+
+    for name, entry in load_science_mcp_catalog().items():
+        click.echo(f"{name:<12} {entry['category']:<28} {entry['source']}")
+        click.echo(f"  Requires: {'; '.join(entry['prerequisites'])}")
+
+
+@mcp_group.command("init")
+@click.option("--servers", required=True, help="Comma-separated catalog server names.")
+@click.option("--output", required=True, type=click.Path(dir_okay=False))
+@click.option("--force", is_flag=True, help="Overwrite an existing output file.")
+def mcp_init(servers: str, output: str, force: bool):
+    """Write an editable portable mcpServers JSON file from the catalog."""
+    from ai4sci_bench.mcp_config import load_science_mcp_catalog
+
+    catalog = load_science_mcp_catalog()
+    requested = [name.strip().lower() for name in servers.split(",") if name.strip()]
+    if not requested:
+        raise click.ClickException("--servers must name at least one catalog server")
+    unknown = sorted(set(requested) - set(catalog))
+    if unknown:
+        raise click.ClickException(f"Unknown MCP server(s): {', '.join(unknown)}")
+    output_path = Path(output)
+    if output_path.exists() and not force:
+        raise click.ClickException(f"Output already exists: {output_path}; use --force")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    document = {"mcpServers": {name: catalog[name]["server"] for name in requested}}
+    output_path.write_text(
+        json.dumps(document, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    click.echo(f"Wrote {output_path}")
+    click.echo("Edit placeholder paths and verify prerequisites, then run: asibench mcp check --config ...")
+
+
+@mcp_group.command("check")
+@click.option("--config", "config_path", required=True, type=click.Path(dir_okay=False))
+def mcp_check(config_path: str):
+    """Validate an MCP config and report obvious local prerequisites."""
+    from ai4sci_bench.mcp_config import load_mcp_config
+
+    try:
+        servers = load_mcp_config(config_path)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    failures = 0
+    for name, server in servers.items():
+        if "url" in server:
+            click.echo(f"OK   {name}: HTTP {server['url']} (connectivity not attempted)")
+            continue
+        command = server["command"]
+        placeholder = "/path/to/" in command or any("/path/to/" in arg for arg in server["args"])
+        available = Path(command).is_file() if ("/" in command or "\\" in command) else shutil.which(command)
+        if placeholder or not available:
+            failures += 1
+            click.echo(f"MISS {name}: command/template is not ready: {command}")
+        else:
+            click.echo(f"OK   {name}: {command}")
+    if failures:
+        raise click.ClickException(f"{failures} MCP server(s) need local installation/configuration")
+
+
 
 @cli.command("review")
 @click.argument("result_files", nargs=-1, type=click.Path(exists=True))
@@ -679,6 +749,8 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
 @click.option("--agent", default=None, help="Built-in agent name.")
 @click.option("--agent-cmd", default=None, help="Agent command template.")
 @click.option("--agent-config", default="{}", show_default=True)
+@click.option("--mcp-config", default=None, type=click.Path(exists=True, dir_okay=False),
+              help="Explicit mcpServers JSON for Claude/Codex; implies tool mode search.")
 @click.option("--prompt-levels", default="b1,b2,b3,b4", show_default=True)
 @click.option("--parallel", default=1, type=click.IntRange(min=1), show_default=True)
 @click.option("--repetitions", default=1, type=click.IntRange(min=1), show_default=True,
@@ -706,7 +778,7 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
     envvar="ASIBENCH_JUDGE_API_PROTOCOL",
     help="Protocol spoken by --judge-api-base (native or OpenAI-compatible).",
 )
-def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
+def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config, mcp_config,
                prompt_levels, parallel, repetitions, sandbox, timeout, output_dir,
                judge_api_base, judge_api_key_env, judge_api_protocol):
     """Run agents and then score each run (seed31415 local scoring)."""
@@ -730,6 +802,8 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
         raise click.ClickException("--output-dir must be empty or absent when using --repetitions")
     if agent and agent_cmd:
         raise click.ClickException("--agent and --agent-cmd are mutually exclusive")
+    if mcp_config and agent not in ("claude_code_cli", "codex_cli"):
+        raise click.ClickException("--mcp-config requires --agent claude_code_cli or codex_cli")
 
     from ai4sci_bench.core.task import TaskLoader
     from ai4sci_bench.runner.parallel import auto_limit_workers
@@ -797,6 +871,8 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
             run_args += ["--agent-cmd", agent_cmd]
         if agent_config != "{}":
             run_args += ["--agent-config", agent_config]
+        if mcp_config:
+            run_args += ["--mcp-config", mcp_config]
         click.echo(f"\n=== Run {number}/{repetitions}: {task_id} ===")
         run_status = subprocess.run(run_args, env=agent_run_env).returncode
         if run_status != 0:
@@ -1322,6 +1398,8 @@ def _ensure_run_sandbox_available(sandbox: str) -> None:
 @click.option("--agent-cmd", help="Agent command template (file-exchange mode)")
 @click.option("--agent", help="Built-in agent name (direct_llm, claude_code_cli, codex_cli, kimi_code_cli, mimo_code_cli, antigravity_cli, openhands, hermes, codewhale, pi_cli, opencode_cli)")
 @click.option("--agent-config", default="{}", help="Agent config JSON")
+@click.option("--mcp-config", default=None, type=click.Path(exists=True, dir_okay=False),
+              help="Explicit mcpServers JSON for Claude/Codex; implies tool mode search.")
 @click.option("--output-dir", default="results/", help="Output directory")
 @click.option("--parallel", default=1, type=int, help="Parallel workers")
 @click.option("--timeout", default=DEFAULT_TIMEOUT_SECONDS, show_default=True, type=int,
@@ -1364,6 +1442,7 @@ def run(
     agent_cmd: str | None,
     agent: str | None,
     agent_config: str,
+    mcp_config: str | None,
     output_dir: str,
     parallel: int,
     timeout: int,
@@ -1400,7 +1479,13 @@ def run(
         raise click.ClickException(
             "--tool-mode and --allow-external-tools are mutually exclusive"
         )
-    resolved_tool_mode = _resolve_tool_mode(tool_mode, allow_external_tools)
+    if mcp_config and agent not in ("claude_code_cli", "codex_cli"):
+        raise click.ClickException("--mcp-config requires --agent claude_code_cli or codex_cli")
+    if mcp_config and tool_mode not in (None, "search"):
+        raise click.ClickException("--mcp-config requires --tool-mode search")
+    if mcp_config and sandbox == "os":
+        raise click.ClickException("--mcp-config is not supported with --sandbox os")
+    resolved_tool_mode = "search" if mcp_config else _resolve_tool_mode(tool_mode, allow_external_tools)
 
     print_sandbox_banner(sandbox)
     _ensure_run_sandbox_available(sandbox)
@@ -1409,6 +1494,10 @@ def run(
     parallel = auto_limit_workers(parallel, sandbox=sandbox)
 
     parsed_agent_config = json.loads(agent_config)
+    if not isinstance(parsed_agent_config, dict):
+        raise click.ClickException("--agent-config must decode to a JSON object")
+    if mcp_config:
+        parsed_agent_config["mcp_config"] = str(Path(mcp_config).resolve())
     # Build agent adapter
     try:
         adapter = _build_agent(agent_cmd, agent, dict(parsed_agent_config),

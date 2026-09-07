@@ -76,6 +76,10 @@
 - host-side Claude/Kimi harness home 必须同时按 benchmark execution 与
   instance run 隔离；execution 结束必须 teardown 清理。目录键须包含原始
   run key 哈希，Kimi 临时根初始化须支持并发。
+- 科学 MCP 只通过显式 `--mcp-config` 注入 Claude/Codex 的隔离 home；默认
+  restricted 运行不得继承 ambient MCP。配置必须严格校验，启用时固定为
+  search mode；当前 `--sandbox os` 因宿主 GUI/许可证/二进制映射不明确而须
+  fail-fast。catalog 只保存上游来源、前置条件和可编辑模板，不捆绑第三方软件。
 
 ## 任务生命周期
 
