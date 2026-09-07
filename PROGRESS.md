@@ -556,3 +556,25 @@
 - Prevention: difficulty evidence must identify both model and harness, and a
   no-tool/single-turn baseline must never be the sole formal difficulty gate.
 - Implementation commit: `47bf572`.
+
+## 2026-09: Explicit scientific MCP tool profiles
+
+- Problem: restricted/search agent runs intentionally excluded ambient MCP
+  configuration, so scientific simulators could only be enabled by switching
+  to unrestricted user state; the repository also had no auditable mapping
+  from requested simulators to upstream servers and prerequisites.
+- Resolution: add a strict portable `mcpServers` parser, a bundled catalog for
+  COMSOL, OpenFOAM, MATLAB/Simulink, MWORKS, PyNite, EnergyPlus, Text2Sim,
+  NetLogo, AFSIM, Blender, FreeCAD, AutoCAD, Fusion 360, SketchUp, PubChem, and
+  GNS3, plus `asibench mcp catalog|init|check`. Explicit `--mcp-config` now
+  injects only selected servers into isolated host-side Claude/Codex runs and
+  implies search mode. Docker OS runs fail closed until simulator-specific
+  mounts, GUI, sockets, licenses, and network policy can be modeled safely.
+- Verification: the full offline suite passed `2323` tests with `2 skipped`
+  and `22 deselected`; focused MCP/adapter/CLI/packaging coverage passed `563`;
+  a built wheel contained `ai4sci_bench/data/science_mcp_catalog.json`.
+- Prevention: never equate external-tool permission with ambient user config;
+  MCP authority must be explicit, validated, provenance-visible, and scoped to
+  named servers. Catalog templates must state third-party prerequisites and
+  must not bundle proprietary applications or credentials.
+- Implementation commit: `4c9970a`.
