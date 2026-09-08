@@ -2032,3 +2032,70 @@ class TestNonStreamingTerminalLogging:
             with pytest.raises(BrokenPipeError):
                 handler._handle_non_streaming({"stop_reason": "end_turn"}, request_id="req-2")
         assert "non_streaming_outcome id=req-2 outcome=client_gone" in "\n".join(caplog.messages)
+
+
+class TestUpstreamStreamRelease:
+    """The upstream connection must be released on this thread, not at GC time.
+
+    litellm's sync ``CustomStreamWrapper`` has no release path (only the async
+    ``aclose``), so abandoning a stream left the httpx connection checked out
+    until collection -- surfacing later as
+    ``httpcore.ReadError: [Errno 9] Bad file descriptor`` on an unrelated read.
+    """
+
+    @staticmethod
+    def _drive(response):
+        from ai4sci_bench.adapters.api_proxy import _LiteLLMProxyHandler
+
+        handler = _LiteLLMProxyHandler.__new__(_LiteLLMProxyHandler)
+        handler.litellm_model = "glm-5.2"
+        handler._write_sse = lambda event, data: None
+        handler.send_response = lambda *a, **k: None
+        handler.send_header = lambda *a, **k: None
+        handler.end_headers = lambda *a, **k: None
+        return handler._handle_streaming(response, request_id="rel")
+
+    def test_completion_stream_is_closed_after_a_normal_stream(self):
+        closed = []
+
+        class Inner:
+            def close(self):
+                closed.append("inner")
+
+        class Wrapper:
+            completion_stream = Inner()
+
+            def __iter__(self):
+                return iter([{"choices": [{"delta": {"content": "hi"},
+                                           "finish_reason": "stop"}]}])
+
+        assert self._drive(Wrapper()) == "ok"
+        assert closed == ["inner"]
+
+    def test_stream_is_closed_even_when_the_client_disconnects(self):
+        closed = []
+
+        class Wrapper:
+            completion_stream = None
+
+            def close(self):
+                closed.append("wrapper")
+
+            def __iter__(self):
+                raise ConnectionResetError("client hung up")
+
+        assert self._drive(Wrapper()) == "client_gone"
+        assert closed == ["wrapper"]
+
+    def test_a_failing_close_does_not_change_the_outcome(self):
+        class Wrapper:
+            completion_stream = None
+
+            def close(self):
+                raise RuntimeError("already torn down")
+
+            def __iter__(self):
+                return iter([{"choices": [{"delta": {"content": "hi"},
+                                           "finish_reason": "stop"}]}])
+
+        assert self._drive(Wrapper()) == "ok"

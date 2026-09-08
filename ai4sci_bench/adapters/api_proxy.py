@@ -710,6 +710,32 @@ def _upstream_timeout_seconds(real_streaming: bool) -> float:
     return value if value > 0 else default
 
 
+def _close_upstream_stream(response: Any, request_id: str = "") -> None:
+    """Release the upstream HTTP connection held by a streaming response.
+
+    ``litellm.completion(stream=True)`` returns a ``CustomStreamWrapper`` whose
+    only release path is the async ``aclose()``; the sync path has none. When we
+    stop iterating early -- which happens on roughly one stream in ten, because
+    the CLI abandons a stream once it has what it needs -- the wrapper keeps the
+    underlying ``httpx`` response open and its connection checked out of the
+    pool. The socket then closes whenever the wrapper is garbage collected,
+    which is a different thread at an arbitrary later moment, and an unrelated
+    in-flight read on a reused descriptor fails with
+    ``httpcore.ReadError: [Errno 9] Bad file descriptor``. Closing here makes
+    the release deterministic and on this thread.
+    """
+    stream = getattr(response, "completion_stream", None)
+    for candidate in (stream, response):
+        closer = getattr(candidate, "close", None)
+        if callable(closer):
+            try:
+                closer()
+            except Exception:  # noqa: BLE001 - cleanup must never mask the outcome
+                logger.debug("litellm proxy stream_close_failed id=%s", request_id,
+                             exc_info=True)
+            return
+
+
 def _stream_retry_attempts() -> int:
     """Total attempts for a streamed upstream call, retries included.
 
@@ -1308,6 +1334,7 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                 outcome = "client_gone"
             self.close_connection = True
         finally:
+            _close_upstream_stream(response, request_id)
             # Without this, a request that never reaches any of the branches
             # above (a handler thread still blocked when the process exits)
             # leaves nothing but its request_start line, which makes the
