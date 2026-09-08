@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -764,11 +765,35 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
     agent_run_env[_RUN_SCORE_CHILD_ENV] = "1"
     agent_run_env["PYTHON_DOTENV_DISABLED"] = "1"
 
-    def _run_task(number: int, task_id: str) -> tuple[int, str, int]:
+    instance_jobs: list[tuple[str, Path]] = []
+    for task_id in task_ids:
+        matches = sorted(
+            path for path in instances_root.glob(f"{task_id}__*")
+            if path.is_dir()
+        )
+        if not matches:
+            raise click.ClickException(
+                f"No instances found for task '{task_id}' in {instances_dir}"
+            )
+        instance_jobs.extend((task_id, path) for path in matches)
+
+    def _run_instance(
+        number: int,
+        task_id: str,
+        instance_path: Path,
+    ) -> tuple[int, str, str, int]:
         run_dir = base / f"run_{number}" if repetitions > 1 else base
-        job_dir = run_dir / ".jobs" / task_id.replace(".", "_")
+        instance_name = instance_path.name
+        job_dir = (
+            run_dir / ".jobs" / task_id.replace(".", "_") / instance_name
+        )
+        instance_set_dir = job_dir / ".instance_set"
+        instance_set_dir.mkdir(parents=True, exist_ok=True)
+        instance_link = instance_set_dir / instance_name
+        if not instance_link.exists():
+            instance_link.symlink_to(instance_path.resolve(), target_is_directory=True)
         run_args = [sys.executable, "-m", "ai4sci_bench.cli", "run",
-                    "--instances-dir", instances_dir, "--tasks-dir", tasks_dir,
+                    "--instances-dir", str(instance_set_dir), "--tasks-dir", tasks_dir,
                     "--tasks", task_id, "--prompt-levels", prompt_levels,
                     "--parallel", "1", "--sandbox", sandbox,
                     "--timeout", str(timeout), "--output-dir", str(job_dir)]
@@ -778,16 +803,30 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
             run_args += ["--agent-cmd", agent_cmd]
         if agent_config != "{}":
             run_args += ["--agent-config", agent_config]
-        click.echo(f"\n=== Run {number}/{repetitions}: {task_id} ===")
-        run_status = subprocess.run(run_args, env=agent_run_env).returncode
+        click.echo(
+            f"\n=== Run {number}/{repetitions}: {task_id} / {instance_name} ==="
+        )
+        instance_env = agent_run_env.copy()
+        instance_env["ASIBENCH_ROUTING_KEY"] = (
+            f"{task_id}:{instance_name}:{uuid.uuid4().hex}"
+        )
+        run_status = subprocess.run(run_args, env=instance_env).returncode
         if run_status != 0:
-            return number, task_id, run_status
+            return number, task_id, instance_name, run_status
         source = job_dir / task_id
         destination = run_dir / task_id
         if source.is_dir():
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(source), str(destination))
-        return number, task_id, 0
+            destination.mkdir(parents=True, exist_ok=True)
+            for artifact in source.iterdir():
+                target = destination / artifact.name
+                if target.exists():
+                    raise RuntimeError(
+                        f"Duplicate result artifact while merging {instance_name}: {target}"
+                    )
+                shutil.move(str(artifact), str(target))
+            source.rmdir()
+        return number, task_id, instance_name, 0
 
     def _score_repetition(number: int) -> int:
         run_dir = base / f"run_{number}" if repetitions > 1 else base
@@ -807,29 +846,39 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
             click.echo(f"Scores saved: {score_path}")
         return status
 
-    # Queue task-sized jobs in repetition order. As the first repetition reaches
-    # its tail, jobs from the next repetition immediately occupy freed slots.
+    # Queue instance-sized jobs in repetition order. This keeps all available
+    # slots busy even when one task type has unusually slow instances.
     import concurrent.futures
-    task_statuses: list[tuple[int, str, int]] = []
-    remaining = {number: len(task_ids) for number in range(1, repetitions + 1)}
+    task_statuses: list[tuple[int, str, str, int]] = []
+    remaining = {
+        number: len(instance_jobs) for number in range(1, repetitions + 1)
+    }
     score_statuses: dict[int, int] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=effective_parallel) as pool:
         futures = [
-            pool.submit(_run_task, number, task_id)
+            pool.submit(_run_instance, number, task_id, instance_path)
             for number in range(1, repetitions + 1)
-            for task_id in task_ids
+            for task_id, instance_path in instance_jobs
         ]
         for future in concurrent.futures.as_completed(futures):
-            number, task_id, status = future.result()
-            task_statuses.append((number, task_id, status))
+            number, task_id, instance_name, status = future.result()
+            task_statuses.append((number, task_id, instance_name, status))
             remaining[number] -= 1
             if remaining[number] == 0:
-                if any(s != 0 for n, _, s in task_statuses if n == number):
+                if any(s != 0 for n, _, _, s in task_statuses if n == number):
                     score_statuses[number] = 1
                 else:
                     score_statuses[number] = _score_repetition(number)
-    failed = [(number, task_id, status) for number, task_id, status in task_statuses if status]
-    failed.extend((number, "score", status) for number, status in score_statuses.items() if status)
+    failed = [
+        (number, f"{task_id}/{instance_name}", status)
+        for number, task_id, instance_name, status in task_statuses
+        if status
+    ]
+    failed.extend(
+        (number, "score", status)
+        for number, status in score_statuses.items()
+        if status
+    )
     click.echo(f"Completed {repetitions} independent run+score repetition(s).")
     if failed:
         raise click.ClickException(

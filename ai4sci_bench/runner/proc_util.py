@@ -75,9 +75,16 @@ def run_subprocess_with_graceful_timeout(
         live_path.write_text("", encoding="utf-8")
         def copy_live(source=stream, destination=live_path):
             with destination.open("a", encoding="utf-8") as output:
-                for line in source:
-                    output.write(line)
-                    output.flush()
+                try:
+                    for line in source:
+                        output.write(line)
+                        output.flush()
+                except (ValueError, OSError):
+                    # communicate() may close the pipe while this reader is
+                    # between iterations.  The child output is already
+                    # captured by communicate(); there is nothing left for
+                    # the live-copy thread to recover in this race.
+                    return
         thread = threading.Thread(target=copy_live, daemon=True)
         thread.start()
         threads.append(thread)

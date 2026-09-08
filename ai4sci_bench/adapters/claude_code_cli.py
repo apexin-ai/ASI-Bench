@@ -142,6 +142,18 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         return value
 
     @staticmethod
+    def _partial_messages_enabled() -> bool:
+        """Whether Claude CLI should emit incremental partial messages.
+
+        Keep the benchmark default non-streaming at the Claude CLI layer. The
+        output format remains ``stream-json`` for complete trajectory capture;
+        this switch only controls the optional partial-message protocol.
+        """
+        return os.environ.get("ASIBENCH_CLAUDE_PARTIAL_STREAMING", "0").strip().lower() in {
+            "1", "true", "yes", "on",
+        }
+
+    @staticmethod
     def _resolve_tool_mode(
         tool_mode: str | ToolMode | None,
         allow_external_tools: bool,
@@ -455,6 +467,8 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             "--verbose",
             "--permission-mode", "bypassPermissions",
         ]
+        if self._partial_messages_enabled():
+            cmd.insert(cmd.index("--print"), "--include-partial-messages")
         self._apply_tool_isolation(cmd)
         cmd += ["--", prompt]
         return cmd
@@ -472,6 +486,8 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             "--print",
             "--verbose",
         ]
+        if self._partial_messages_enabled():
+            cmd.insert(cmd.index("--print"), "--include-partial-messages")
         if self.permission_mode:
             cmd += ["--permission-mode", self.permission_mode]
         self._apply_tool_isolation(cmd)

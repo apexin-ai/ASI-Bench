@@ -95,6 +95,17 @@ class TestChatCompletionsRemap:
         kwargs = handler._build_litellm_kwargs({"messages": [], "max_tokens": 8})
         assert kwargs["model"] == "hosted_vllm/deepseek/deepseek-v4-pro"
 
+    def test_proxy_forwards_session_routing_key(self):
+        """All requests handled by one proxy use one router affinity key."""
+        from ai4sci_bench.adapters.api_proxy import _LiteLLMProxyHandler
+        handler = _LiteLLMProxyHandler.__new__(_LiteLLMProxyHandler)
+        handler.litellm_model = "openai/model"
+        handler.litellm_api_base = "http://router/v1"
+        handler.litellm_api_key = "local"
+        handler.routing_key = "task-session-1"
+        kwargs = handler._build_litellm_kwargs({"messages": [], "max_tokens": 8})
+        assert kwargs["extra_headers"] == {"X-SMG-Routing-Key": "task-session-1"}
+
 
 class TestAnthropicTokenRouterRewrites:
     """TokenRouter native Anthropic routes need small model-specific rewrites."""
@@ -398,6 +409,31 @@ class TestProxyThinkingPassthrough:
         sigs = [d["delta"]["signature"] for ev, d in events
                 if ev == "content_block_delta" and d["delta"].get("type") == "signature_delta"]
         assert sigs == ["sig123"]
+
+    def test_reasoning_delta_streamed_as_thinking_delta(self):
+        from ai4sci_bench.adapters.api_proxy import _LiteLLMProxyHandler
+
+        handler = _LiteLLMProxyHandler.__new__(_LiteLLMProxyHandler)
+        handler.litellm_model = "glm-5.2"
+        events = []
+        handler._write_sse = lambda event, data: events.append((event, data))
+        handler.send_response = lambda *args, **kwargs: None
+        handler.send_header = lambda *args, **kwargs: None
+        handler.end_headers = lambda *args, **kwargs: None
+
+        handler._handle_streaming([
+            {"choices": [{"delta": {"role": "assistant", "reasoning_content": "think"}}]},
+            {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+        ], request_id="test-reasoning")
+
+        starts = [d["content_block"]["type"] for ev, d in events
+                  if ev == "content_block_start"]
+        thinking = [d["delta"]["thinking"] for ev, d in events
+                    if ev == "content_block_delta"
+                    and d["delta"].get("type") == "thinking_delta"]
+        assert starts == ["thinking"]
+        assert thinking == ["think"]
+        assert any(ev == "message_stop" for ev, _ in events)
 
 
 class TestClaudeCodeCLIInit:
@@ -1080,6 +1116,21 @@ class TestLiteLLMProxyLifecycle:
         assert data["status"] == "ok"
 
         proxy.stop()
+
+    def test_proxy_uses_instance_routing_key_from_environment(self, monkeypatch):
+        from ai4sci_bench.adapters.api_proxy import LiteLLMProxy
+        monkeypatch.setenv(
+            "ASIBENCH_ROUTING_KEY",
+            "math.demo:math.demo__seed_a:attempt-uuid",
+        )
+        proxy = LiteLLMProxy(model="openai/gpt-4", api_base="http://fake")
+        proxy.start()
+        try:
+            assert proxy._server.RequestHandlerClass.routing_key == (
+                "math.demo:math.demo__seed_a:attempt-uuid"
+            )
+        finally:
+            proxy.stop()
 
     def test_proxy_not_started_raises(self):
         from ai4sci_bench.adapters.api_proxy import LiteLLMProxy
@@ -1891,3 +1942,50 @@ class TestEdgeCases:
             print(f"[OpenAI proxy error test] Structured error: {error_body}")
         finally:
             proxy.stop()
+
+
+class TestStreamingUpstreamTranslation:
+    """Guards on the Anthropic -> chat/completions translation for streaming.
+
+    The chat/completions endpoint rejects Anthropic's object form of
+    ``tool_choice`` outright, so a streamed request has to convert it. Getting
+    the conversion wrong is silent: ``any`` downgraded to ``auto`` still serves
+    traffic, it just lets the model stop instead of requiring a tool call.
+    """
+
+    def test_tool_choice_any_maps_to_required_not_auto(self):
+        from ai4sci_bench.adapters.api_proxy import _anthropic_tool_choice_to_openai
+
+        # Anthropic "any" means "call one of the tools" == OpenAI "required".
+        assert _anthropic_tool_choice_to_openai({"type": "any"}) == "required"
+        assert _anthropic_tool_choice_to_openai({"type": "auto"}) == "auto"
+        assert _anthropic_tool_choice_to_openai({"type": "none"}) == "none"
+
+    def test_tool_choice_named_tool_maps_to_function(self):
+        from ai4sci_bench.adapters.api_proxy import _anthropic_tool_choice_to_openai
+
+        assert _anthropic_tool_choice_to_openai({"type": "tool", "name": "Bash"}) == {
+            "type": "function",
+            "function": {"name": "Bash"},
+        }
+
+    def test_tool_choice_passthrough_for_openai_shapes(self):
+        from ai4sci_bench.adapters.api_proxy import _anthropic_tool_choice_to_openai
+
+        for value in ("auto", "required", "none", None):
+            assert _anthropic_tool_choice_to_openai(value) == value
+
+    def test_streaming_and_blocking_budgets_differ(self, monkeypatch):
+        """httpx applies the timeout per read, so the two paths need different
+        budgets: idle detection on a stream, whole-generation on a blocking
+        call."""
+        from ai4sci_bench.adapters import api_proxy
+
+        monkeypatch.delenv("ASIBENCH_STREAM_IDLE_TIMEOUT_SECONDS", raising=False)
+        monkeypatch.delenv("ASIBENCH_BLOCKING_TIMEOUT_SECONDS", raising=False)
+        streaming = api_proxy._upstream_timeout_seconds(True)
+        blocking = api_proxy._upstream_timeout_seconds(False)
+        assert blocking > streaming
+
+        monkeypatch.setenv("ASIBENCH_BLOCKING_TIMEOUT_SECONDS", "1234")
+        assert api_proxy._upstream_timeout_seconds(False) == 1234.0

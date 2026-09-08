@@ -120,6 +120,45 @@ class TestRunSandboxAvailability:
         assert all("--parallel" in c and c[c.index("--parallel") + 1] == "1" for c in run_calls)
         assert len({c[c.index("--output-dir") + 1] for c in run_calls}) == 6
 
+    def test_run_score_schedules_each_instance_independently(self, monkeypatch, tmp_path):
+        calls = []
+        tasks_dir = tmp_path / "tasks"
+        instances_dir = tmp_path / "instances"
+        task_dir = tasks_dir / "math" / "demo"
+        task_dir.mkdir(parents=True)
+        (task_dir / "task_meta.yaml").write_text(
+            "id: math.demo\nstatus: final\n", encoding="utf-8"
+        )
+        for seed in ("seed_a", "seed_b"):
+            (instances_dir / f"math.demo__{seed}").mkdir(parents=True)
+
+        def fake_run(cmd, **kwargs):
+            calls.append((cmd, kwargs))
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr("ai4sci_bench.cli.subprocess.run", fake_run)
+        result = CliRunner().invoke(cli, [
+            "run-score", "--instances-dir", str(instances_dir),
+            "--tasks-dir", str(tasks_dir), "--repetitions", "3",
+            "--parallel", "10", "--agent", "direct_llm",
+            "--output-dir", str(tmp_path / "out"),
+        ])
+        assert result.exit_code == 0, result.output
+
+        run_calls = [(cmd, kwargs) for cmd, kwargs in calls if cmd[3] == "run"]
+        score_calls = [(cmd, kwargs) for cmd, kwargs in calls if cmd[3] == "score"]
+        assert len(run_calls) == 6
+        assert len(score_calls) == 3
+        assert len({cmd[cmd.index("--output-dir") + 1] for cmd, _ in run_calls}) == 6
+        routing_keys = [kwargs["env"]["ASIBENCH_ROUTING_KEY"] for _, kwargs in run_calls]
+        assert len(set(routing_keys)) == 6
+        assert all("math.demo__seed_" in key for key in routing_keys)
+        for cmd, _ in run_calls:
+            single_root = Path(cmd[cmd.index("--instances-dir") + 1])
+            entries = list(single_root.iterdir())
+            assert len(entries) == 1
+            assert entries[0].is_symlink()
+
     @pytest.mark.parametrize("command", ["score", "run-score", "benchflow-score"])
     def test_scoring_help_exposes_runtime_judge_configuration(self, command):
         result = CliRunner().invoke(cli, [command, "--help"])

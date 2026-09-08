@@ -636,6 +636,9 @@ class TestClaudeCommandVerification:
                 None,
             )
         assert "--max-turns" not in cmd
+        # Partial messages are opt-in via ASIBENCH_CLAUDE_PARTIAL_STREAMING;
+        # the default keeps stream-json without the incremental protocol.
+        assert "--include-partial-messages" not in cmd
 
     def test_claude_os_cmd_no_max_turns_flag(self):
         from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
@@ -646,6 +649,7 @@ class TestClaudeCommandVerification:
             (ws / "prompt.md").write_text("test")
             cmd = adapter._build_os_agent_cmd(ws)
         assert "--max-turns" not in cmd
+        assert "--include-partial-messages" not in cmd
 
     def test_claude_init_rejects_max_turns_param(self):
         from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter

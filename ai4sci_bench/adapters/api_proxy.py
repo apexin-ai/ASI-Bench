@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import http.server
 import json
+import socket
 import logging
 import os
 from pathlib import Path
@@ -36,6 +37,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -290,6 +292,62 @@ def _format_tool_result_as_text(block: dict[str, Any]) -> str:
     if block.get("is_error"):
         return f"Runtime observation for the prior tool execution (error):\n{content_text}"
     return f"Runtime observation for the prior tool execution:\n{content_text}"
+
+
+def _anthropic_messages_to_openai_standard(body: dict[str, Any]) -> list[dict[str, Any]]:
+    """Translate Anthropic Messages content to standard OpenAI chat roles."""
+    messages: list[dict[str, Any]] = []
+    system = body.get("system")
+    if isinstance(system, list):
+        system = "\n".join(str(b.get("text", "")) for b in system
+                           if isinstance(b, dict) and b.get("type") == "text")
+    if system:
+        messages.append({"role": "system", "content": str(system)})
+    for message in body.get("messages", []):
+        if not isinstance(message, dict):
+            continue
+        role, content = message.get("role"), message.get("content")
+        if isinstance(content, str):
+            messages.append({"role": role, "content": content})
+            continue
+        if not isinstance(content, list):
+            messages.append({"role": role, "content": str(content)})
+            continue
+        if role == "assistant":
+            text: list[str] = []
+            calls: list[dict[str, Any]] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    text.append(str(block.get("text", "")))
+                elif block.get("type") == "tool_use":
+                    calls.append({"id": str(block.get("id", "")), "type": "function",
+                                  "function": {"name": str(block.get("name", "")),
+                                  "arguments": json.dumps(block.get("input", {}), ensure_ascii=False)}})
+            item: dict[str, Any] = {"role": "assistant", "content": "\n".join(text) or None}
+            if calls:
+                item["tool_calls"] = calls
+            messages.append(item)
+        else:
+            text: list[str] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    text.append(str(block.get("text", "")))
+                elif block.get("type") == "tool_result":
+                    if text:
+                        messages.append({"role": "user", "content": "\n".join(text)})
+                        text = []
+                    result = block.get("content", "")
+                    if isinstance(result, list):
+                        result = "\n".join(str(x.get("text", "")) if isinstance(x, dict) else str(x) for x in result)
+                    messages.append({"role": "tool", "tool_call_id": str(block.get("tool_use_id", "")),
+                                     "content": str(result)})
+            if text:
+                messages.append({"role": "user", "content": "\n".join(text)})
+    return messages
 
 
 def _attach_gemini_tool_thought_signatures(
@@ -600,6 +658,75 @@ def to_chat_completions_model(model: str) -> str:
     return model
 
 
+def _anthropic_tool_choice_to_openai(tool_choice: Any) -> Any:
+    """Translate an Anthropic ``tool_choice`` to its OpenAI equivalent.
+
+    The chat/completions endpoint rejects Anthropic's object form outright
+    (SGLang answers 400 ``ToolChoice.function: Field required``), so a request
+    forwarded there has to be converted rather than passed through.  Anthropic
+    ``any`` means "call one of the tools", which is OpenAI ``required`` — not
+    ``auto``, which lets the model answer without calling anything and is a
+    materially different instruction.  Mirrors litellm's own
+    ``translate_anthropic_tool_choice_to_openai``.
+    """
+    if not isinstance(tool_choice, dict):
+        return tool_choice
+    kind = tool_choice.get("type")
+    if kind == "any":
+        return "required"
+    if kind == "auto":
+        return "auto"
+    if kind == "none":
+        return "none"
+    if kind == "tool" and tool_choice.get("name"):
+        return {"type": "function", "function": {"name": str(tool_choice["name"])}}
+    return "auto"
+
+
+def _upstream_timeout_seconds(real_streaming: bool) -> float:
+    """Read timeout for the upstream call, in seconds.
+
+    litellm falls back to 600s and httpx applies the value per read operation,
+    so the same number means opposite things on the two paths.  While a
+    response is streamed every chunk resets the clock, making it an idle
+    timeout that a long generation never trips.  On a non-streamed call the
+    whole body is a single read, so it caps total generation time instead — and
+    a max-effort reasoning turn runs well past 600s.  That is why non-streamed
+    calls time out while streamed ones of the same length succeed, so the two
+    paths get separate budgets: tight on a stream to surface a stalled
+    upstream quickly, generous on a blocking call to fit a full output budget.
+    """
+    if real_streaming:
+        name, default = "ASIBENCH_STREAM_IDLE_TIMEOUT_SECONDS", 600.0
+    else:
+        name, default = "ASIBENCH_BLOCKING_TIMEOUT_SECONDS", 3600.0
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _stream_retry_attempts() -> int:
+    """Total attempts for a streamed upstream call, retries included.
+
+    A stream can die mid-response (observed as httpcore ReadError "[Errno 9]
+    Bad file descriptor").  Retrying here is worth doing because the CLI's own
+    retry drops to a non-streamed request, which then has to fit the whole
+    generation inside one read and reliably times out on a long reasoning turn.
+    Only replays that emitted nothing are eligible; see ``_handle_streaming``.
+    """
+    raw = os.getenv("ASIBENCH_STREAM_RETRY_ATTEMPTS", "").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 3
+    return value if value >= 1 else 3
+
+
 class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
     """HTTP handler that bridges Anthropic Messages API to litellm."""
 
@@ -607,7 +734,18 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
     litellm_model: str
     litellm_api_base: str | None
     litellm_api_key: str | None
+    routing_key: str | None = None
     supports_image_input: bool = False
+    # request_id -> routing_key, for requests whose handler thread never
+    # returned.  ``LiteLLMProxy.stop`` reports the leftovers, which is the only
+    # way a hung thread (killed silently as a daemon at process exit) shows up.
+    _inflight: dict[str, str] = {}
+
+    @staticmethod
+    def _real_streaming_enabled() -> bool:
+        """Return whether stream requests should be forwarded upstream as streams."""
+        value = os.getenv("ASIBENCH_REAL_STREAMING_PROXY", "1").strip().lower()
+        return value not in {"0", "false", "no", "off"}
 
     def do_POST(self) -> None:
         if "/v1/messages" not in self.path:
@@ -630,26 +768,65 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
             supports_image_input=self.supports_image_input,
         )
         is_stream = body.get("stream", False)
+        real_streaming = is_stream and self._real_streaming_enabled()
+        request_id = self.headers.get("x-request-id") or f"proxy-{uuid.uuid4().hex[:12]}"
 
         kwargs = self._build_litellm_kwargs(body)
+        kwargs["timeout"] = _upstream_timeout_seconds(real_streaming)
+        type(self)._inflight[request_id] = self.routing_key or ""
+        logger.warning(
+            "litellm proxy request_start id=%s stream=%s real_stream=%s model=%s "
+            "max_tokens=%s timeout=%ss routing_key=%s",
+            request_id, is_stream, real_streaming, self.litellm_model,
+            kwargs.get("max_tokens"), kwargs["timeout"], self.routing_key or "",
+        )
+        if real_streaming and "tool_choice" in kwargs:
+            kwargs["tool_choice"] = _anthropic_tool_choice_to_openai(kwargs["tool_choice"])
+        if real_streaming:
+            # The OpenAI completion endpoint requires OpenAI message roles;
+            # translate Anthropic tool_result blocks before forwarding.
+            kwargs["messages"] = _anthropic_messages_to_openai_standard(body)
 
-        try:
-            if is_stream:
-                # Keep the upstream request streaming.  The old implementation
-                # waited for the complete generation and only then synthesized
-                # SSE, which inflated TTFT and caused clients to disconnect.
-                import litellm
-                kwargs["stream"] = True
-                response = litellm.completion(**kwargs)
-            else:
-                response = self._call_litellm_anthropic(kwargs)
-        except Exception as e:
-            logger.exception("litellm proxy: upstream call failed")
-            self._send_anthropic_error(502, f"Upstream error: {type(e).__name__}: {e}")
-            return
+        attempts = _stream_retry_attempts() if real_streaming else 1
+        for attempt in range(1, attempts + 1):
+            try:
+                if real_streaming:
+                    kwargs["stream"] = True
+                    import litellm
+                    response = litellm.completion(**kwargs)
+                elif is_stream:
+                    # Compatibility mode: retain the original non-streaming
+                    # Anthropic call and synthesize SSE locally below.
+                    kwargs["stream"] = False
+                    response = self._call_litellm_anthropic(kwargs)
+                else:
+                    response = self._call_litellm_anthropic(kwargs)
+            except Exception as e:
+                logger.exception("litellm proxy: upstream call failed")
+                if real_streaming and attempt < attempts:
+                    logger.warning("litellm proxy stream_retry id=%s attempt=%d/%d reason=call_failed",
+                                   request_id, attempt, attempts)
+                    continue
+                type(self)._inflight.pop(request_id, None)
+                self._send_anthropic_error(502, f"Upstream error: {type(e).__name__}: {e}")
+                return
 
+            if not real_streaming:
+                break
+
+            outcome = self._handle_streaming(response, request_id=request_id)
+            # Only a stream that died before any SSE reached the client can be
+            # replayed; once deltas are out, a second attempt would duplicate
+            # content the client has already committed to its transcript.
+            if outcome != "failed_before_write" or attempt >= attempts:
+                return
+            logger.warning("litellm proxy stream_retry id=%s attempt=%d/%d reason=%s",
+                           request_id, attempt, attempts, outcome)
+            type(self)._inflight[request_id] = self.routing_key or ""
+
+        type(self)._inflight.pop(request_id, None)
         if is_stream:
-            self._handle_streaming(response)
+            self._handle_synthetic_streaming(response)
         else:
             self._handle_non_streaming(response)
 
@@ -691,6 +868,11 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
             kwargs["api_base"] = self.litellm_api_base
         if self.litellm_api_key:
             kwargs["api_key"] = self.litellm_api_key
+        if self.routing_key:
+            # Keep every turn from one CLI agent session on the same SGLang
+            # worker. The router uses this header only for placement; it is
+            # not included in the model prompt.
+            kwargs["extra_headers"] = {"X-SMG-Routing-Key": self.routing_key}
 
         for key in (
             "system", "temperature", "top_p", "top_k",
@@ -771,12 +953,20 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                 btype = block.get("type", "text")
 
                 if btype == "tool_use":
+                    # Forward the tool call as the model issued it.  A previous
+                    # revision rewrote Bash inputs down to ``command`` alone and
+                    # dropped the block when that was empty, which silently
+                    # discarded the model's ``timeout`` and ``run_in_background``
+                    # arguments and hid whole tool calls from the CLI — and only
+                    # on this path, so the two transports ran different agents.
+                    tool_input = block.get("input", {})
+                    tool_name = str(block.get("name", ""))
                     self._write_sse("content_block_start", {
                         "type": "content_block_start",
                         "index": idx,
-                        "content_block": {"type": "tool_use", "id": block.get("id", f"toolu_{idx}"), "name": block.get("name", ""), "input": {}},
+                        "content_block": {"type": "tool_use", "id": block.get("id", f"toolu_{idx}"), "name": tool_name, "input": {}},
                     })
-                    input_json = json.dumps(block.get("input", {}), default=str)
+                    input_json = json.dumps(tool_input, default=str)
                     self._write_sse("content_block_delta", {
                         "type": "content_block_delta",
                         "index": idx,
@@ -836,27 +1026,119 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
             })
 
             self._write_sse("message_stop", {"type": "message_stop"})
+            # Keep the HTTP connection reusable for Claude's follow-up
+            # requests (session title and tool-result turns).
+            self.close_connection = True
 
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception:
             logger.exception("litellm proxy: synthetic streaming error")
 
-    def _handle_streaming(self, response: Any) -> None:
-        """Translate LiteLLM OpenAI chunks to Anthropic SSE immediately."""
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
-        self.send_header("X-Accel-Buffering", "no")
-        self.end_headers()
+    def _handle_streaming(self, response: Any, *, request_id: str = "") -> str:
+        """Translate LiteLLM OpenAI chunks to Anthropic SSE immediately.
+
+        Returns an outcome tag.  ``failed_before_write`` means the stream died
+        without anything reaching the client, so the caller may safely retry;
+        every other failure has already emitted SSE and must not be replayed.
+        """
         started = False
+        outcome = "unknown"
         index = 0
+        active_blocks: dict[int, str] = {}
+        tool_block_indices: dict[int, int] = {}
+        pending_tools: dict[int, dict[str, Any]] = {}
+        reasoning_block_index: int | None = None
+        final_stop_reason = "end_turn"
+        sse_buffer = b""
+        saw_terminal = False
+        item_count = 0
+        byte_count = 0
+
+        def start_block(block_index: int, block_type: str, block: dict[str, Any]) -> None:
+            if block_index in active_blocks:
+                return
+            active_blocks[block_index] = block_type
+            self._write_sse("content_block_start", {
+                "type": "content_block_start", "index": block_index,
+                "content_block": block,
+            })
+
+        def stop_blocks() -> None:
+            for block_index in list(active_blocks):
+                self._write_sse("content_block_stop", {
+                    "type": "content_block_stop", "index": block_index,
+                })
+                del active_blocks[block_index]
+
         try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
             for item in response:
-                chunk = item.model_dump() if hasattr(item, "model_dump") else item
-                if not isinstance(chunk, dict):
-                    chunk = dict(chunk)
+                item_count += 1
+                # LiteLLM's Anthropic adapter may already yield wire-format
+                # SSE bytes. Forward them unchanged instead of treating them
+                # as OpenAI response objects.
+                if isinstance(item, (bytes, bytearray)):
+                    byte_count += len(item)
+                    sse_buffer += bytes(item)
+                    if b"\n\n" not in sse_buffer:
+                        continue
+                    raw, sse_buffer = sse_buffer.split(b"\n\n", 1)
+                    raw += b"\n\n"
+                    out_lines = []
+                    for line in raw.splitlines(keepends=True):
+                        if not line.endswith(b"\n"):
+                            line += b"\n"
+                        # LiteLLM can emit the SSE event label as a separate
+                        # frame. Claude's stream parser expects JSON data
+                        # frames, so omit orphan labels and retain data.
+                        if line.startswith(b"event:"):
+                            continue
+                        if line.startswith(b"data: "):
+                            try:
+                                payload = json.loads(line[6:])
+                                if payload.get("type") == "message_stop":
+                                    saw_terminal = True
+                                if payload.get("type") == "message_delta" and (
+                                    payload.get("delta", {}).get("stop_reason")
+                                ):
+                                    saw_terminal = True
+                                if payload.get("type") == "content_block_delta":
+                                    idx = int(payload.get("index", 0))
+                                line = b"data: " + json.dumps(payload, default=str).encode() + b"\n"
+                            except (json.JSONDecodeError, UnicodeDecodeError):
+                                pass
+                        out_lines.append(line)
+                    self.wfile.write(b"".join(out_lines))
+                    self.wfile.flush()
+                    continue
+                if isinstance(item, str) and item.startswith("event:"):
+                    self.wfile.write(item.encode())
+                    self.wfile.flush()
+                    continue
+                if isinstance(item, dict):
+                    chunk = item
+                elif hasattr(item, "model_dump"):
+                    chunk = item.model_dump()
+                elif hasattr(item, "dict"):
+                    chunk = item.dict()
+                elif hasattr(item, "choices"):
+                    chunk = {
+                        "id": getattr(item, "id", "msg_proxy"),
+                        "model": getattr(item, "model", self.litellm_model),
+                        "choices": getattr(item, "choices", []),
+                    }
+                else:
+                    try:
+                        chunk = dict(item)
+                    except (TypeError, ValueError):
+                        logger.warning("litellm proxy: ignoring unsupported stream item %r", item)
+                        continue
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
@@ -872,37 +1154,138 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                     started = True
                 reasoning = delta.get("reasoning_content") or delta.get("reasoning")
                 if reasoning:
-                    self._write_sse("content_block_start", {"type": "content_block_start", "index": index,
-                        "content_block": {"type": "thinking", "thinking": ""}})
-                    self._write_sse("content_block_delta", {"type": "content_block_delta", "index": index,
-                        "delta": {"type": "thinking_delta", "thinking": reasoning}})
+                    # Preserve reasoning in the same Anthropic shape emitted by
+                    # the non-streaming adapter.  Dropping reasoning deltas can
+                    # leave Claude with an empty assistant message (and no
+                    # tool call), which is serialized as a completed run with
+                    # no task outputs.
+                    if reasoning_block_index is None:
+                        while index in active_blocks:
+                            index += 1
+                        reasoning_block_index = index
+                        start_block(reasoning_block_index, "thinking", {
+                            "type": "thinking", "thinking": "",
+                        })
+                    self._write_sse("content_block_delta", {
+                        "type": "content_block_delta",
+                        "index": reasoning_block_index,
+                        "delta": {"type": "thinking_delta", "thinking": str(reasoning)},
+                    })
                 text = delta.get("content")
                 if text:
-                    self._write_sse("content_block_start", {"type": "content_block_start", "index": index,
-                        "content_block": {"type": "text", "text": ""}})
+                    if index not in active_blocks:
+                        start_block(index, "text", {"type": "text", "text": ""})
                     self._write_sse("content_block_delta", {"type": "content_block_delta", "index": index,
                         "delta": {"type": "text_delta", "text": text}})
                 tool_calls = delta.get("tool_calls") or []
                 for tool in tool_calls:
+                    source_index = int(tool.get("index", 0) or 0)
+                    if source_index in tool_block_indices:
+                        block_index = tool_block_indices[source_index]
+                    else:
+                        while index in active_blocks:
+                            index += 1
+                        block_index = index
+                        tool_block_indices[source_index] = block_index
+                        index += 1
                     function = tool.get("function") or {}
-                    self._write_sse("content_block_start", {"type": "content_block_start", "index": index,
-                        "content_block": {"type": "tool_use", "id": tool.get("id", f"toolu_{index}"),
-                                           "name": function.get("name", ""), "input": {}}})
+                    pending = pending_tools.setdefault(source_index, {
+                        "id": tool.get("id"), "name": "", "arguments": "", "started": False,
+                    })
+                    if tool.get("id"):
+                        pending["id"] = tool["id"]
+                    if function.get("name"):
+                        pending["name"] += str(function["name"])
                     if function.get("arguments"):
-                        self._write_sse("content_block_delta", {"type": "content_block_delta", "index": index,
-                            "delta": {"type": "input_json_delta", "partial_json": function["arguments"]}})
-                    index += 1
+                        pending["arguments"] += str(function["arguments"])
+                    if not pending["started"] and pending["name"]:
+                        pending["started"] = True
+                        start_block(block_index, "tool_use", {
+                            "type": "tool_use", "id": pending["id"] or f"toolu_{block_index}",
+                            "name": pending["name"], "input": {},
+                        })
+                    if pending["started"] and function.get("arguments"):
+                        self._write_sse("content_block_delta", {"type": "content_block_delta", "index": block_index,
+                            "delta": {"type": "input_json_delta", "partial_json": str(function["arguments"])}})
                 finish = choice.get("finish_reason")
                 if finish:
-                    self._write_sse("message_delta", {"type": "message_delta",
-                        "delta": {"stop_reason": "tool_use" if finish == "tool_calls" else "end_turn",
-                                   "stop_sequence": None}, "usage": {"output_tokens": 0}})
+                    saw_terminal = True
+                    # Mirror the non-streaming mapping in
+                    # ``_openai_response_to_anthropic``. Collapsing ``length``
+                    # into ``end_turn`` hides output-budget truncation from the
+                    # CLI, which then treats a thinking-only reply as a normal
+                    # finished turn and ends the session with no task outputs.
+                    if finish == "tool_calls":
+                        final_stop_reason = "tool_use"
+                    elif finish == "length":
+                        final_stop_reason = "max_tokens"
+                    elif finish == "content_filter":
+                        final_stop_reason = "stop_sequence"
+                    else:
+                        final_stop_reason = "end_turn"
+            if sse_buffer:
+                logger.warning(
+                    "litellm proxy stream_incomplete_tail id=%s bytes=%d tail_bytes=%d",
+                    request_id, byte_count, len(sse_buffer),
+                )
+            if not saw_terminal:
+                logger.error(
+                    "litellm proxy stream_incomplete id=%s items=%d bytes=%d started=%s",
+                    request_id, item_count, byte_count, started,
+                )
+                if started:
+                    stop_blocks()
+                self._write_sse("error", {"type": "error", "error": {
+                    "type": "api_error",
+                    "message": "Upstream stream ended before a terminal message_stop",
+                }})
+                self.close_connection = True
+                outcome = "incomplete_after_write" if started else "failed_before_write"
+                return outcome
+            logger.warning(
+                "litellm proxy stream_complete id=%s items=%d bytes=%d stop_reason=%s",
+                request_id, item_count, byte_count, final_stop_reason,
+            )
             if started:
+                stop_blocks()
+                self._write_sse("message_delta", {"type": "message_delta",
+                    "delta": {"stop_reason": final_stop_reason, "stop_sequence": None},
+                    "usage": {"output_tokens": 0}})
                 self._write_sse("message_stop", {"type": "message_stop"})
+                self.close_connection = True
+            outcome = "ok"
         except (BrokenPipeError, ConnectionResetError):
             logger.info("litellm proxy: downstream client disconnected during streaming")
+            outcome = "client_gone"
         except Exception:
-            logger.exception("litellm proxy: streaming translation error")
+            # A mid-stream upstream failure (seen in the wild as httpcore
+            # ReadError "[Errno 9] Bad file descriptor") used to be logged and
+            # nothing more, so the client just saw the connection stop with no
+            # HTTP status and no SSE error.  Report it the same way an
+            # early-terminating stream is reported, so the caller can retry
+            # against a real error instead of guessing.
+            logger.exception("litellm proxy stream_failed id=%s items=%d bytes=%d started=%s",
+                             request_id, item_count, byte_count, started)
+            outcome = "failed_after_write" if started else "failed_before_write"
+            try:
+                if started:
+                    stop_blocks()
+                self._write_sse("error", {"type": "error", "error": {
+                    "type": "api_error",
+                    "message": "Upstream stream failed mid-response",
+                }})
+            except (BrokenPipeError, ConnectionResetError):
+                outcome = "client_gone"
+            self.close_connection = True
+        finally:
+            # Without this, a request that never reaches any of the branches
+            # above (a handler thread still blocked when the process exits)
+            # leaves nothing but its request_start line, which makes the
+            # failure impossible to attribute after the fact.
+            type(self)._inflight.pop(request_id, None)
+            logger.warning("litellm proxy stream_outcome id=%s outcome=%s items=%d",
+                           request_id, outcome, item_count)
+        return outcome
 
     def _write_sse(self, event: str, data: dict) -> None:
         line = f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
@@ -971,6 +1354,7 @@ class LiteLLMProxy:
         self.supports_image_input = supports_image_input
         self._server: http.server.HTTPServer | None = None
         self._thread: threading.Thread | None = None
+        self._handler_cls: type | None = None
 
     @property
     def local_url(self) -> str:
@@ -980,15 +1364,40 @@ class LiteLLMProxy:
 
     def start(self) -> str:
         """Start the proxy in a daemon thread. Returns the local URL."""
-        handler = type("Handler", (_LiteLLMProxyHandler,), {
+        # Proxy diagnostics need a handler of their own.  ``logger.setLevel``
+        # alone does not publish them: the benchmark CLI installs its handler on
+        # the root logger at WARNING, and a record still has to clear the
+        # handler's level after it clears the logger's.  That is why the
+        # per-request INFO diagnostics never reached the pod log, which in turn
+        # hid every mid-stream client disconnect.
+        proxy_log_level = os.getenv("ASIBENCH_PROXY_LOG_LEVEL", "INFO").upper()
+        level = getattr(logging, proxy_log_level, logging.INFO)
+        logger.setLevel(level)
+        if not any(getattr(h, "_asibench_proxy", False) for h in logger.handlers):
+            handler = logging.StreamHandler()
+            handler.setLevel(level)
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            handler._asibench_proxy = True  # type: ignore[attr-defined]
+            logger.addHandler(handler)
+        # Emit through this handler only, so the root handler cannot duplicate
+        # records that do clear its level.
+        logger.propagate = False
+        routing_key = os.getenv("ASIBENCH_ROUTING_KEY") or uuid.uuid4().hex
+        handler_cls = type("Handler", (_LiteLLMProxyHandler,), {
             "litellm_model": self.model,
             "litellm_api_base": self.api_base,
             "litellm_api_key": self.api_key,
+            "routing_key": routing_key,
             "supports_image_input": self.supports_image_input,
+            # Per-proxy, not inherited: one process runs many proxies at the
+            # parallelism the benchmark is launched with, and a shared dict
+            # would make each one report the others' requests.
+            "_inflight": {},
         })
         self._server = http.server.ThreadingHTTPServer(
-            ("127.0.0.1", self._port), handler,
+            ("127.0.0.1", self._port), handler_cls,
         )
+        self._handler_cls = handler_cls
         self._thread = threading.Thread(
             target=self._server.serve_forever, daemon=True,
         )
@@ -998,6 +1407,13 @@ class LiteLLMProxy:
         return url
 
     def stop(self) -> None:
+        leftover = dict(getattr(self._handler_cls, "_inflight", {}) or {})
+        if leftover:
+            # Handler threads are daemons, so anything still blocked here is
+            # about to be killed without reaching its own logging.  Name the
+            # requests now or they leave only a request_start line behind.
+            logger.error("litellm proxy stopped with %d request(s) still in flight: %s",
+                         len(leftover), ", ".join(sorted(leftover)))
         if self._server is not None:
             self._server.shutdown()
             self._server = None
@@ -1303,7 +1719,7 @@ class _TokenRouterOpenAIChatProxyHandler(_LiteLLMProxyHandler):
         return {
             "type": "tool_use",
             "id": tool_id,
-            "name": function.get("name", ""),
+            "name": str(function.get("name", "")),
             "input": tool_input,
         }
 

@@ -137,12 +137,6 @@ def score_seed31415_results(
                 f"{reference_dir}. Re-run `asibench task pull --repo seed31415`."
             )
 
-        output_dir = result_path.parent / f"{result_path.stem}.outputs"
-        if not output_dir.is_dir():
-            raise LocalScoringError(
-                f"Persisted output directory not found for {result_path.name}: {output_dir}"
-            )
-
         try:
             metadata = loader.load_task_by_id(task_id)
         except ValueError as exc:
@@ -152,6 +146,45 @@ def score_seed31415_results(
             raise LocalScoringError(
                 f"Task {task_id} has no public evaluation contract under {tasks_root}"
             )
+        output_dir = result_path.parent / f"{result_path.stem}.outputs"
+        # Treat an existing but empty directory as missing. The runner creates
+        # it before handing control to the agent, so ``is_dir()`` alone passes
+        # for a run that wrote nothing and the failure only resurfaces deeper
+        # in scoring, where it is harder to attribute.
+        if not output_dir.is_dir() or not any(output_dir.iterdir()):
+            status = str(source.get("status") or (source.get("agent_output") or {}).get("status") or "")
+            max_score = float(
+                sum(float(config.get("weight", 1.0)) for config in evaluation.get("scoring", []))
+            )
+            # A run that persisted nothing earned nothing, whatever status it
+            # reported. Scoring it zero -- rather than raising -- keeps the
+            # denominator equal to the instances actually run, and stops one
+            # such result from aborting the pass and discarding every score
+            # already computed. ``completed`` lands here when a turn was
+            # truncated mid-thinking: the agent never emitted a tool call, so
+            # the session ended cleanly with no outputs written.
+            scored_results.append({
+                "source_result": str(result_path.relative_to(results_root)),
+                "task_id": task_id,
+                "instance_id": instance_id,
+                "prompt_level": str(source.get("prompt_level") or ""),
+                "attempt": int(source.get("attempt", 1)),
+                "hard_gates_passed": False,
+                "soft_gate_failures": 0,
+                "gate_results": [],
+                "score_results": [{
+                    "scorer_name": "execution_failure",
+                    "score": 0.0,
+                    "max_score": max_score,
+                    "passed": False,
+                    "message": f"Execution status {status or 'unknown'}; missing outputs scored as zero.",
+                    "details": {"missing_outputs": True, "execution_status": status},
+                }],
+                "final_score": 0.0,
+                "max_score": max_score,
+                "scorer_internal_error": False,
+            })
+            continue
         task_dir = Path(metadata["_task_dir"])
         try:
             load_custom_scorer(task_dir)
