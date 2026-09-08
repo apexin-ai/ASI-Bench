@@ -10,8 +10,10 @@ Tests are organized in three tiers:
 """
 
 import json
+import logging
 import os
 import threading
+import types
 import time
 import urllib.request
 import urllib.error
@@ -1989,3 +1991,44 @@ class TestStreamingUpstreamTranslation:
 
         monkeypatch.setenv("ASIBENCH_BLOCKING_TIMEOUT_SECONDS", "1234")
         assert api_proxy._upstream_timeout_seconds(False) == 1234.0
+
+
+class TestNonStreamingTerminalLogging:
+    """Every non-streaming request must leave a terminal line in the proxy log.
+
+    Without it, a reply that dies on the way back to the client is invisible on
+    the proxy side and only inferrable from the client's ConnectionResetError.
+    """
+
+    @staticmethod
+    def _handler(write):
+        from ai4sci_bench.adapters.api_proxy import _LiteLLMProxyHandler
+
+        handler = _LiteLLMProxyHandler.__new__(_LiteLLMProxyHandler)
+        handler.send_response = lambda *a, **k: None
+        handler.send_header = lambda *a, **k: None
+        handler.end_headers = lambda *a, **k: None
+        handler.wfile = types.SimpleNamespace(write=write)
+        return handler
+
+    def test_success_logs_outcome_with_stop_reason_and_usage(self, caplog):
+        handler = self._handler(lambda payload: None)
+        with caplog.at_level(logging.WARNING, logger="ai4sci_bench.adapters.api_proxy"):
+            handler._handle_non_streaming(
+                {"stop_reason": "max_tokens", "usage": {"output_tokens": 7}},
+                request_id="req-1",
+            )
+        line = "\n".join(caplog.messages)
+        assert "non_streaming_outcome id=req-1 outcome=ok" in line
+        assert "stop_reason=max_tokens" in line
+        assert "output_tokens" in line
+
+    def test_broken_pipe_logs_client_gone(self, caplog):
+        def boom(_payload):
+            raise BrokenPipeError("client hung up")
+
+        handler = self._handler(boom)
+        with caplog.at_level(logging.WARNING, logger="ai4sci_bench.adapters.api_proxy"):
+            with pytest.raises(BrokenPipeError):
+                handler._handle_non_streaming({"stop_reason": "end_turn"}, request_id="req-2")
+        assert "non_streaming_outcome id=req-2 outcome=client_gone" in "\n".join(caplog.messages)

@@ -828,7 +828,7 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
         if is_stream:
             self._handle_synthetic_streaming(response)
         else:
-            self._handle_non_streaming(response)
+            self._handle_non_streaming(response, request_id=request_id)
 
     def do_GET(self) -> None:
         self.send_response(200)
@@ -902,20 +902,50 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
 
         return kwargs
 
-    def _handle_non_streaming(self, response: Any) -> None:
+    def _handle_non_streaming(self, response: Any, *, request_id: str = "") -> None:
+        # The streaming path logs a terminal ``stream_outcome`` line for every
+        # request; without the same here, a non-streaming request that dies on
+        # the way back to the client leaves no trace in the proxy log at all --
+        # the failure is only inferrable from the client's ConnectionResetError.
+        outcome = "ok"
+        stop_reason = None
+        usage = None
+        resp_json = b""
         try:
-            if isinstance(response, dict):
-                resp_json = json.dumps(response, default=str).encode()
+            try:
+                if isinstance(response, dict):
+                    payload = response
+                else:
+                    payload = dict(response)
+            except (TypeError, ValueError):
+                outcome = "serialize_failed"
+                resp_json = json.dumps({"error": "Failed to serialize response"}).encode()
             else:
-                resp_json = json.dumps(dict(response), default=str).encode()
-        except (TypeError, ValueError):
-            resp_json = json.dumps({"error": "Failed to serialize response"}).encode()
+                stop_reason = payload.get("stop_reason")
+                usage = payload.get("usage")
+                try:
+                    resp_json = json.dumps(payload, default=str).encode()
+                except (TypeError, ValueError):
+                    outcome = "serialize_failed"
+                    resp_json = json.dumps({"error": "Failed to serialize response"}).encode()
 
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(resp_json)))
-        self.end_headers()
-        self.wfile.write(resp_json)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp_json)))
+            self.end_headers()
+            self.wfile.write(resp_json)
+        except (BrokenPipeError, ConnectionResetError):
+            outcome = "client_gone"
+            raise
+        except Exception:
+            outcome = "write_failed"
+            raise
+        finally:
+            logger.warning(
+                "litellm proxy non_streaming_outcome id=%s outcome=%s bytes=%d "
+                "stop_reason=%s usage=%s",
+                request_id, outcome, len(resp_json), stop_reason, usage,
+            )
 
     def _handle_synthetic_streaming(self, response: Any) -> None:
         """Convert a non-streaming response into Anthropic SSE events."""

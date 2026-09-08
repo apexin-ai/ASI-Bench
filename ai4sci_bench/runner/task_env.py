@@ -163,37 +163,75 @@ class TaskEnvironmentManager:
     @contextmanager
     def _acquire_lock(self, lock_path: Path):
         start = time.monotonic()
+        token = uuid.uuid4().hex
+
+        def _timed_out() -> bool:
+            return time.monotonic() - start >= self.LOCK_TIMEOUT_SECONDS
+
         while True:
             try:
                 lock_path.mkdir(parents=True, exist_ok=False)
-                self._write_lock_metadata(lock_path)
-                break
             except FileExistsError:
                 if self._lock_is_stale(lock_path):
                     shutil.rmtree(lock_path, ignore_errors=True)
                     continue
-                if time.monotonic() - start >= self.LOCK_TIMEOUT_SECONDS:
+                if _timed_out():
                     raise TimeoutError(f"Timed out waiting for task env lock: {lock_path}")
                 time.sleep(self.LOCK_POLL_INTERVAL_SECONDS)
+                continue
+
+            # A successful ``mkdir`` is not proof of ownership. ``shutil.rmtree``
+            # is not atomic, so a departing holder's final ``rmdir`` can delete
+            # the directory we just created, and a stale-lock reaper can do the
+            # same. Stamp a token and read it back: if either step disagrees the
+            # lock was never really ours, and we must retry rather than build the
+            # environment unprotected. Previously the metadata write raised
+            # ``FileNotFoundError`` straight out of the context manager and killed
+            # the instance with a zero-second run.
+            try:
+                self._write_lock_metadata(lock_path, token)
+                owned = self._read_lock_token(lock_path) == token
+            except OSError:
+                owned = False
+            if owned:
+                break
+
+            if _timed_out():
+                raise TimeoutError(f"Timed out waiting for task env lock: {lock_path}")
+            time.sleep(self.LOCK_POLL_INTERVAL_SECONDS)
 
         try:
             yield
         finally:
-            shutil.rmtree(lock_path, ignore_errors=True)
+            # Only tear the lock down while it is still ours; if a reaper judged
+            # it stale and handed it to another process, removing it here would
+            # drop that process's protection too.
+            if self._read_lock_token(lock_path) == token:
+                shutil.rmtree(lock_path, ignore_errors=True)
 
-    def _write_lock_metadata(self, lock_path: Path) -> None:
+    def _write_lock_metadata(self, lock_path: Path, token: str) -> None:
         (lock_path / "owner.json").write_text(
             json.dumps(
                 {
                     "pid": os.getpid(),
                     "hostname": socket.gethostname(),
                     "created_at": time.time(),
+                    "token": token,
                 },
                 indent=2,
                 sort_keys=True,
             ),
             encoding="utf-8",
         )
+
+    def _read_lock_token(self, lock_path: Path) -> str | None:
+        """Return the token stamped in the lock, or ``None`` if unreadable."""
+        try:
+            payload = json.loads((lock_path / "owner.json").read_text(encoding="utf-8"))
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+        token = payload.get("token") if isinstance(payload, dict) else None
+        return token if isinstance(token, str) else None
 
     def _lock_is_stale(self, lock_path: Path) -> bool:
         owner_path = lock_path / "owner.json"

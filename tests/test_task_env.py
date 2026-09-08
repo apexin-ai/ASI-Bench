@@ -1,5 +1,6 @@
 """Regression tests for task environments from source and wheel installs."""
 
+import shutil
 from pathlib import Path
 from unittest.mock import patch
 
@@ -75,3 +76,45 @@ def test_runtime_root_falls_back_to_user_config_for_wheel(tmp_path):
         assert resolve_runtime_root() == fallback
 
     assert fallback.is_dir()
+
+
+def test_lock_survives_departing_holder_deleting_the_new_dir(tmp_path):
+    """A stale reaper / departing holder's rmtree must not kill the new holder.
+
+    ``shutil.rmtree`` is not atomic, so its final ``rmdir`` can remove the
+    directory another process just created. The metadata write then failed with
+    ``FileNotFoundError`` straight out of the context manager, aborting the
+    instance with a zero-second run.
+    """
+    manager = TaskEnvironmentManager(tmp_path / "repo", cache_root=tmp_path / "cache")
+    lock_path = manager._lock_path("abc123")
+    manager.LOCK_POLL_INTERVAL_SECONDS = 0
+
+    real_write = manager._write_lock_metadata
+    calls = {"n": 0}
+
+    def flaky_write(path, token):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            shutil.rmtree(path, ignore_errors=True)  # simulate the racing rmdir
+        real_write(path, token)
+
+    with patch.object(manager, "_write_lock_metadata", side_effect=flaky_write):
+        with manager._acquire_lock(lock_path):
+            assert lock_path.is_dir()
+            assert manager._read_lock_token(lock_path) is not None
+
+    assert calls["n"] == 2  # first attempt was retried, not raised
+    assert not lock_path.exists()
+
+
+def test_release_does_not_delete_a_lock_owned_by_someone_else(tmp_path):
+    """If a reaper handed the lock on, releasing ours must leave theirs alone."""
+    manager = TaskEnvironmentManager(tmp_path / "repo", cache_root=tmp_path / "cache")
+    lock_path = manager._lock_path("abc123")
+
+    with manager._acquire_lock(lock_path):
+        manager._write_lock_metadata(lock_path, "someone-elses-token")
+
+    assert lock_path.is_dir()
+    assert manager._read_lock_token(lock_path) == "someone-elses-token"
