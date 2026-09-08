@@ -145,11 +145,14 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
     def _partial_messages_enabled() -> bool:
         """Whether Claude CLI should emit incremental partial messages.
 
-        Keep the benchmark default non-streaming at the Claude CLI layer. The
-        output format remains ``stream-json`` for complete trajectory capture;
-        this switch only controls the optional partial-message protocol.
+        On by default: every cluster evaluation to date has run with
+        ``--include-partial-messages``, and the incremental events are what
+        give the trajectory its per-event timestamps -- the only way to see
+        where an instance actually spent its wall clock. Set
+        ``ASIBENCH_CLAUDE_PARTIAL_STREAMING=0`` to fall back to whole-message
+        events; the output format stays ``stream-json`` either way.
         """
-        return os.environ.get("ASIBENCH_CLAUDE_PARTIAL_STREAMING", "0").strip().lower() in {
+        return os.environ.get("ASIBENCH_CLAUDE_PARTIAL_STREAMING", "1").strip().lower() in {
             "1", "true", "yes", "on",
         }
 

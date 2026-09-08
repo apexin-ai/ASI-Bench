@@ -636,9 +636,10 @@ class TestClaudeCommandVerification:
                 None,
             )
         assert "--max-turns" not in cmd
-        # Partial messages are opt-in via ASIBENCH_CLAUDE_PARTIAL_STREAMING;
-        # the default keeps stream-json without the incremental protocol.
-        assert "--include-partial-messages" not in cmd
+        # Partial messages are on by default; the per-event timestamps they
+        # produce are what make an instance's wall clock attributable.
+        # ASIBENCH_CLAUDE_PARTIAL_STREAMING=0 turns them off.
+        assert "--include-partial-messages" in cmd
 
     def test_claude_os_cmd_no_max_turns_flag(self):
         from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
@@ -649,7 +650,7 @@ class TestClaudeCommandVerification:
             (ws / "prompt.md").write_text("test")
             cmd = adapter._build_os_agent_cmd(ws)
         assert "--max-turns" not in cmd
-        assert "--include-partial-messages" not in cmd
+        assert "--include-partial-messages" in cmd
 
     def test_claude_init_rejects_max_turns_param(self):
         from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
@@ -937,3 +938,13 @@ class TestStdinThreadSafety:
             f2.result()
 
         assert set(captured_inputs) == {"codex_prompt_A", "codex_prompt_B"}
+
+
+def test_partial_messages_can_be_disabled_by_env(monkeypatch):
+    """The default is on; ``0`` is the documented way back to whole messages."""
+    from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
+
+    monkeypatch.setenv("ASIBENCH_CLAUDE_PARTIAL_STREAMING", "0")
+    assert ClaudeCodeCLIAdapter._partial_messages_enabled() is False
+    monkeypatch.delenv("ASIBENCH_CLAUDE_PARTIAL_STREAMING")
+    assert ClaudeCodeCLIAdapter._partial_messages_enabled() is True
