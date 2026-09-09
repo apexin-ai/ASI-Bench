@@ -43,7 +43,7 @@ def test_vector_judge_redacts_key_from_raw_and_parsed_reasoning(tmp_path):
             pred_file="simulation.py",
             ref_file="",
             rubric="score the simulation",
-            model="gpt-5.4",
+            model="gpt-5.5",
             num_judges=1,
             temperature=0.0,
             max_tokens=100,
@@ -85,7 +85,7 @@ def test_strict_gate_redacts_key_from_raw_and_parsed_reasoning(tmp_path):
             pred_dir,
             {
                 "strict_netlist_gate": {
-                    "model": "gpt-5.4",
+                    "model": "gpt-5.5",
                     "num_judges": 1,
                     "api_key": secret,
                     "api_base": "https://judge.example.test/v1",
@@ -112,7 +112,7 @@ def test_metric_trust_report_returns_non_grounded_judge_payload(tmp_path):
         "median_subscores": {metric: 2.0 for metric in custom_scorer.TRUST_METRICS},
         "raw_responses": ["{}"],
         "parsed_responses": [{"score": 12.0, "reasoning": "ok", "subscores": {}}],
-        "model": "gpt-5.4",
+        "model": "gpt-5.5",
     }
 
     with patch.object(custom_scorer, "_call_vector_judges", return_value=vector):
@@ -122,7 +122,7 @@ def test_metric_trust_report_returns_non_grounded_judge_payload(tmp_path):
             {
                 "trust_judge": {
                     "agent": "llm",
-                    "model": "gpt-5.4",
+                    "model": "gpt-5.5",
                     "num_judges": 1,
                 }
             },

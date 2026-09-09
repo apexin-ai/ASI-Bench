@@ -1,7 +1,7 @@
 """
-测试三个模型的 API 可用性：Claude Opus 4.6、GPT-5.4、Gemini 3.1 Pro Preview
+测试三个模型的 API 可用性：Claude Opus 4.6、GPT-5.5、Gemini 3.1 Pro Preview
 
-- GPT-5.4: 通过 OpenAI API 直接调用
+- GPT-5.5: 通过 OpenAI API 直接调用
 - Claude Opus 4.6: 通过 OpenRouter 调用
 - Gemini 3.1 Pro Preview: 通过 OpenRouter 调用
 """
@@ -61,10 +61,10 @@ def _call_model(client: OpenAI, model: str, use_max_completion_tokens: bool = Fa
 
 
 class TestGPT54:
-    """测试 GPT-5.4 (OpenAI API)"""
+    """测试 GPT-5.5 (OpenAI API)"""
 
     def test_gpt54_responds(self, openai_client):
-        content = _call_model(openai_client, "gpt-5.4", use_max_completion_tokens=True)
+        content = _call_model(openai_client, "gpt-5.5", use_max_completion_tokens=True)
         assert "hello" in content.lower()
 
 

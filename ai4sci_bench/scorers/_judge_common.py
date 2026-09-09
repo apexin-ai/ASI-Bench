@@ -87,10 +87,9 @@ def resolve_scorer_api_params(config: dict[str, Any]) -> tuple[str | None, str |
 SUPPORTED_MODELS: dict[str, str] = {
     "gemini-3.1-pro-preview": "gemini/gemini-3.1-pro-preview",
     "claude-opus-4-6": "anthropic/claude-opus-4-6",
-    "gpt-5.4": "openai/gpt-5.4",
     "gpt-5.5": "openai/gpt-5.5",
+    "openrouter/gpt-5.5": "openrouter/openai/gpt-5.5",
     "openrouter/claude-opus-4-6": "openrouter/anthropic/claude-opus-4-6",
-    "openrouter/gpt-5.4": "openrouter/openai/gpt-5.4",
     "openrouter/gemini-3.1-pro-preview": "openrouter/google/gemini-3.1-pro-preview",
 }
 

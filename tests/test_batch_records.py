@@ -131,13 +131,13 @@ class TestBatchRecords:
 
     def test_write_batch_records_reuses_report_dedupe_ignores_workspace_noise_and_tracks_levels(self, tmp_dir):
         results_dir = tmp_dir / "results"
-        task_dir = results_dir / "gpt-5.4" / "physics.test_task"
+        task_dir = results_dir / "gpt-5.5" / "physics.test_task"
         task_dir.mkdir(parents=True)
-        (results_dir / "gpt-5.4" / "run_metadata.json").write_text(json.dumps({
+        (results_dir / "gpt-5.5" / "run_metadata.json").write_text(json.dumps({
             "agent_config": {
                 "agent_name": "direct_llm",
                 "adapter_class": "DirectLLMAdapter",
-                "config": {"model": "openai/gpt-5.4"},
+                "config": {"model": "openai/gpt-5.5"},
             }
         }), encoding="utf-8")
 
@@ -162,7 +162,7 @@ class TestBatchRecords:
             )
         ))
 
-        workspace_dir = results_dir / "gpt-5.4" / "instances" / "inst1" / "workspace_b1"
+        workspace_dir = results_dir / "gpt-5.5" / "instances" / "inst1" / "workspace_b1"
         workspace_dir.mkdir(parents=True)
         (workspace_dir / "task_info.json").write_text(json.dumps({
             "instance_id": "inst1",
@@ -177,10 +177,10 @@ class TestBatchRecords:
         with overview_path.open(newline="", encoding="utf-8") as handle:
             overview_rows = list(csv.DictReader(handle))
         assert len(overview_rows) == 1
-        assert overview_rows[0]["agent_label"] == "gpt-5.4"
+        assert overview_rows[0]["agent_label"] == "gpt-5.5"
         assert overview_rows[0]["agent_name"] == "direct_llm"
         assert overview_rows[0]["adapter_class"] == "DirectLLMAdapter"
-        assert overview_rows[0]["model_name"] == "openai/gpt-5.4"
+        assert overview_rows[0]["model_name"] == "openai/gpt-5.5"
         assert overview_rows[0]["method_group"] == "direct_llm"
         assert overview_rows[0]["n_instances"] == "2"
         assert overview_rows[0]["overall_mean_score"] == "70.0"
@@ -212,7 +212,7 @@ class TestBatchRecords:
             ("b1", "80.0"),
             ("b2", "60.0"),
         }
-        assert {row["model_name"] for row in long_rows} == {"openai/gpt-5.4"}
+        assert {row["model_name"] for row in long_rows} == {"openai/gpt-5.5"}
         level_json_rows = json.loads(task_level_long_json_path.read_text(encoding="utf-8"))
         assert [_as_string_row(row) for row in level_json_rows] == long_rows
 
@@ -230,7 +230,7 @@ class TestBatchRecords:
                     "agent": {
                         "agent_name": "direct_llm",
                         "adapter_class": "DirectLLMAdapter",
-                        "config": {"model": "openai/gpt-5.4"},
+                        "config": {"model": "openai/gpt-5.5"},
                     }
                 },
             )
@@ -244,7 +244,7 @@ class TestBatchRecords:
                     "agent": {
                         "agent_name": "codex_cli",
                         "adapter_class": "CodexCLIAdapter",
-                        "config": {"model": "gpt-5.4"},
+                        "config": {"model": "gpt-5.5"},
                     }
                 },
             )
@@ -258,23 +258,23 @@ class TestBatchRecords:
 
         assert len(overview_rows) == 2
         rows_by_label = {row["agent_label"]: row for row in overview_rows}
-        assert rows_by_label["gpt-5.4"]["agent_name"] == "direct_llm"
-        assert rows_by_label["gpt-5.4"]["method_group"] == "direct_llm"
-        assert rows_by_label["gpt-5.4"]["model_name"] == "openai/gpt-5.4"
-        assert rows_by_label["codex_cli_gpt-5.4"]["agent_name"] == "codex_cli"
-        assert rows_by_label["codex_cli_gpt-5.4"]["adapter_class"] == "CodexCLIAdapter"
-        assert rows_by_label["codex_cli_gpt-5.4"]["method_group"] == "codex_cli"
-        assert rows_by_label["codex_cli_gpt-5.4"]["model_name"] == "gpt-5.4"
+        assert rows_by_label["gpt-5.5"]["agent_name"] == "direct_llm"
+        assert rows_by_label["gpt-5.5"]["method_group"] == "direct_llm"
+        assert rows_by_label["gpt-5.5"]["model_name"] == "openai/gpt-5.5"
+        assert rows_by_label["codex_cli_gpt-5.5"]["agent_name"] == "codex_cli"
+        assert rows_by_label["codex_cli_gpt-5.5"]["adapter_class"] == "CodexCLIAdapter"
+        assert rows_by_label["codex_cli_gpt-5.5"]["method_group"] == "codex_cli"
+        assert rows_by_label["codex_cli_gpt-5.5"]["model_name"] == "gpt-5.5"
 
     def test_json_mirrors_are_machine_readable_row_mirrors(self, tmp_dir):
         results_dir = tmp_dir / "results"
-        task_dir = results_dir / "gpt-5.4" / "physics.test_task"
+        task_dir = results_dir / "gpt-5.5" / "physics.test_task"
         task_dir.mkdir(parents=True)
-        (results_dir / "gpt-5.4" / "run_metadata.json").write_text(json.dumps({
+        (results_dir / "gpt-5.5" / "run_metadata.json").write_text(json.dumps({
             "agent_config": {
                 "agent_name": "direct_llm",
                 "adapter_class": "DirectLLMAdapter",
-                "config": {"model": "openai/gpt-5.4"},
+                "config": {"model": "openai/gpt-5.5"},
             }
         }), encoding="utf-8")
         (task_dir / "inst1__b2.json").write_text(json.dumps(
@@ -295,7 +295,7 @@ class TestBatchRecords:
         assert isinstance(overview_json_rows, list)
         assert isinstance(scoreboard_json_rows, list)
         assert isinstance(level_json_rows, list)
-        assert overview_json_rows[0]["agent_label"] == "gpt-5.4"
+        assert overview_json_rows[0]["agent_label"] == "gpt-5.5"
         assert scoreboard_json_rows[0]["task_id"] == "physics.test_task"
         assert level_json_rows[0]["prompt_level"] == "b2"
 

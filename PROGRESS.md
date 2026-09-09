@@ -600,3 +600,15 @@
   (`105 passed`); full offline suite passed `2320`, with `2 skipped` and
   `22 deselected`.
 - Implementation commit: `97fef0e`.
+
+## 2026-09: Remove remaining GPT-5.4 runtime references
+
+- Problem: after migrating formal Judge contracts, CLI examples, compatibility
+  mappings, and API test fixtures still referenced GPT-5.4, allowing accidental
+  use of the retired Judge model.
+- Resolution: migrate those runtime/test references to GPT-5.5 and remove the
+  GPT-5.4 model aliases while retaining the existing GPT-5.5 OpenRouter alias.
+- Verification: targeted CLI, Judge, CMOS, batch-record, issue-fix, and model
+  API tests passed; the full offline suite passed `2320`, with `2 skipped` and
+  `22 deselected`.
+- Implementation commit: `bd0fd9a`.

@@ -22,7 +22,7 @@ from ai4sci_bench.scorers._judge_common import (
 
 class TestResolveModel:
     def test_resolve_model_known(self):
-        assert resolve_model("gpt-5.4") == "openai/gpt-5.4"
+        assert resolve_model("gpt-5.5") == "openai/gpt-5.5"
         assert resolve_model("gpt-5.5") == "openai/gpt-5.5"
         assert resolve_model("claude-opus-4-6") == "anthropic/claude-opus-4-6"
         assert resolve_model("gemini-3.1-pro-preview") == "gemini/gemini-3.1-pro-preview"

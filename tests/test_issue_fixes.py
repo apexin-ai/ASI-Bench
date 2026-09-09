@@ -620,8 +620,8 @@ class TestParseAgentConfig:
 
     def test_valid_json(self):
         from ai4sci_bench.cli import _parse_agent_config
-        result = _parse_agent_config('{"model": "gpt-5.4"}')
-        assert result == {"model": "gpt-5.4"}
+        result = _parse_agent_config('{"model": "gpt-5.5"}')
+        assert result == {"model": "gpt-5.5"}
 
     def test_empty_json(self):
         from ai4sci_bench.cli import _parse_agent_config
@@ -630,9 +630,9 @@ class TestParseAgentConfig:
 
     def test_unquoted_keys_yaml_fallback(self):
         from ai4sci_bench.cli import _parse_agent_config
-        # PowerShell strips quotes: {model:gpt-5.4}
-        result = _parse_agent_config('{model: gpt-5.4}')
-        assert result == {"model": "gpt-5.4"}
+        # PowerShell strips quotes: {model:gpt-5.5}
+        result = _parse_agent_config('{model: gpt-5.5}')
+        assert result == {"model": "gpt-5.5"}
 
     def test_unquoted_boolean_yaml_fallback(self):
         from ai4sci_bench.cli import _parse_agent_config

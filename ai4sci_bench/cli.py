@@ -3853,7 +3853,7 @@ def _parse_agent_config(raw: str) -> dict:
     raise click.BadParameter(
         f"Cannot parse agent config: {raw!r}\n"
         "Hint: on PowerShell, escape inner double-quotes with backslash:\n"
-        '  --agent \'codex_cli:{\\"model\\":\\"gpt-5.4\\"}\'',
+        '  --agent \'codex_cli:{\\"model\\":\\"gpt-5.5\\"}\'',
         param_hint="--agent",
     )
 

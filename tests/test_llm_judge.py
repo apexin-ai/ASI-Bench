@@ -48,7 +48,7 @@ class TestResolveModel:
     def test_short_name(self):
         assert _resolve_model("gemini-3.1-pro-preview") == "gemini/gemini-3.1-pro-preview"
         assert _resolve_model("claude-opus-4-6") == "anthropic/claude-opus-4-6"
-        assert _resolve_model("gpt-5.4") == "openai/gpt-5.4"
+        assert _resolve_model("gpt-5.5") == "openai/gpt-5.5"
 
     def test_passthrough(self):
         assert _resolve_model("openai/gpt-4o") == "openai/gpt-4o"
@@ -56,7 +56,7 @@ class TestResolveModel:
 
     def test_openrouter_short_name(self):
         assert _resolve_model("openrouter/claude-opus-4-6") == "openrouter/anthropic/claude-opus-4-6"
-        assert _resolve_model("openrouter/gpt-5.4") == "openrouter/openai/gpt-5.4"
+        assert _resolve_model("openrouter/gpt-5.5") == "openrouter/openai/gpt-5.5"
         assert _resolve_model("openrouter/gemini-3.1-pro-preview") == "openrouter/google/gemini-3.1-pro-preview"
 
     def test_openrouter_full_passthrough(self):

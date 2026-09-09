@@ -1632,7 +1632,7 @@ class TestSaveEvalResult:
         )
         existing_data = {
             "attempt": 2,
-            "provenance": {"agent": {"agent_name": "direct_llm", "config": {"model": "openai/gpt-5.4"}}},
+            "provenance": {"agent": {"agent_name": "direct_llm", "config": {"model": "openai/gpt-5.5"}}},
             "agent_output": {"log": "debug", "status": "failed"},
             "cost": {"estimated_cost_usd": 1.23, "total_tokens": 456},
             "extra_field": "keep-me",
@@ -1643,7 +1643,7 @@ class TestSaveEvalResult:
         payload = json.loads(path.read_text(encoding="utf-8"))
         assert payload[RESULT_SCHEMA_VERSION_FIELD] == CURRENT_RESULT_SCHEMA_VERSION
         assert payload["attempt"] == 2
-        assert payload["provenance"]["agent"]["config"]["model"] == "openai/gpt-5.4"
+        assert payload["provenance"]["agent"]["config"]["model"] == "openai/gpt-5.5"
         assert payload["agent_output"]["log"] == "debug"
         assert payload["cost"]["total_tokens"] == 456
         assert payload["extra_field"] == "keep-me"
@@ -2015,7 +2015,7 @@ class TestDeriveAgentLabel:
 
     def test_direct_llm_with_model(self):
         from ai4sci_bench.cli import _derive_agent_label
-        assert _derive_agent_label("direct_llm", {"model": "openai/gpt-5.4"}) == "gpt-5.4"
+        assert _derive_agent_label("direct_llm", {"model": "openai/gpt-5.5"}) == "gpt-5.5"
         assert _derive_agent_label("direct_llm", {"model": "claude-opus-4-6"}) == "claude-opus-4-6"
         assert _derive_agent_label("direct_llm", {"model": "gemini/gemini-3.1-pro-preview"}) == "gemini-3.1-pro-preview"
 
@@ -2065,7 +2065,7 @@ class TestBuildAgentOpenRouter:
         assert adapter.model == "openai/gpt-4o"
 
     def test_build_agent_direct_llm_default_no_api_key(self):
-        adapter = _build_agent(None, "direct_llm", {"model": "openai/gpt-5.4"})
+        adapter = _build_agent(None, "direct_llm", {"model": "openai/gpt-5.5"})
         assert adapter.api_key is None
         assert adapter.api_base is None
 
@@ -2606,11 +2606,11 @@ class TestReportRetryDedup:
 class TestReportMultiAgentRoots:
     def test_report_groups_batch_run_parent_and_dedupes_within_each_agent(self, tmp_dir):
         results_dir = tmp_dir / "results"
-        gpt_task_dir = results_dir / "gpt-5.4" / "physics.test_task"
+        gpt_task_dir = results_dir / "gpt-5.5" / "physics.test_task"
         claude_task_dir = results_dir / "claude-opus-4-6" / "physics.test_task"
         gpt_task_dir.mkdir(parents=True)
         claude_task_dir.mkdir(parents=True)
-        (results_dir / "gpt-5.4" / "run_metadata.json").write_text("{}", encoding="utf-8")
+        (results_dir / "gpt-5.5" / "run_metadata.json").write_text("{}", encoding="utf-8")
         (results_dir / "claude-opus-4-6" / "run_metadata.json").write_text("{}", encoding="utf-8")
 
         # Shared instance across agents: gpt has retries, claude has one completed result.
@@ -2635,7 +2635,7 @@ class TestReportMultiAgentRoots:
         ))
 
         # Noise JSON inside a nested workspace should still be ignored.
-        workspace_dir = results_dir / "gpt-5.4" / "instances" / "inst1" / "workspace_b1"
+        workspace_dir = results_dir / "gpt-5.5" / "instances" / "inst1" / "workspace_b1"
         workspace_dir.mkdir(parents=True)
         (workspace_dir / "task_info.json").write_text(json.dumps({
             "instance_id": "inst1",
@@ -2648,7 +2648,7 @@ class TestReportMultiAgentRoots:
         assert result.exit_code == 0
         assert "Detected 2 agent groups in results root." in result.output
         assert result.output.count("Instances: 1") == 2
-        assert "Agent: gpt-5.4" in result.output
+        assert "Agent: gpt-5.5" in result.output
         assert "Agent: claude-opus-4-6" in result.output
         assert "Overall: 80.0 / 100" in result.output
         assert "Overall: 55.0 / 100" in result.output
@@ -2667,7 +2667,7 @@ class TestReportMultiAgentRoots:
                     "agent": {
                         "agent_name": "direct_llm",
                         "adapter_class": "DirectLLMAdapter",
-                        "config": {"model": "openai/gpt-5.4"},
+                        "config": {"model": "openai/gpt-5.5"},
                     }
                 },
             )
@@ -2693,7 +2693,7 @@ class TestReportMultiAgentRoots:
         assert result.exit_code == 0
         assert "Detected 2 agent groups in results root." in result.output
         assert result.output.count("Instances: 1") == 2
-        assert "Agent: gpt-5.4" in result.output
+        assert "Agent: gpt-5.5" in result.output
         assert "Agent: claude-opus-4-6" in result.output
         assert "Overall: 40.0 / 100" in result.output
         assert "Overall: 90.0 / 100" in result.output
@@ -2792,13 +2792,13 @@ class TestBatchReportCommand:
 
     def test_batch_report_regenerates_batch_records_from_existing_root(self, tmp_dir):
         results_dir = tmp_dir / "results"
-        task_dir = results_dir / "gpt-5.4" / "physics.test_task"
+        task_dir = results_dir / "gpt-5.5" / "physics.test_task"
         task_dir.mkdir(parents=True)
-        (results_dir / "gpt-5.4" / "run_metadata.json").write_text(json.dumps({
+        (results_dir / "gpt-5.5" / "run_metadata.json").write_text(json.dumps({
             "agent_config": {
                 "agent_name": "direct_llm",
                 "adapter_class": "DirectLLMAdapter",
-                "config": {"model": "openai/gpt-5.4"},
+                "config": {"model": "openai/gpt-5.5"},
             }
         }), encoding="utf-8")
         (task_dir / "inst1__b2.json").write_text(json.dumps(
