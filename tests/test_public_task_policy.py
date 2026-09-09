@@ -1,6 +1,7 @@
 """Public Task files must follow the scorer and Example disclosure policies."""
 
 import ast
+import importlib.util
 import json
 import re
 import subprocess
@@ -8,6 +9,7 @@ import sys
 from pathlib import Path, PurePosixPath
 
 import yaml
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "tasks"
@@ -405,6 +407,30 @@ def test_public_evaluator_runtimes_do_not_contain_generation_or_reference_oracle
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
             }
             assert forbidden.isdisjoint(names), (task_id, forbidden & names)
+
+
+def test_mpsc_solution_runtime_value_object_is_constructible():
+    runtime_path = _task_dir("math.mpsc_safety_filter") / "mpsc_eval_runtime.py"
+    spec = importlib.util.spec_from_file_location("mpsc_eval_runtime_test", runtime_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+        solution = module.MPSCSolution(
+            feasible=False,
+            action=np.array([0.0]),
+            objective=float("inf"),
+            z=np.empty((0, 1)),
+            v=np.empty((0, 1)),
+            status="test",
+            max_residual=float("inf"),
+        )
+    finally:
+        sys.modules.pop(spec.name, None)
+
+    assert solution.feasible is False
+    assert solution.status == "test"
 
 
 def test_public_scorers_never_import_generate_gt():

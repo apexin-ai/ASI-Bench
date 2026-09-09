@@ -102,6 +102,7 @@ def activate_declared_runtime_dependencies() -> bool:
     _DECLARED_RUNTIME_ACTIVE = True
     return True
 
+@dataclass
 class MPSCSolution:
     feasible: bool
     action: np.ndarray
