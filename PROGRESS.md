@@ -469,3 +469,53 @@
   the unused Kimi test import. Targeted tests passed `424`; the full offline
   suite passed `2264`, with `2 skipped` and `22 deselected`.
 - Review follow-up commit: `1bf84a0`.
+
+## Non-streaming main-loop requests are the dominant evaluation failure
+
+- Problem: 4.9% of 3498 evaluation runs produced no outputs, and 59% of those
+  failures were `Request timed out` or a Claude CLI exit 1 after ten retries
+  reporting `error: "unknown"`. Neither side recorded anything usable: the
+  proxy logged nothing terminal for non-streamed replies, and the client's
+  own abort left it without an HTTP status to report.
+- Resolution: log a terminal outcome for the non-streaming path, then pair it
+  with `request_start` by request id. Non-streamed replies that succeed take
+  at most 300s (p50 19s); every one that fails sits between ~330s and 915s and
+  ends `client_gone`, with no write error on our side. The ceiling is the
+  client's, near 900s. The proxy's own 7200s blocking budget was never reached
+  and was never the cause, contrary to what several earlier analyses assumed.
+- Prevention: these requests are not a special call type. Shape logging shows
+  full conversation history, all 13 tools, paired tool_use/tool_result blocks
+  and `max_tokens=64000` -- they are ordinary main-loop turns that happen to
+  arrive with `stream: false`, which is exactly why they are the slowest and
+  the least protected: a stream's idle timer resets on every token, so the
+  longest healthy stream ran 3499s. Why the CLI degrades some main-loop turns
+  to non-streaming is still unknown; routing them all through streaming would
+  remove most of this failure class.
+- Verification: 2727 paired non-streaming outcomes across four shards (2318
+  ok / 409 client_gone, none `write_failed`); 23282 streaming outcomes as the
+  control; seven captured request shapes from a single-instance probe.
+- Implementation commits: `31deddd` (terminal logging), `15a14e9` (shape
+  logging)
+
+## GLM-5.2 evaluations have always run at Max reasoning effort
+
+- Problem: the evaluation manifest sets `AGENT_EFFORT=high`, which suggests
+  runs are at a reduced reasoning level. They are not.
+- Resolution: `effort` reaches the Claude CLI as `--effort` and stops there.
+  The only place the proxy emits `reasoning_effort` is `_build_openai_payload`
+  on `_TokenRouterOpenAIChatProxyHandler`; evaluations run through
+  `_LiteLLMProxyHandler`, which never sets it. GLM-5.2's chat template maps a
+  missing value to `max`: `'high' if reasoning_effort == 'high' else 'max'`.
+- Prevention: there are two effective levels, not four -- `low` and `medium`
+  both resolve to `max`. An earlier test of `low` showed no change and was
+  misread as "the parameter is ignored"; it resolves to the default. Testing
+  `high` shows a 69% drop in thinking length. Disabling thinking entirely is a
+  separate switch and the template variable is `enable_thinking`, not
+  `thinking`; an Anthropic-style `thinking: {"type": "disabled"}` is accepted
+  and silently ignored.
+- Verification: chat template source at `/model/chat_template.jinja`; four
+  measured values on one prompt at a 3000-token budget (absent: 9235 chars of
+  thinking, no answer; `high`: 2826 chars plus a 2130-char answer; `low` and
+  `max` within 1% of each other).
+- Implementation commit: `9e55ba7` (documented, deliberately not changed --
+  altering effort mid-comparison would break continuity with every baseline)
