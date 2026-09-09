@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import http.server
+import collections
 import json
 import socket
 import logging
@@ -736,6 +737,52 @@ def _close_upstream_stream(response: Any, request_id: str = "") -> None:
             return
 
 
+def _describe_request_shape(body: dict) -> str:
+    """One-line summary of what a request actually contains.
+
+    Roughly one request in nine arrives with ``stream: false``, and those are
+    the ones that die: they have no idle timeout to protect them, so a slow
+    generation runs until the client gives up (measured at ~900s) and the reply
+    lands on a closed socket. Nothing in the proxy log said what those requests
+    *were*, so there was no way to tell whether the CLI sends them for a
+    particular kind of turn. This prints enough shape to answer that without
+    logging any prompt content.
+    """
+    messages = body.get("messages") or []
+    roles = [str(m.get("role", "?")) for m in messages if isinstance(m, dict)]
+    block_types: collections.Counter = collections.Counter()
+    chars = 0
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        content = m.get("content")
+        if isinstance(content, str):
+            block_types["text"] += 1
+            chars += len(content)
+        elif isinstance(content, list):
+            for c in content:
+                if isinstance(c, dict):
+                    block_types[str(c.get("type", "?"))] += 1
+                    for key in ("text", "thinking", "content"):
+                        v = c.get(key)
+                        if isinstance(v, str):
+                            chars += len(v)
+    system = body.get("system")
+    return (
+        "msgs=%d roles=%s last=%s blocks=%s chars=%d tools=%d system=%s temp=%s"
+        % (
+            len(messages),
+            "/".join(roles[:3]) + ("..." if len(roles) > 3 else ""),
+            roles[-1] if roles else "-",
+            dict(block_types.most_common(4)),
+            chars,
+            len(body.get("tools") or []),
+            "y" if system else "n",
+            body.get("temperature"),
+        )
+    )
+
+
 def _stream_retry_attempts() -> int:
     """Total attempts for a streamed upstream call, retries included.
 
@@ -806,6 +853,12 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
             request_id, is_stream, real_streaming, self.litellm_model,
             kwargs.get("max_tokens"), kwargs["timeout"], self.routing_key or "",
         )
+        if not real_streaming:
+            # Only for the non-streaming path: it is the one whose failures are
+            # invisible from the client side (it reports error="unknown"), and
+            # the one we still cannot explain.
+            logger.warning("litellm proxy nonstream_shape id=%s %s",
+                           request_id, _describe_request_shape(body))
         if real_streaming and "tool_choice" in kwargs:
             kwargs["tool_choice"] = _anthropic_tool_choice_to_openai(kwargs["tool_choice"])
         if real_streaming:

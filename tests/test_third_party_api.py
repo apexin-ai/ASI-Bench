@@ -2099,3 +2099,39 @@ class TestUpstreamStreamRelease:
                                            "finish_reason": "stop"}]}])
 
         assert self._drive(Wrapper()) == "ok"
+
+
+class TestRequestShapeSummary:
+    """The non-streaming path is the one that fails invisibly; log what it is."""
+
+    def test_summary_reports_structure_without_prompt_text(self):
+        from ai4sci_bench.adapters.api_proxy import _describe_request_shape
+
+        out = _describe_request_shape({
+            "system": "you are a helpful assistant",
+            "temperature": 0.7,
+            "tools": [{"name": "Bash"}, {"name": "Read"}],
+            "messages": [
+                {"role": "user", "content": "solve the thing"},
+                {"role": "assistant", "content": [
+                    {"type": "thinking", "thinking": "hmm"},
+                    {"type": "tool_use", "name": "Bash", "input": {}},
+                ]},
+                {"role": "user", "content": [{"type": "tool_result", "content": "ok"}]},
+            ],
+        })
+        assert "msgs=3" in out
+        assert "last=user" in out
+        assert "tools=2" in out
+        assert "system=y" in out
+        assert "temp=0.7" in out
+        # shape only -- no prompt text may leak into the log line
+        assert "solve the thing" not in out
+        assert "hmm" not in out
+
+    def test_summary_survives_malformed_content(self):
+        from ai4sci_bench.adapters.api_proxy import _describe_request_shape
+
+        out = _describe_request_shape({"messages": [None, {"role": "user"}, "junk"]})
+        assert "msgs=3" in out
+        assert "tools=0" in out
