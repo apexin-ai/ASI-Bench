@@ -172,7 +172,16 @@ class TaskEnvironmentManager:
             try:
                 lock_path.mkdir(parents=True, exist_ok=False)
             except FileExistsError:
-                if self._lock_is_stale(lock_path):
+                try:
+                    stale = self._lock_is_stale(lock_path)
+                except OSError:
+                    # Catch rather than only scoping _lock_is_stale: a reaper
+                    # can remove the dir even between the exists() guard in
+                    # _lock_is_stale and its own stat, and any OSError here
+                    # must not escape the while loop. An unreadable lock is
+                    # not evidence of ownership, so re-enter the loop.
+                    stale = False
+                if stale:
                     shutil.rmtree(lock_path, ignore_errors=True)
                     continue
                 if _timed_out():
@@ -235,17 +244,23 @@ class TaskEnvironmentManager:
 
     def _lock_is_stale(self, lock_path: Path) -> bool:
         owner_path = lock_path / "owner.json"
-        created_at = lock_path.stat().st_mtime if lock_path.exists() else 0.0
         hostname = None
         pid = None
-        if owner_path.exists():
-            try:
+        created_at = 0.0
+        try:
+            mtime = lock_path.stat().st_mtime
+            if owner_path.exists():
                 payload = json.loads(owner_path.read_text(encoding="utf-8"))
-                created_at = float(payload.get("created_at", created_at))
+                created_at = float(payload.get("created_at", mtime))
                 hostname = payload.get("hostname")
                 pid = payload.get("pid")
-            except (OSError, TypeError, ValueError, json.JSONDecodeError):
-                pass
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            # The directory may have been torn down between the ``exists()``
+            # check above and the ``stat`` here -- the departing holder's
+            # rmtree is not atomic. Falling through to the age check below
+            # turns a racy moment into "wait and try again", which is what
+            # the caller already does for a merely-held lock.
+            return False
 
         if hostname == socket.gethostname() and isinstance(pid, int):
             return not self._pid_exists(pid)

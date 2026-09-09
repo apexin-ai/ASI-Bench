@@ -118,3 +118,55 @@ def test_release_does_not_delete_a_lock_owned_by_someone_else(tmp_path):
 
     assert lock_path.is_dir()
     assert manager._read_lock_token(lock_path) == "someone-elses-token"
+
+
+def test_lock_is_stale_survives_dir_removed_under_it(tmp_path):
+    """_lock_is_stale must not throw when the lock dir disappears mid-check.
+
+    The departing holder's ``rmtree`` is not atomic, so ``stat()`` can run on
+    a directory that ``exists()`` just approved. With 600 processes contending
+    for a handful of task-env locks -- six shards at 100 parallel -- this was
+    hit often enough to kill instances at 0 seconds with
+    ``[Errno 2] No such file or directory: .../task-envs/<key>.lock``.
+    """
+    manager = TaskEnvironmentManager(tmp_path / "repo", cache_root=tmp_path / "cache")
+    lock_path = manager._lock_path("abc123")
+    lock_path.mkdir(parents=True)
+    (lock_path / "owner.json").write_text("{}")
+    shutil.rmtree(lock_path, ignore_errors=True)
+    # A fully removed lock is simply not stale-and-present; the caller re-enters
+    # the loop and the next mkdir succeeds or finds a fresh lock.
+    assert manager._lock_is_stale(lock_path) is False
+
+
+def test_acquire_lock_retries_after_stale_check_raises(tmp_path):
+    """_lock_is_stale raising must re-enter the loop, not kill the instance."""
+    manager = TaskEnvironmentManager(tmp_path / "repo", cache_root=tmp_path / "cache")
+    lock_path = manager._lock_path("abc123")
+
+    with patch.object(manager, "_lock_is_stale", side_effect=FileNotFoundError("gone")):
+        with manager._acquire_lock(lock_path):
+            assert manager._read_lock_token(lock_path) is not None
+
+
+def test_release_survives_lock_removed_while_held(tmp_path):
+    """A lock removed by a reaper while we hold the critical section must not
+    blow up the ``finally`` block and take the instance down."""
+    manager = TaskEnvironmentManager(tmp_path / "repo", cache_root=tmp_path / "cache")
+    lock_path = manager._lock_path("abc123")
+    with manager._acquire_lock(lock_path):
+        # Simulate the reaper removing it while we are inside the section.
+        shutil.rmtree(lock_path, ignore_errors=True)
+    # Reaching here without an exception is the whole point.
+
+
+def test_acquire_lock_retries_after_stale_check_raises(tmp_path):
+    """_lock_is_stale raising must re-enter the loop, not kill the instance."""
+    manager = TaskEnvironmentManager(tmp_path / "repo", cache_root=tmp_path / "cache")
+    lock_path = manager._lock_path("abc123")
+
+    with patch.object(manager, "_lock_is_stale", side_effect=FileNotFoundError("gone")):
+        with manager._acquire_lock(lock_path):
+            assert manager._read_lock_token(lock_path) is not None
+
+
