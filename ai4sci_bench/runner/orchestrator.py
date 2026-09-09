@@ -12,7 +12,7 @@ import time
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ai4sci_bench.core.agent_interface import AgentAdapter
 from ai4sci_bench.core.scorer import get_scorer
@@ -301,6 +301,9 @@ class RunConfig:
     # Tasks directory
     tasks_dir: str = "tasks/"
     agent_metadata: dict[str, Any] | None = None
+    progress_callback: (
+        Callable[[str, TaskInstance, EvalResult | None], None] | None
+    ) = field(default=None, repr=False, compare=False)
 
 
 class BenchmarkOrchestrator:
@@ -367,7 +370,7 @@ class BenchmarkOrchestrator:
             runner = ParallelRunner(max_workers=self.config.parallel)
             results = runner.run_instances(
                 instances,
-                run_fn=self._run_single_instance,
+                run_fn=self._run_single_instance_with_progress,
                 completed_ids=completed_ids,
             )
 
@@ -378,6 +381,34 @@ class BenchmarkOrchestrator:
             return self._aggregate(results)
         finally:
             self.agent.teardown()
+
+    def _notify_progress(
+        self,
+        event: str,
+        instance: TaskInstance,
+        result: EvalResult | None = None,
+    ) -> None:
+        """Notify an optional CLI progress observer without affecting the run."""
+        callback = self.config.progress_callback
+        if callback is None:
+            return
+        try:
+            callback(event, instance, result)
+        except Exception as exc:
+            logger.warning("Progress callback failed: %s", exc)
+
+    def _run_single_instance_with_progress(
+        self, instance: TaskInstance
+    ) -> EvalResult:
+        """Wrap one instance run with start/completion progress notifications."""
+        self._notify_progress("started", instance)
+        try:
+            result = self._run_single_instance(instance)
+        except Exception:
+            self._notify_progress("failed", instance)
+            raise
+        self._notify_progress("completed", instance, result)
+        return result
 
     def _run_single_instance(self, instance: TaskInstance) -> EvalResult:
         """Run agent, evaluate, analyze, and save for one instance.

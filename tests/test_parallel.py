@@ -4,6 +4,7 @@ import json
 import time
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -18,6 +19,7 @@ from ai4sci_bench.core.types import (
     TaskInstance,
 )
 from ai4sci_bench.runner.parallel import ParallelRunner
+from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator
 from ai4sci_bench.runner.metadata import (
     build_task_runtime_provenance,
     collect_run_metadata,
@@ -137,6 +139,28 @@ class TestParallelRunner:
         assert runner.max_workers == 1
         runner = ParallelRunner(max_workers=-5)
         assert runner.max_workers == 1
+
+
+class TestOrchestratorProgressCallback:
+    def test_reports_instance_start_and_completion(self, tmp_dir):
+        instance = TestParallelRunner()._make_instance(0, tmp_dir)
+        result = TestParallelRunner()._make_eval_result(instance)
+        events = []
+        orchestrator = object.__new__(BenchmarkOrchestrator)
+        orchestrator.config = SimpleNamespace(
+            progress_callback=lambda event, current, current_result: events.append(
+                (event, current.instance_id, current_result)
+            )
+        )
+        orchestrator._run_single_instance = lambda current: result
+
+        returned = orchestrator._run_single_instance_with_progress(instance)
+
+        assert returned is result
+        assert events == [
+            ("started", instance.instance_id, None),
+            ("completed", instance.instance_id, result),
+        ]
 
 
 # ── RunMetadata Tests ─────────────────────────────────────────────────

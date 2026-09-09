@@ -452,7 +452,7 @@ def _stub_orchestrator_run(score_by_level: dict[str, float]):
                 for level in self.config.prompt_levels:
                     score = score_by_level.get(level, 0.0)
                     for i in range(self.config.instances_per_task):
-                        results.append(EvalResult(
+                        result = EvalResult(
                             instance_id=f"{tid}_{level}_{i}",
                             task_id=tid,
                             prompt_level=PromptLevel(level),
@@ -464,7 +464,17 @@ def _stub_orchestrator_run(score_by_level: dict[str, float]):
                             final_score=score,
                             max_possible_score=100.0,
                             status=RunStatus.COMPLETED,
-                        ))
+                        )
+                        callback = getattr(self.config, "progress_callback", None)
+                        if callback:
+                            instance = type("StubInstance", (), {
+                                "instance_id": result.instance_id,
+                                "task_id": tid,
+                                "prompt_level": PromptLevel(level),
+                            })()
+                            callback("started", instance, None)
+                            callback("completed", instance, result)
+                        results.append(result)
             return RunReport(
                 agent_name="direct_llm",
                 n_tasks=len(task_ids),
@@ -622,6 +632,30 @@ class TestDifficultyCheckCLI:
         assert agent_result["effort"] == "high"
         assert agent_result["agent_version"]
         assert agent_result["framework_version"]
+
+    def test_shows_progress_with_current_prompt_level(self, tmp_path):
+        tasks_dir = tmp_path / "tasks"
+        _write_task_yaml(tasks_dir, "physics.demo", status="in_development")
+        stub_cls = _stub_orchestrator_run({"b1": 20.0, "b3": 30.0})
+
+        with patch("ai4sci_bench.runner.orchestrator.BenchmarkOrchestrator", stub_cls):
+            result = CliRunner().invoke(cli, [
+                "difficulty-check",
+                "--task", "physics.demo",
+                "--prompt-levels", "b1,b3",
+                *DIFFICULTY_AGENT_ARGS,
+                "--tasks-dir", str(tasks_dir),
+                "--scores-dir", str(tmp_path / "scores"),
+                "--no-color",
+            ])
+
+        assert result.exit_code == 0, result.output
+        assert "Difficulty progress" in result.output
+        assert "level=B1" in result.output
+        assert "level=B3" in result.output
+        assert "0/2" in result.output
+        assert "2/2" in result.output
+        assert "100%" in result.output
 
     def test_failing_run_exits_nonzero(self, tmp_path):
         tasks_dir = tmp_path / "tasks"

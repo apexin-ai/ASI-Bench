@@ -124,6 +124,12 @@ strictly below 40. JSON, Markdown, CSV, and persisted score reports record the
 agent, effective model, effort, measured agent version, framework version, and
 sandbox.
 
+The command displays durable progress lines throughout the run. `PREPARING`
+identifies the next task, harness, and model; `RUNNING` identifies the exact
+B1–B4 level and instance currently executing; and `DONE` advances the global
+progress bar with the resulting score. A failed or timed-out agent instance is
+shown as `FAILED` before the command reports its final `ABORT` verdict.
+
 The difficulty gate applies only to the low-guidance levels: every B3 and B4
 mean score must be strictly below 40. B1 and B2 are required evidence but have
 no score ceiling. The CLI therefore reports them as `RECORDED`, while B3/B4

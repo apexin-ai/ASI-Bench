@@ -3858,6 +3858,59 @@ def _parse_agent_config(raw: str) -> dict:
     )
 
 
+class _DifficultyProgress:
+    """Render durable progress lines for long-running difficulty checks."""
+
+    _WIDTH = 20
+
+    def __init__(self, total: int, *, use_color: bool) -> None:
+        self.total = max(1, total)
+        self.completed = 0
+        self.use_color = use_color
+
+    def _bar(self) -> str:
+        filled = min(self._WIDTH, int(self._WIDTH * self.completed / self.total))
+        return "[" + "#" * filled + "-" * (self._WIDTH - filled) + "]"
+
+    def _echo(self, state: str, *, task: str, agent: str, detail: str) -> None:
+        percent = min(100, int(100 * self.completed / self.total))
+        rendered_state = state
+        if self.use_color:
+            color = {"RUNNING": "cyan", "DONE": "green", "FAILED": "red"}.get(state)
+            if color:
+                rendered_state = click.style(state, fg=color, bold=True)
+        click.echo(
+            f"Difficulty progress {self._bar()} {self.completed}/{self.total} "
+            f"({percent:3d}%) {rendered_state} task={task} agent={agent} {detail}"
+        )
+
+    def preparing(self, *, task: str, agent: str, model: str) -> None:
+        self._echo("PREPARING", task=task, agent=agent, detail=f"model={model}")
+
+    def callback(self, *, task: str, agent: str):
+        def report(event: str, instance: Any, result: EvalResult | None) -> None:
+            level_value = getattr(instance.prompt_level, "value", instance.prompt_level)
+            detail = f"level={str(level_value).upper()} instance={instance.instance_id}"
+            if event == "started":
+                self._echo("RUNNING", task=task, agent=agent, detail=detail)
+                return
+
+            self.completed = min(self.total, self.completed + 1)
+            if (
+                event == "completed"
+                and result is not None
+                and result.status not in (RunStatus.FAILED, RunStatus.TIMEOUT)
+            ):
+                detail += f" score={result.final_score:.1f}"
+                self._echo("DONE", task=task, agent=agent, detail=detail)
+            else:
+                if result is not None:
+                    detail += f" status={result.status.value}"
+                self._echo("FAILED", task=task, agent=agent, detail=detail)
+
+        return report
+
+
 @cli.command("difficulty-check")
 @click.option("--task", "task_id", required=False, default=None,
               help="Task ID, e.g. physics.new_task. Mutually exclusive with --status.")
@@ -3873,7 +3926,9 @@ def _parse_agent_config(raw: str) -> dict:
 @click.option("--threshold", default=40, show_default=True,
               type=click.IntRange(min=1, max=40),
               help="B3/B4 difficulty threshold (maximum 40); B1/B2 are recorded but not limited.")
-@click.option("--instances-per-task", default=1, type=int, show_default=True)
+@click.option(
+    "--instances-per-task", default=1, type=click.IntRange(min=1), show_default=True
+)
 @click.option("--seed", default=42, type=int, show_default=True)
 @click.option("--sandbox", default="os", show_default=True,
               help="Sandbox mode for Task contribution evidence; must be os (Docker).")
@@ -4022,6 +4077,10 @@ def difficulty_check(
     failures = 0
     aborts: list[tuple[str, str]] = []  # (task_id, reason) for infra-failure aborts
     agent_version_cache: dict[tuple[str, str], str] = {}
+    progress = _DifficultyProgress(
+        len(task_id_list) * len(agents) * len(parsed_levels) * instances_per_task,
+        use_color=not no_color,
+    )
 
     for tid in task_id_list:
         try:
@@ -4043,6 +4102,8 @@ def difficulty_check(
         with tempfile.TemporaryDirectory(prefix=f"difficulty_{tid}_") as tmp_root:
             for label, name, cfg, adapter in agent_specs:
                 agent_out = Path(tmp_root) / label
+                model = str(getattr(adapter, "model", cfg.get("model", "unknown")))
+                progress.preparing(task=tid, agent=label, model=model)
                 config = RunConfig(
                     agent=adapter,
                     tasks=[tid],
@@ -4062,6 +4123,7 @@ def difficulty_check(
                         allow_external_tools=False,
                         tool_mode=resolved_tool_mode,
                     ),
+                    progress_callback=progress.callback(task=tid, agent=label),
                 )
                 try:
                     orchestrator = BenchmarkOrchestrator(config)
@@ -4081,7 +4143,7 @@ def difficulty_check(
                 else:
                     version = f"asibench {__version__}"
                 agent_details = {
-                    "model": str(getattr(adapter, "model", cfg.get("model", "unknown"))),
+                    "model": model,
                     "effort": str(getattr(adapter, "effort", "N/A")),
                     "agent_version": version,
                     "framework_version": __version__,

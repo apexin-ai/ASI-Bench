@@ -410,6 +410,9 @@ asibench task submit --task-dir tasks/physics/my_new_task/
   `--agent-config` with an explicit model, and formal evidence must contain at
   least one multi-turn harness such as `codex_cli`, `claude_code_cli`, or
   `kimi_code_cli`. `direct_llm` may be added only as a single-turn baseline.
+  While the check runs, the terminal prints a global progress bar plus the
+  current task, agent, B1–B4 level, instance ID, completion percentage, and
+  completed score, so long agent runs do not appear stalled.
 - Record all four scores on the 0–100 scale.
   B1 and B2 have no score ceiling; every B3 and B4 mean score must be strictly
   below 40. The CLI marks

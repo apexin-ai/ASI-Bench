@@ -195,12 +195,15 @@ record the effective model, effort, measured agent CLI/adapter version,
 framework version, and sandbox. Task Draft validation independently rejects
 missing agent names and direct-LLM-only evidence before authentication or
 network access. The CLI rejects a threshold above 40, and catalog flagging
-likewise ignores B1/B2. Cover the terminal, JSON, Markdown, CSV, persistence,
-submission evidence, and catalog contracts with:
+likewise ignores B1/B2. Terminal regressions also require a global progress bar
+that identifies the current task, agent, prompt level, and instance before a
+long-running agent call starts, then advances on completion or failure. Cover
+the terminal, JSON, Markdown, CSV, persistence, submission evidence, runner
+progress callback, and catalog contracts with:
 
 ```bash
 uv run pytest -q tests/test_difficulty_check.py tests/test_static_validator.py \
-  tests/test_cli_task_submit.py
+  tests/test_cli_task_submit.py tests/test_parallel.py
 ```
 
 ## Pull filtering and custom pre-submit paths
