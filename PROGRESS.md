@@ -611,4 +611,4 @@
 - Verification: targeted CLI, Judge, CMOS, batch-record, issue-fix, and model
   API tests passed; the full offline suite passed `2320`, with `2 skipped` and
   `22 deselected`.
-- Implementation commit: `bd0fd9a`.
+- Implementation commit: `ee139f0`.
