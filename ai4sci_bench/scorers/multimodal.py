@@ -136,6 +136,7 @@ class MultimodalScorer(Scorer):
         max_tokens = config.get("max_tokens", 1024)
         max_score_value = config.get("max_score_value", 10)
         threshold = config.get("threshold", 0.5)
+        reasoning_effort = config.get("reasoning_effort")
 
         resolved_api = resolve_judge_api(config)
 
@@ -209,6 +210,7 @@ class MultimodalScorer(Scorer):
             raw = self._call_vlm_with_retry(
                 resolved_api.model, user_content, temperature, max_tokens,
                 api_key=resolved_api.api_key, api_base=resolved_api.api_base,
+                reasoning_effort=reasoning_effort,
             )
             raw_responses.append(raw)
             score_val = parse_judge_json(raw, max_score=max_score_value)
@@ -246,12 +248,14 @@ class MultimodalScorer(Scorer):
         max_tokens: int,
         api_key: str | None = None,
         api_base: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> str:
         last_error: Exception | None = None
         extra_kwargs: dict[str, Any] = judge_completion_api_kwargs(
             model=model,
             api_base=api_base,
             api_key=api_key,
+            reasoning_effort=reasoning_effort,
         )
         effective_api_key = extra_kwargs.get("api_key")
         for attempt in range(MAX_RETRIES):

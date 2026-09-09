@@ -163,6 +163,23 @@ class TestLLMJudgeScorer:
         assert call_args.kwargs["model"] == "anthropic/claude-opus-4-6"
 
     @patch("ai4sci_bench.scorers.llm_judge.litellm")
+    def test_reasoning_effort_is_forwarded(self, mock_litellm, tmp_path):
+        pred_dir = tmp_path / "pred"
+        pred_dir.mkdir()
+        (pred_dir / "output.txt").write_text("Output")
+        mock_litellm.completion.return_value = _make_litellm_response(9.0)
+
+        get_scorer("llm_judge").score(pred_dir, tmp_path, {
+            "pred_file": "output.txt",
+            "model": "openai/gpt-5.5",
+            "reasoning_effort": "medium",
+        })
+
+        kwargs = mock_litellm.completion.call_args.kwargs
+        assert kwargs["model"] == "openai/gpt-5.5"
+        assert kwargs["reasoning_effort"] == "medium"
+
+    @patch("ai4sci_bench.scorers.llm_judge.litellm")
     def test_openrouter_model_with_api_key(self, mock_litellm, tmp_path):
         pred_dir = tmp_path / "pred"
         pred_dir.mkdir()
@@ -438,6 +455,24 @@ class TestMultimodalScorer:
         assert result.passed is True
         assert result.score == pytest.approx(16.0)
         assert result.details["median_score"] == 8.0
+
+    @patch("ai4sci_bench.scorers.multimodal.litellm")
+    def test_vlm_reasoning_effort_is_forwarded(self, mock_litellm, tmp_path):
+        pred_dir = tmp_path / "pred"
+        pred_dir.mkdir()
+        _create_minimal_png(pred_dir / "plot.png")
+        mock_litellm.completion.return_value = _make_litellm_response(8.0)
+
+        get_scorer("multimodal").score(pred_dir, tmp_path, {
+            "mode": "vlm_judge",
+            "model": "openai/gpt-5.5",
+            "reasoning_effort": "medium",
+            "pred_image": "plot.png",
+        })
+
+        kwargs = mock_litellm.completion.call_args.kwargs
+        assert kwargs["model"] == "openai/gpt-5.5"
+        assert kwargs["reasoning_effort"] == "medium"
 
     @patch("ai4sci_bench.scorers.multimodal.litellm")
     def test_vlm_runtime_judge_override_matches_text_route(self, mock_litellm, tmp_path):

@@ -98,7 +98,8 @@ evaluation:
     weight: 2
     config:
       mode: vlm_judge
-      model: gpt-5.4
+      model: openai/gpt-5.5
+      reasoning_effort: medium
       pred_image: results/retrieval_diagnostics.png
       ref_image: retrieval_diagnostics_ref.png
       rubric: 'Compare the retrieval summary figures.

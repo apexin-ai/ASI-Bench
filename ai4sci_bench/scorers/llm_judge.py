@@ -70,6 +70,7 @@ class LLMJudgeScorer(Scorer):
         max_score_value = config.get("max_score_value", 10)
         threshold = config.get("threshold", 0.5)
         max_chars = config.get("max_chars", 10000)
+        reasoning_effort = config.get("reasoning_effort")
 
         if num_judges < 3:
             logger.warning(
@@ -116,6 +117,7 @@ class LLMJudgeScorer(Scorer):
                 num_judges=num_judges,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                reasoning_effort=reasoning_effort,
                 max_score_value=max_score_value,
                 api_key=resolved_api.api_key,
                 api_base=resolved_api.api_base,
@@ -244,6 +246,7 @@ class LLMJudgeScorer(Scorer):
         max_score_value: float = 10,
         api_key: str | None = None,
         api_base: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> tuple[list[float | None], list[str], int]:
         scores: list[float | None] = []
         raw_responses: list[str] = []
@@ -256,7 +259,7 @@ class LLMJudgeScorer(Scorer):
 
         for i in range(num_judges):
             logger.debug("Calling judge %d/%d with model %s", i + 1, num_judges, model)
-            raw = self._call_with_retry(model, prompt, temperature, max_tokens, api_key=api_key, api_base=api_base)
+            raw = self._call_with_retry(model, prompt, temperature, max_tokens, api_key=api_key, api_base=api_base, reasoning_effort=reasoning_effort)
             raw_responses.append(raw)
             score = parse_judge_json(raw, max_score=max_score_value)
             if score is None:
@@ -273,12 +276,14 @@ class LLMJudgeScorer(Scorer):
         max_tokens: int,
         api_key: str | None = None,
         api_base: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> str:
         last_error: Exception | None = None
         extra_kwargs: dict[str, Any] = judge_completion_api_kwargs(
             model=model,
             api_base=api_base,
             api_key=api_key,
+            reasoning_effort=reasoning_effort,
         )
         effective_api_key = extra_kwargs.get("api_key")
         for attempt in range(MAX_RETRIES):

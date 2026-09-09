@@ -24,7 +24,8 @@ evaluation:
   - scorer: llm_judge
     severity: hard
     config:
-      model: openai/gpt-5.4
+      model: openai/gpt-5.5
+      reasoning_effort: medium
       max_score_value: 1
       pred_file: opamp_netlist.cir
       num_judges: 3
@@ -84,7 +85,8 @@ evaluation:
   - scorer: llm_judge
     weight: 1
     config:
-      model: openai/gpt-5.4
+      model: openai/gpt-5.5
+      reasoning_effort: medium
       max_score_value: 1
       pred_file: opamp_netlist.cir
       num_judges: 3
@@ -204,7 +206,8 @@ evaluation:
   - scorer: llm_judge
     weight: 8
     config:
-      model: openai/gpt-5.4
+      model: openai/gpt-5.5
+      reasoning_effort: medium
       max_score_value: 1
       pred_file: opamp_netlist.cir
       num_judges: 3
@@ -244,7 +247,8 @@ evaluation:
   - scorer: llm_judge
     weight: 5
     config:
-      model: openai/gpt-5.4
+      model: openai/gpt-5.5
+      reasoning_effort: medium
       max_score_value: 1
       pred_file: design_reasoning.md
       num_judges: 3

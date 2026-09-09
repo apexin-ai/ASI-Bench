@@ -669,3 +669,21 @@ def test_tracked_tree_has_no_secret_containers_or_symlinks():
         elif path.suffix.lower() in BLOCKED_TRACKED_SUFFIXES:
             violations.append(f"{relative}: blocked secret/archive suffix")
     assert not violations, "Potential secret container:\n" + "\n".join(violations)
+
+
+def test_gpt_judge_contracts_use_gpt55_with_medium_effort():
+    gpt_judge_configs = []
+    for path in TASKS.glob("*/*/task_eval.yaml"):
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        evaluation = data.get("evaluation") or {}
+        for section in ("gates", "scoring"):
+            for item in evaluation.get(section) or []:
+                config = item.get("config") or {}
+                model = str(config.get("model") or "")
+                if model.startswith(("gpt-", "openai/gpt-")):
+                    gpt_judge_configs.append((path, config))
+
+    assert len(gpt_judge_configs) == 7
+    for path, config in gpt_judge_configs:
+        assert config["model"] == "openai/gpt-5.5", path
+        assert config["reasoning_effort"] == "medium", path

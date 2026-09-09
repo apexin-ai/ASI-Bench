@@ -88,6 +88,7 @@ SUPPORTED_MODELS: dict[str, str] = {
     "gemini-3.1-pro-preview": "gemini/gemini-3.1-pro-preview",
     "claude-opus-4-6": "anthropic/claude-opus-4-6",
     "gpt-5.4": "openai/gpt-5.4",
+    "gpt-5.5": "openai/gpt-5.5",
     "openrouter/claude-opus-4-6": "openrouter/anthropic/claude-opus-4-6",
     "openrouter/gpt-5.4": "openrouter/openai/gpt-5.4",
     "openrouter/gemini-3.1-pro-preview": "openrouter/google/gemini-3.1-pro-preview",
@@ -240,6 +241,7 @@ def judge_completion_api_kwargs(
     model: str,
     api_base: str | None,
     api_key: str | None,
+    reasoning_effort: str | None = None,
 ) -> dict[str, str]:
     """Build identical credential/endpoint kwargs for text and VLM judges."""
     kwargs: dict[str, str] = {}
@@ -255,6 +257,8 @@ def judge_completion_api_kwargs(
             kwargs["api_key"] = provider_key
     if api_base:
         kwargs["api_base"] = api_base
+    if reasoning_effort:
+        kwargs["reasoning_effort"] = reasoning_effort
     return kwargs
 
 

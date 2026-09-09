@@ -23,6 +23,7 @@ from ai4sci_bench.scorers._judge_common import (
 class TestResolveModel:
     def test_resolve_model_known(self):
         assert resolve_model("gpt-5.4") == "openai/gpt-5.4"
+        assert resolve_model("gpt-5.5") == "openai/gpt-5.5"
         assert resolve_model("claude-opus-4-6") == "anthropic/claude-opus-4-6"
         assert resolve_model("gemini-3.1-pro-preview") == "gemini/gemini-3.1-pro-preview"
 
@@ -173,6 +174,17 @@ class TestJudgeAPIOverride:
                 api_base="https://api.example.test/v1",
                 api_key=None,
             ) == {"api_base": "https://api.example.test/v1"}
+
+    def test_completion_kwargs_include_explicit_reasoning_effort(self):
+        assert judge_completion_api_kwargs(
+            model="openai/gpt-5.5",
+            api_base=None,
+            api_key="judge-key",
+            reasoning_effort="medium",
+        ) == {
+            "api_key": "judge-key",
+            "reasoning_effort": "medium",
+        }
 
     def test_openrouter_route_keeps_legacy_environment_fallback(self):
         with patch.dict("os.environ", {"OPENROUTER_API_KEY": "provider-key"}, clear=False):

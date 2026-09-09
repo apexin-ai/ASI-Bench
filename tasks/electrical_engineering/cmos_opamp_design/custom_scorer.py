@@ -544,6 +544,7 @@ def _call_vector_judges(
     api_key: Optional[str] = None,
     api_base: Optional[str] = None,
     api_protocol: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> Dict[str, Any]:
     pred_content = _read_text(pred_dir / pred_file, max_chars=max_chars)
     if pred_content is None:
@@ -573,6 +574,7 @@ def _call_vector_judges(
         model=resolved_model,
         api_base=api_base,
         api_key=api_key,
+        reasoning_effort=reasoning_effort,
     )
     # Keep the legacy OpenRouter fallback compatible for direct callers, but
     # include the effective credential in the redaction set if it was used.
@@ -763,7 +765,7 @@ def _metric_trust_report(
 ) -> Dict[str, Any]:
     trust_cfg = config.get("trust_judge", {}) or {}
     judge_agent = str(trust_cfg.get("agent", "llm"))
-    model = str(trust_cfg.get("model", "gpt-5.4"))
+    model = str(trust_cfg.get("model", "openai/gpt-5.5"))
     num_judges = int(trust_cfg.get("num_judges", 3))
     temperature = float(trust_cfg.get("temperature", 0.0))
     max_tokens = int(trust_cfg.get("max_tokens", 400))
@@ -778,7 +780,7 @@ def _metric_trust_report(
     resolved_api = None
     try:
         if judge_agent == "codex":
-            codex_model = str(trust_cfg.get("model", "gpt-5.4"))
+            codex_model = str(trust_cfg.get("model", "gpt-5.5"))
             reasoning_effort = str(trust_cfg.get("reasoning_effort", "medium"))
             sandbox = str(trust_cfg.get("sandbox", "workspace-write"))
             timeout = int(trust_cfg.get("timeout", 300))
@@ -827,6 +829,7 @@ def _metric_trust_report(
                 api_key=resolved_api.api_key,
                 api_base=resolved_api.api_base,
                 api_protocol=resolved_api.api_protocol,
+                reasoning_effort=str(trust_cfg.get("reasoning_effort", "medium")),
             )
             extraction = _call_vector_judges(
                 pred_dir=pred_dir,
@@ -842,6 +845,7 @@ def _metric_trust_report(
                 api_key=resolved_api.api_key,
                 api_base=resolved_api.api_base,
                 api_protocol=resolved_api.api_protocol,
+                reasoning_effort=str(trust_cfg.get("reasoning_effort", "medium")),
             )
     except Exception as exc:
         safe_error = sanitize_judge_error(
@@ -1348,7 +1352,8 @@ def _netlist_strict_gate_report(
 ) -> Dict[str, Any]:
     strict_cfg = config.get("strict_netlist_gate", {}) or {}
     code_only = bool(strict_cfg.get("code_only", False))
-    model = str(strict_cfg.get("model", "gpt-5.4"))
+    model = str(strict_cfg.get("model", "openai/gpt-5.5"))
+    reasoning_effort = str(strict_cfg.get("reasoning_effort", "medium"))
     num_judges = int(strict_cfg.get("num_judges", 3))
     temperature = float(strict_cfg.get("temperature", 0.0))
     max_tokens = int(strict_cfg.get("max_tokens", 220))
@@ -1435,6 +1440,7 @@ def _netlist_strict_gate_report(
             model=resolved_api.model,
             api_base=resolved_api.api_base,
             api_key=resolved_api.api_key,
+            reasoning_effort=reasoning_effort,
         )
         for _ in range(max(1, num_judges)):
             response = litellm.completion(
