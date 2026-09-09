@@ -711,6 +711,42 @@ def _upstream_timeout_seconds(real_streaming: bool) -> float:
     return value if value > 0 else default
 
 
+def _attach_proxy_file_handler(level: int) -> None:
+    """Also write proxy diagnostics to a file under ``ASIBENCH_PROXY_LOG_DIR``.
+
+    The stream handler above reaches only the container's stdout, which is
+    reachable through ``kubectl logs`` and disappears with the pod. That has
+    already cost one run its throughput data: pairing ``request_start`` with a
+    terminal outcome is the only way to measure generation time with tool
+    execution excluded, and two pods were deleted before anyone read them.
+    Unlike the stream handler this one timestamps every record, so the pairing
+    does not depend on ``kubectl logs --timestamps``.
+
+    Failure to open the file is not fatal -- the directory may be read-only or
+    absent, and losing a diagnostic log should never take an evaluation down.
+    """
+    log_dir = os.getenv("ASIBENCH_PROXY_LOG_DIR", "").strip()
+    if not log_dir:
+        return
+    if any(getattr(h, "_asibench_proxy_file", False) for h in logger.handlers):
+        return
+    try:
+        directory = Path(log_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        # One file per process: many proxies run in one process, and they all
+        # log through this module-level logger.
+        handler = logging.FileHandler(directory / f"proxy-{os.getpid()}.log")
+    except OSError:
+        logger.debug("proxy file log unavailable at %s", log_dir, exc_info=True)
+        return
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s.%(msecs)03dZ %(message)s", datefmt="%Y-%m-%dT%H:%M:%S",
+    ))
+    handler._asibench_proxy_file = True  # type: ignore[attr-defined]
+    logger.addHandler(handler)
+
+
 def _close_upstream_stream(response: Any, request_id: str = "") -> None:
     """Release the upstream HTTP connection held by a streaming response.
 
@@ -1489,6 +1525,7 @@ class LiteLLMProxy:
             handler.setFormatter(logging.Formatter("%(message)s"))
             handler._asibench_proxy = True  # type: ignore[attr-defined]
             logger.addHandler(handler)
+        _attach_proxy_file_handler(level)
         # Emit through this handler only, so the root handler cannot duplicate
         # records that do clear its level.
         logger.propagate = False

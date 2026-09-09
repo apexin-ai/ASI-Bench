@@ -2135,3 +2135,64 @@ class TestRequestShapeSummary:
         out = _describe_request_shape({"messages": [None, {"role": "user"}, "junk"]})
         assert "msgs=3" in out
         assert "tools=0" in out
+
+
+class TestProxyFileLogging:
+    """Proxy diagnostics must survive the pod they were produced in.
+
+    `kubectl logs` is the only place they used to exist, and pairing
+    request_start with a terminal outcome is what measures generation time
+    apart from tool time. One run lost that data to a deleted pod.
+    """
+
+    def test_file_handler_written_with_timestamps(self, tmp_path, monkeypatch):
+        import logging as _logging
+        from ai4sci_bench.adapters import api_proxy
+
+        monkeypatch.setenv("ASIBENCH_PROXY_LOG_DIR", str(tmp_path))
+        api_proxy.logger.handlers = [
+            h for h in api_proxy.logger.handlers
+            if not getattr(h, "_asibench_proxy_file", False)
+        ]
+        try:
+            api_proxy._attach_proxy_file_handler(_logging.WARNING)
+            api_proxy.logger.warning("litellm proxy request_start id=abc")
+            for h in api_proxy.logger.handlers:
+                h.flush()
+            written = list(tmp_path.glob("proxy-*.log"))
+            assert len(written) == 1
+            text = written[0].read_text()
+            assert "request_start id=abc" in text
+            # a timestamp the pairing can parse, not a bare message
+            assert text.startswith("20")
+            assert "Z " in text
+        finally:
+            for h in list(api_proxy.logger.handlers):
+                if getattr(h, "_asibench_proxy_file", False):
+                    h.close()
+                    api_proxy.logger.removeHandler(h)
+
+    def test_no_dir_configured_is_a_noop(self, monkeypatch):
+        import logging as _logging
+        from ai4sci_bench.adapters import api_proxy
+
+        monkeypatch.delenv("ASIBENCH_PROXY_LOG_DIR", raising=False)
+        before = len(api_proxy.logger.handlers)
+        api_proxy._attach_proxy_file_handler(_logging.WARNING)
+        assert len(api_proxy.logger.handlers) == before
+
+    def test_unopenable_path_does_not_raise(self, tmp_path, monkeypatch):
+        """Losing a diagnostic log must never take an evaluation down.
+
+        A file where a directory is expected fails for root too, unlike a
+        permission bit -- the suite runs as root in the evaluation image.
+        """
+        import logging as _logging
+        from ai4sci_bench.adapters import api_proxy
+
+        blocker = tmp_path / "not-a-dir"
+        blocker.write_text("")
+        monkeypatch.setenv("ASIBENCH_PROXY_LOG_DIR", str(blocker / "nested"))
+        before = len(api_proxy.logger.handlers)
+        api_proxy._attach_proxy_file_handler(_logging.WARNING)  # must not raise
+        assert len(api_proxy.logger.handlers) == before
