@@ -571,3 +571,20 @@
   construction and at least one scorer path instead of checking only syntax or
   class presence.
 - Implementation commit: `5b40ad0`.
+
+## 2026-09: Difficulty-check terminal progress
+
+- Problem: `asibench difficulty-check` could spend hours inside an agent run
+  without visible terminal feedback, leaving authors unable to tell which
+  task, harness, prompt level, or instance was currently executing.
+- Resolution: add an optional orchestrator instance-progress callback and use
+  it to render durable global progress-bar lines before and after every
+  difficulty instance. The output identifies task, agent/model preparation,
+  B1–B4 level, instance ID, percentage, score, and failed/timeout state.
+- Verification: add CLI regressions for level-aware 0–100% output and a runner
+  regression for start/completion callbacks; the full offline suite passed
+  `2316` tests, with `2 skipped` and `22 deselected`.
+- Prevention: long-running author workflows must emit a visible stage before
+  blocking external work begins, and progress hooks must remain optional so
+  library callers and other CLI commands keep their existing output.
+- Implementation commit: `b70cd1c`.
