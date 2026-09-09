@@ -556,3 +556,18 @@
 - Prevention: difficulty evidence must identify both model and harness, and a
   no-tool/single-turn baseline must never be the sole formal difficulty gate.
 - Implementation commit: `47bf572`.
+
+## 2026-09: Fix MPSC evaluator solution construction
+
+- Problem: `math.mpsc_safety_filter` raised `TypeError: MPSCSolution() takes no arguments`
+  because the public evaluator runtime declared fields on `MPSCSolution` without
+  generating an initializer, while all solver paths instantiate it with values.
+- Resolution: annotate `MPSCSolution` with `@dataclass`; add a regression test
+  that imports the public runtime and constructs the value object using its
+  keyword fields.
+- Verification: the MPSC public-policy and regression tests pass (`20 passed`);
+  full offline suite is run before integration.
+- Prevention: whenever evaluator runtimes expose typed result records, test both
+  construction and at least one scorer path instead of checking only syntax or
+  class presence.
+- Implementation commit: `5b40ad0`.
