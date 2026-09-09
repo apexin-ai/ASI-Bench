@@ -715,6 +715,7 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
 
     from ai4sci_bench.core.task import TaskLoader
     from ai4sci_bench.runner.parallel import auto_limit_workers
+    from ai4sci_bench.runner.runtime_root import resolve_runtime_root
 
     instances_root = Path(instances_dir)
     if tasks == "all":
@@ -727,6 +728,31 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config,
         task_ids = [task_id.strip() for task_id in tasks.split(",") if task_id.strip()]
     if not task_ids:
         raise click.ClickException("No matching tasks found in --instances-dir")
+
+    # Pre-build every task runtime environment, one at a time. The instance
+    # workers each call ``ensure_env`` under a lock on first use; at 100
+    # parallel those locks have left instances dying at 0 seconds with
+    # ``Timed out waiting for task env lock``. Walking the tasks here, serially,
+    # populates the cache so the workers all hit it and never touch the locks.
+    # Off by default: this is a cluster-evaluation affordance, not something
+    # every local run wants, and enabling it changes how often the build path
+    # is touched.
+    if os.environ.get("ASIBENCH_WARMUP_ENVS", "0").strip() in {"1", "true", "yes", "on"}:
+        from ai4sci_bench.runner.task_env import TaskEnvironmentManager
+
+        env_manager = TaskEnvironmentManager(resolve_runtime_root(Path(tasks_dir)))
+        loader = TaskLoader(Path(tasks_dir))
+        for task_id in task_ids:
+            metadata = loader.load_task_by_id(task_id)
+            if metadata is None:
+                continue
+            try:
+                env_manager.ensure_env(metadata)
+                logger.info("task env ready: %s", task_id)
+            except Exception:
+                # A failed build must not abort the whole run; the per-instance
+                # path will retry it under the lock as before.
+                logger.warning("task env warmup failed for %s", task_id, exc_info=True)
 
     effective_parallel = auto_limit_workers(parallel, sandbox=sandbox)
     base = Path(output_dir)
