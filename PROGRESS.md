@@ -588,3 +588,15 @@
   blocking external work begins, and progress hooks must remain optional so
   library callers and other CLI commands keep their existing output.
 - Implementation commit: `b70cd1c`.
+
+## 2026-09: Replace GPT-5.4 Judge configuration
+
+- Problem: several formal image/text Judge contracts still selected GPT-5.4,
+  while the requested review standard is GPT-5.5 at medium reasoning effort.
+- Resolution: update all seven GPT Judge task contracts to `openai/gpt-5.5`
+  with `reasoning_effort: medium`; add GPT-5.5 model resolution and forward
+  reasoning effort through generic text/VLM and CMOS custom Judge paths.
+- Verification: targeted Judge, CMOS, NNLS, and public-policy tests passed
+  (`105 passed`); full offline suite passed `2320`, with `2 skipped` and
+  `22 deselected`.
+- Implementation commit: `97fef0e`.
