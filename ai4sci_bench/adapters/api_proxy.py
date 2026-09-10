@@ -907,6 +907,10 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
             try:
                 if real_streaming:
                     kwargs["stream"] = True
+                    # Without this the server sends no usage chunk, and the only
+                    # available "size" of a response is the chunk count -- which
+                    # counts protocol events, not tokens.
+                    kwargs["stream_options"] = {"include_usage": True}
                     import litellm
                     response = litellm.completion(**kwargs)
                 elif is_stream:
@@ -1199,6 +1203,11 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
         saw_terminal = False
         item_count = 0
         byte_count = 0
+        # Generated-token count as reported by the server. item_count is the
+        # number of iterator chunks, which includes protocol-only events and,
+        # on the byte path, partial SSE frames -- it is not a token count and
+        # must not be used as one when measuring decode throughput.
+        upstream_output_tokens: int | None = None
 
         def start_block(block_index: int, block_type: str, block: dict[str, Any]) -> None:
             if block_index in active_blocks:
@@ -1277,6 +1286,7 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                         "id": getattr(item, "id", "msg_proxy"),
                         "model": getattr(item, "model", self.litellm_model),
                         "choices": getattr(item, "choices", []),
+                        "usage": getattr(item, "usage", None),
                     }
                 else:
                     try:
@@ -1284,6 +1294,18 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                     except (TypeError, ValueError):
                         logger.warning("litellm proxy: ignoring unsupported stream item %r", item)
                         continue
+                chunk_usage = chunk.get("usage")
+                if chunk_usage is not None:
+                    if not isinstance(chunk_usage, dict):
+                        try:
+                            chunk_usage = dict(chunk_usage)
+                        except (TypeError, ValueError):
+                            chunk_usage = {}
+                    reported = chunk_usage.get("completion_tokens")
+                    if reported is None:
+                        reported = chunk_usage.get("output_tokens")
+                    if isinstance(reported, (int, float)) and reported > 0:
+                        upstream_output_tokens = int(reported)
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
@@ -1375,8 +1397,9 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                 )
             if not saw_terminal:
                 logger.error(
-                    "litellm proxy stream_incomplete id=%s items=%d bytes=%d started=%s",
-                    request_id, item_count, byte_count, started,
+                    "litellm proxy stream_incomplete id=%s items=%d output_tokens=%s "
+                    "bytes=%d started=%s",
+                    request_id, item_count, upstream_output_tokens, byte_count, started,
                 )
                 if started:
                     stop_blocks()
@@ -1388,14 +1411,16 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                 outcome = "incomplete_after_write" if started else "failed_before_write"
                 return outcome
             logger.warning(
-                "litellm proxy stream_complete id=%s items=%d bytes=%d stop_reason=%s",
-                request_id, item_count, byte_count, final_stop_reason,
+                "litellm proxy stream_complete id=%s items=%d output_tokens=%s "
+                "bytes=%d stop_reason=%s",
+                request_id, item_count, upstream_output_tokens, byte_count,
+                final_stop_reason,
             )
             if started:
                 stop_blocks()
                 self._write_sse("message_delta", {"type": "message_delta",
                     "delta": {"stop_reason": final_stop_reason, "stop_sequence": None},
-                    "usage": {"output_tokens": 0}})
+                    "usage": {"output_tokens": upstream_output_tokens or 0}})
                 self._write_sse("message_stop", {"type": "message_stop"})
                 self.close_connection = True
             outcome = "ok"
