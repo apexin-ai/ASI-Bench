@@ -2872,7 +2872,7 @@ class TestCodexCLIEffort:
         assert adapter.effort == "xhigh"
 
     def test_all_valid_effort_levels(self):
-        for level in ("none", "minimal", "low", "medium", "high", "xhigh"):
+        for level in ("none", "minimal", "low", "medium", "high", "xhigh", "ultra"):
             adapter = CodexCLIAdapter(effort=level)
             assert adapter.effort == level
 

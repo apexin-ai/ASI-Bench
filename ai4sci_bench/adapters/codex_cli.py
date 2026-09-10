@@ -61,7 +61,10 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
     point to a pre-configured Codex config directory.
     """
 
-    VALID_EFFORT_LEVELS = ("none", "minimal", "low", "medium", "high", "xhigh")
+    # Keep validation aligned with current Codex CLI, which supports ``ultra``.
+    VALID_EFFORT_LEVELS = (
+        "none", "minimal", "low", "medium", "high", "xhigh", "ultra"
+    )
 
     NATIVE_CODEX_PROVIDERS = frozenset({
         "openrouter", "openai-compatible", "openai", "anthropic",

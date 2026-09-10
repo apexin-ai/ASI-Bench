@@ -16,10 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from ai4sci_bench.core.logger import get_logger
+from ai4sci_bench import __version__
 
 logger = get_logger(__name__)
 
-FRAMEWORK_VERSION = "0.1.3"
+FRAMEWORK_VERSION = __version__
 
 
 def collect_run_metadata(

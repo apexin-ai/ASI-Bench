@@ -612,3 +612,14 @@
   API tests passed; the full offline suite passed `2320`, with `2 skipped` and
   `22 deselected`.
 - Implementation commit: `ee139f0`.
+
+## 2026-09: Synchronize framework version and Codex effort levels
+
+- Problem: run metadata hard-coded framework version `0.1.3` while the package
+  and CLI reported `0.1.5`; Codex CLI validation also rejected the installed
+  CLI's supported `ultra` effort level.
+- Resolution: derive metadata version from `ai4sci_bench.__version__` and add
+  `ultra` to Codex adapter validation and regression coverage.
+- Verification: targeted metadata, adapter, difficulty, and integration tests
+  passed; `asibench --version` and metadata both report `0.1.5`.
+- Implementation commit: `c653ec4`.
