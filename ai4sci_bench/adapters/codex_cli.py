@@ -489,8 +489,17 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
             "--skip-git-repo-check",
             "--json",
         ]
-        # Under linux_ns and os, the benchmark already provides the outer
-        # isolation layer, so Codex should not nest its own sandbox.
+        # Under task, linux_ns and os, the benchmark already provides the
+        # outer isolation layer, so Codex should not nest its own sandbox.
+        # `task` belongs in this list for the same reason the others do: the
+        # isolation is the evaluation pod plus the per-task virtualenv, and
+        # Claude Code -- run under the same mode -- passes no sandbox flag at
+        # all and executes directly. Nesting Codex's bwrap inside that is not
+        # extra safety, it is a hard failure wherever user namespaces are
+        # unavailable: an evaluation pod has
+        # /proc/sys/user/max_user_namespaces = 0, so every command returns
+        # `bwrap: Creating new namespace failed ... (ENOSPC)` and the agent
+        # burns its whole timeout retrying.
         #
         # Under sandbox=none the benchmark explicitly requested host-mode
         # execution. Leaving Codex in its default approval flow here can
@@ -498,7 +507,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         # which prevents writing outputs even though the benchmark itself is
         # not enforcing isolation. In that host-mode case, match the outer
         # benchmark contract and bypass Codex's inner approval/sandbox layer.
-        if self.sandbox in ("none", "linux_ns"):
+        if self.sandbox in ("none", "task", "linux_ns"):
             cmd += ["--dangerously-bypass-approvals-and-sandbox"]
         else:
             cmd += ["--sandbox", "workspace-write"]
