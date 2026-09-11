@@ -2571,7 +2571,23 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
     litellm_api_key: str | None
     translate_responses: bool = False
     responses_via_chat: bool = False
+    routing_key: str | None = None
     supports_image_input: bool = False
+
+    def _apply_routing_key(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Pin this agent session's turns to one SGLang worker.
+
+        Mirrors what the Anthropic handler does. Without it the router has
+        nothing to place by and piles every request onto a single worker: with
+        Codex, 79 concurrent requests landed on one of nine while the other
+        eight sat at zero. The header is used for placement only and never
+        reaches the prompt.
+        """
+        if self.routing_key:
+            headers = dict(kwargs.get("extra_headers") or {})
+            headers["X-SMG-Routing-Key"] = self.routing_key
+            kwargs["extra_headers"] = headers
+        return kwargs
 
     def do_POST(self) -> None:
         content_length = int(self.headers.get("Content-Length", 0))
@@ -2665,14 +2681,16 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
             kwargs["api_base"] = self.litellm_api_base
         if self.litellm_api_key:
             kwargs["api_key"] = self.litellm_api_key
+            kwargs = self._apply_routing_key(kwargs)
 
         wants_stream = bool(body.get("stream"))
         logger.warning(
             "codex proxy request_start id=%s model=%s stream=%s msgs=%d tools=%d "
-            "max_tokens=%s effort=%s",
+            "max_tokens=%s effort=%s routing_key=%s",
             request_id, kwargs.get("model"), wants_stream,
             len(kwargs.get("messages") or []), len(kwargs.get("tools") or []),
             kwargs.get("max_completion_tokens"), kwargs.get("reasoning_effort"),
+            (kwargs.get("extra_headers") or {}).get("X-SMG-Routing-Key", ""),
         )
 
         started = time.time()
@@ -2912,6 +2930,7 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
             kwargs["api_base"] = self.litellm_api_base
         if self.litellm_api_key:
             kwargs["api_key"] = self.litellm_api_key
+            kwargs = self._apply_routing_key(kwargs)
 
         # Call upstream non-streaming; synthesize SSE if the client asked for it.
         # Streaming is deliberately dropped here because upstream stream formats
@@ -3162,6 +3181,7 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
             kwargs["api_base"] = self.litellm_api_base
         if self.litellm_api_key:
             kwargs["api_key"] = self.litellm_api_key
+            kwargs = self._apply_routing_key(kwargs)
 
         for key in (
             "temperature", "top_p", "max_tokens", "max_completion_tokens",
@@ -3324,6 +3344,8 @@ class LiteLLMOpenAIProxy:
             "litellm_api_key": self.api_key,
             "translate_responses": self._translate_responses,
             "responses_via_chat": self._responses_via_chat,
+            # Set per instance by the harness; see _apply_routing_key.
+            "routing_key": os.getenv("ASIBENCH_ROUTING_KEY") or None,
             "supports_image_input": self.supports_image_input,
         })
         self._server = http.server.ThreadingHTTPServer(
