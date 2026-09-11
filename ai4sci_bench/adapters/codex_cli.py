@@ -189,6 +189,33 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
             )
             return self._proxy.start()  # type: ignore[union-attr]
 
+    def _ensure_bridge_codex_home(self, proxy_url: str) -> str:
+        """Write a CODEX_HOME whose provider points at the local bridge.
+
+        The bridge speaks the Responses API (translating down to
+        chat/completions upstream), so the provider declares
+        ``wire_api = "responses"``. Codex reads this only when
+        ``--ignore-user-config`` is absent, which is why the tool-isolation
+        flags drop that one on this path.
+        """
+        if self._temp_codex_home:
+            return self._temp_codex_home
+        tmpdir = tempfile.mkdtemp(prefix="codex_bridge_")
+        os.chmod(tmpdir, 0o700)
+        config = (
+            'model_provider = "bridge"\n'
+            '\n[model_providers.bridge]\n'
+            'name = "Local Bridge"\n'
+            f'base_url = "{proxy_url}/v1"\n'
+            'wire_api = "responses"\n'
+            'experimental_bearer_token = "sk-proxy-placeholder"\n'
+        )
+        with open(os.path.join(tmpdir, "config.toml"), "w", encoding="utf-8") as fh:
+            fh.write(config)
+        self._temp_codex_home = tmpdir
+        logger.info("codex_cli: bridge CODEX_HOME at %s -> %s", tmpdir, proxy_url)
+        return tmpdir
+
     def _build_api_env(self) -> dict[str, str]:
         """Build env vars for API authentication."""
         env: dict[str, str] = {}
@@ -201,18 +228,12 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
             env["OPENAI_API_KEY"] = "sk-proxy-placeholder"
             env["OPENAI_BASE_URL"] = proxy_url
             if self.responses_via_chat:
-                # OPENAI_BASE_URL alone is not enough: Codex resolves its
-                # provider from its own config and would otherwise talk to
-                # api.openai.com directly (observed as a 401 against
-                # wss://api.openai.com/v1/responses). These overrides point the
-                # frozen launcher's Responses provider at the local bridge
-                # instead.
-                env.update({
-                    "CODEX_HARNESS_PROVIDER": "openai-compatible",
-                    "CODEX_HARNESS_BASE_URL": f"{proxy_url}/v1",
-                    "CODEX_HARNESS_BEARER_TOKEN": "sk-proxy-placeholder",
-                    "CODEX_HARNESS_WIRE_API": "responses",
-                })
+                # OPENAI_BASE_URL alone does not redirect Codex: it resolves
+                # its provider from its own config and goes to
+                # api.openai.com regardless (seen as 401 against
+                # wss://api.openai.com/v1/responses). Generate a CODEX_HOME
+                # whose provider points at the local bridge instead.
+                env["CODEX_HOME"] = self._ensure_bridge_codex_home(proxy_url)
             logger.info("codex_cli: using litellm proxy at %s", proxy_url)
         elif self.api_key:
             env["OPENAI_API_KEY"] = self.api_key
@@ -409,7 +430,15 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         # sufficient (verified: Appendix F.3).
         # Also ignore ambient execpolicy rules so benchmark runs are not
         # silently tightened by host- or repo-local Codex policies.
-        cmd += ["--ignore-user-config", "--ignore-rules"]
+        #
+        # Exception: on the bridge path the provider lives in a CODEX_HOME we
+        # generated, and --ignore-user-config would discard it -- Codex then
+        # falls back to api.openai.com and every request 401s. The generated
+        # home is a fresh temp dir with only our provider in it, so there is
+        # no ambient user config left to ignore.
+        if not (self._uses_proxy and self.responses_via_chat):
+            cmd += ["--ignore-user-config"]
+        cmd += ["--ignore-rules"]
         for feature in CODEX_RESTRICTED_DISABLE_FEATURES:
             cmd += ["--disable", feature]
         if self.tool_mode == ToolMode.RESTRICTED:
