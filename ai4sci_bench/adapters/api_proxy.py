@@ -1024,6 +1024,35 @@ def _attach_proxy_file_handler(level: int) -> None:
     logger.addHandler(handler)
 
 
+def _configure_proxy_logging() -> None:
+    """Install this module's log handlers, for either proxy class.
+
+    Proxy diagnostics need a handler of their own.  ``logger.setLevel``
+    alone does not publish them: the benchmark CLI installs its handler on
+    the root logger at WARNING, and a record still has to clear the
+    handler's level after it clears the logger's.  That is why the
+    per-request INFO diagnostics never reached the pod log, which in turn
+    hid every mid-stream client disconnect.
+
+    Shared rather than duplicated because it was not: only the Anthropic
+    proxy set this up, so Codex runs honoured ASIBENCH_PROXY_LOG_DIR for
+    Claude Code and silently wrote nothing.
+    """
+    proxy_log_level = os.getenv("ASIBENCH_PROXY_LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, proxy_log_level, logging.INFO)
+    logger.setLevel(level)
+    if not any(getattr(h, "_asibench_proxy", False) for h in logger.handlers):
+        handler = logging.StreamHandler()
+        handler.setLevel(level)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler._asibench_proxy = True  # type: ignore[attr-defined]
+        logger.addHandler(handler)
+    _attach_proxy_file_handler(level)
+    # Emit through these handlers only, so the root handler cannot duplicate
+    # records that do clear its level.
+    logger.propagate = False
+
+
 def _close_upstream_stream(response: Any, request_id: str = "") -> None:
     """Release the upstream HTTP connection held by a streaming response.
 
@@ -1812,25 +1841,7 @@ class LiteLLMProxy:
 
     def start(self) -> str:
         """Start the proxy in a daemon thread. Returns the local URL."""
-        # Proxy diagnostics need a handler of their own.  ``logger.setLevel``
-        # alone does not publish them: the benchmark CLI installs its handler on
-        # the root logger at WARNING, and a record still has to clear the
-        # handler's level after it clears the logger's.  That is why the
-        # per-request INFO diagnostics never reached the pod log, which in turn
-        # hid every mid-stream client disconnect.
-        proxy_log_level = os.getenv("ASIBENCH_PROXY_LOG_LEVEL", "INFO").upper()
-        level = getattr(logging, proxy_log_level, logging.INFO)
-        logger.setLevel(level)
-        if not any(getattr(h, "_asibench_proxy", False) for h in logger.handlers):
-            handler = logging.StreamHandler()
-            handler.setLevel(level)
-            handler.setFormatter(logging.Formatter("%(message)s"))
-            handler._asibench_proxy = True  # type: ignore[attr-defined]
-            logger.addHandler(handler)
-        _attach_proxy_file_handler(level)
-        # Emit through this handler only, so the root handler cannot duplicate
-        # records that do clear its level.
-        logger.propagate = False
+        _configure_proxy_logging()
         routing_key = os.getenv("ASIBENCH_ROUTING_KEY") or uuid.uuid4().hex
         handler_cls = type("Handler", (_LiteLLMProxyHandler,), {
             "litellm_model": self.model,
@@ -3306,6 +3317,7 @@ class LiteLLMOpenAIProxy:
 
     def start(self) -> str:
         """Start the proxy in a daemon thread. Returns the local URL."""
+        _configure_proxy_logging()
         handler = type("Handler", (_LiteLLMOpenAIProxyHandler,), {
             "litellm_model": self.model,
             "litellm_api_base": self.api_base,
