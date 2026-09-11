@@ -659,6 +659,283 @@ def to_chat_completions_model(model: str) -> str:
     return model
 
 
+def _value(obj: Any, key: str, default: Any = None) -> Any:
+    """Read a field from either a dict or a provider SDK response object."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _responses_content_text(content: Any) -> str:
+    """Flatten text-only Responses message content for Chat Completions."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return "" if content is None else str(content)
+
+    parts: list[str] = []
+    for part in content:
+        if isinstance(part, str):
+            parts.append(part)
+            continue
+        if not isinstance(part, dict):
+            parts.append(str(part))
+            continue
+        part_type = part.get("type")
+        if part_type in ("input_text", "output_text", "text"):
+            parts.append(str(part.get("text", "")))
+        elif part_type in ("input_image", "output_image", "image_url"):
+            raise ValueError(
+                "Responses-to-Chat translation currently supports text-only inputs"
+            )
+    return "\n".join(part for part in parts if part)
+
+
+def responses_request_to_chat(body: dict[str, Any], model: str) -> dict[str, Any]:
+    """Convert an OpenAI Responses request into Chat Completions kwargs.
+
+    Codex speaks the Responses API, but SGLang — and most OpenAI-*compatible*
+    gateways — implement only ``/v1/chat/completions``. Sending a Responses
+    request to one does not degrade gracefully: SGLang parses the body as a
+    ``ChatCompletionRequest`` and rejects Codex's tool declarations outright
+    (``tools[5].type: unknown variant `namespace```).
+
+    The conversion is intentionally state-less: Codex includes the prior
+    ``function_call`` and matching ``function_call_output`` items in each new
+    request. Keeping their ``call_id`` as the Chat ``tool_call_id`` preserves
+    the agent's tool loop without relying on ``previous_response_id`` storage.
+    """
+    messages: list[dict[str, Any]] = []
+    instructions = body.get("instructions")
+    if instructions:
+        messages.append({"role": "system", "content": str(instructions)})
+
+    input_items = body.get("input", [])
+    if isinstance(input_items, str):
+        input_items = [{"type": "message", "role": "user", "content": input_items}]
+    if not isinstance(input_items, list):
+        raise ValueError("Responses input must be a string or list")
+
+    pending_calls: list[dict[str, Any]] = []
+
+    def flush_calls() -> None:
+        if pending_calls:
+            messages.append({"role": "assistant", "content": None, "tool_calls": list(pending_calls)})
+            pending_calls.clear()
+
+    for item in input_items:
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("type", "message")
+        if item_type == "message":
+            flush_calls()
+            role = str(item.get("role") or "user")
+            if role == "developer":
+                role = "system"
+            messages.append({
+                "role": role,
+                "content": _responses_content_text(item.get("content")),
+            })
+        elif item_type in ("function_call", "custom_tool_call"):
+            call_id = str(item.get("call_id") or item.get("id") or f"call_proxy_{len(pending_calls)}")
+            pending_calls.append({
+                "id": call_id,
+                "type": "function",
+                "function": {
+                    "name": str(item.get("name") or ""),
+                    "arguments": str(item.get("arguments") or "{}"),
+                },
+            })
+        elif item_type in ("function_call_output", "custom_tool_call_output"):
+            flush_calls()
+            output = item.get("output", "")
+            if not isinstance(output, str):
+                output = json.dumps(output, default=str)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": str(item.get("call_id") or item.get("id") or ""),
+                "content": output,
+            })
+        # Reasoning and hosted-tool bookkeeping do not have Chat equivalents.
+    flush_calls()
+
+    chat_tools: list[dict[str, Any]] = []
+    for tool in body.get("tools") or []:
+        if not isinstance(tool, dict) or tool.get("type") != "function":
+            continue
+        function = {
+            key: tool[key]
+            for key in ("name", "description", "parameters", "strict")
+            if key in tool and tool[key] is not None
+        }
+        chat_tools.append({"type": "function", "function": function})
+
+    chat_model = to_chat_completions_model(model)
+    if not chat_model.startswith("hosted_vllm/"):
+        chat_model = f"hosted_vllm/{chat_model}"
+    kwargs: dict[str, Any] = {
+        "model": chat_model,
+        "messages": messages,
+        "stream": False,
+        "timeout": 3600,
+    }
+    if chat_tools:
+        kwargs["tools"] = chat_tools
+
+    tool_choice = body.get("tool_choice")
+    if isinstance(tool_choice, dict) and tool_choice.get("type") == "function":
+        tool_choice = {
+            "type": "function",
+            "function": {"name": tool_choice.get("name", "")},
+        }
+    if tool_choice in ("auto", "none", "required") or isinstance(tool_choice, dict):
+        kwargs["tool_choice"] = tool_choice
+
+    if body.get("parallel_tool_calls") is not None:
+        kwargs["parallel_tool_calls"] = bool(body["parallel_tool_calls"])
+    if body.get("max_output_tokens") is not None:
+        kwargs["max_completion_tokens"] = body["max_output_tokens"]
+    for key in ("temperature", "top_p"):
+        if body.get(key) is not None:
+            kwargs[key] = body[key]
+    reasoning = body.get("reasoning")
+    if isinstance(reasoning, dict) and reasoning.get("effort") is not None:
+        kwargs["reasoning_effort"] = reasoning["effort"]
+    return kwargs
+
+
+def chat_completion_to_responses(response: Any, fallback_model: str) -> dict[str, Any]:
+    """Convert a completed Chat Completions response to Responses format."""
+    choices = _value(response, "choices") or []
+    choice = choices[0] if choices else {}
+    message = _value(choice, "message") or {}
+    chat_id = str(_value(response, "id", "proxy"))
+    response_id = chat_id if chat_id.startswith("resp_") else f"resp_{chat_id}"
+    output: list[dict[str, Any]] = []
+
+    tool_calls = list(_value(message, "tool_calls") or [])
+    text = _value(message, "content")
+    # Some Chat-compatible reasoning models emit a narrative preamble together
+    # with tool calls.  In Responses semantics that text can look like a final
+    # assistant message and cause Codex to end the turn after executing the
+    # tools, instead of submitting their outputs in a follow-up request.  A
+    # Chat response containing tool calls is an intermediate step, so defer its
+    # text until a later, tool-free response.
+    if isinstance(text, str) and text and not tool_calls:
+        output.append({
+            "id": f"msg_{chat_id}",
+            "type": "message",
+            "status": "completed",
+            "role": "assistant",
+            "content": [{
+                "type": "output_text",
+                "text": text,
+                "annotations": [],
+            }],
+        })
+
+    for index, tool_call in enumerate(tool_calls):
+        function = _value(tool_call, "function") or {}
+        call_id = str(_value(tool_call, "id") or f"call_{chat_id}_{index}")
+        output.append({
+            "id": f"fc_{call_id}",
+            "type": "function_call",
+            "status": "completed",
+            "call_id": call_id,
+            "name": str(_value(function, "name", "")),
+            "arguments": str(_value(function, "arguments", "{}")),
+        })
+
+    usage = _value(response, "usage") or {}
+    input_tokens = int(_value(usage, "prompt_tokens", 0) or 0)
+    output_tokens = int(_value(usage, "completion_tokens", 0) or 0)
+    prompt_details = _value(usage, "prompt_tokens_details") or {}
+    completion_details = _value(usage, "completion_tokens_details") or {}
+    return {
+        "id": response_id,
+        "object": "response",
+        "created_at": int(time.time()),
+        "status": "completed",
+        "error": None,
+        "incomplete_details": None,
+        "model": str(_value(response, "model", fallback_model) or fallback_model),
+        "output": output,
+        "usage": {
+            "input_tokens": input_tokens,
+            "input_tokens_details": {
+                "cached_tokens": int(_value(prompt_details, "cached_tokens", 0) or 0),
+            },
+            "output_tokens": output_tokens,
+            "output_tokens_details": {
+                "reasoning_tokens": int(_value(completion_details, "reasoning_tokens", 0) or 0),
+            },
+            "total_tokens": int(_value(usage, "total_tokens", input_tokens + output_tokens) or 0),
+        },
+    }
+
+
+def chat_completion_stream_to_responses(chunks: Any, fallback_model: str) -> dict[str, Any]:
+    """Aggregate a Chat Completions SSE iterator, then convert it to Responses.
+
+    Some OpenAI-compatible endpoints only make progress when ``stream`` is
+    enabled. Tool-call ids/names are structural fields and may be repeated by a
+    provider; argument and content fields are true deltas and are concatenated.
+    """
+    response_id = "chatcmpl_proxy"
+    response_model = fallback_model
+    content_parts: list[str] = []
+    tool_calls: dict[int, dict[str, Any]] = {}
+    usage: Any = {}
+
+    for chunk in chunks:
+        response_id = str(_value(chunk, "id", response_id) or response_id)
+        response_model = str(_value(chunk, "model", response_model) or response_model)
+        chunk_usage = _value(chunk, "usage")
+        if chunk_usage:
+            usage = chunk_usage
+        choices = _value(chunk, "choices") or []
+        if not choices:
+            continue
+        delta = _value(choices[0], "delta") or {}
+        content = _value(delta, "content")
+        if isinstance(content, str):
+            content_parts.append(content)
+
+        for position, call_delta in enumerate(_value(delta, "tool_calls") or []):
+            index = int(_value(call_delta, "index", position) or 0)
+            call = tool_calls.setdefault(index, {
+                "id": "",
+                "type": "function",
+                "function": {"name": "", "arguments": ""},
+            })
+            call_id = _value(call_delta, "id")
+            if call_id and not call["id"]:
+                call["id"] = str(call_id)
+            function_delta = _value(call_delta, "function") or {}
+            name_delta = _value(function_delta, "name")
+            if name_delta:
+                name_delta = str(name_delta)
+                current_name = call["function"]["name"]
+                if name_delta != current_name:
+                    call["function"]["name"] += name_delta
+            arguments_delta = _value(function_delta, "arguments")
+            if arguments_delta:
+                call["function"]["arguments"] += str(arguments_delta)
+
+    aggregate = {
+        "id": response_id,
+        "model": response_model,
+        "choices": [{
+            "message": {
+                "content": "".join(content_parts) or None,
+                "tool_calls": [tool_calls[index] for index in sorted(tool_calls)],
+            },
+        }],
+        "usage": usage,
+    }
+    return chat_completion_to_responses(aggregate, fallback_model)
+
+
 def _anthropic_tool_choice_to_openai(tool_choice: Any) -> Any:
     """Translate an Anthropic ``tool_choice`` to its OpenAI equivalent.
 
@@ -2282,6 +2559,7 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
     litellm_api_base: str | None
     litellm_api_key: str | None
     translate_responses: bool = False
+    responses_via_chat: bool = False
     supports_image_input: bool = False
 
     def do_POST(self) -> None:
@@ -2292,11 +2570,24 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
 
         raw_body = self.rfile.read(content_length)
 
-        # Responses API: translate via litellm.responses() when opted-in
-        # (so upstreams that don't implement /v1/responses still work); else
-        # forward raw to upstream with only model/key rewrite.
+        # Responses API: three mutually exclusive strategies.
+        #
+        #   responses_via_chat  -- upstream speaks only /v1/chat/completions
+        #                          (SGLang, vLLM, most compatible gateways).
+        #                          Translate the request down to Chat and the
+        #                          reply back up to Responses.
+        #   translate_responses -- upstream speaks Responses, but not through
+        #                          the path litellm's provider prefix expects.
+        #   neither             -- pass through untouched.
+        #
+        # via_chat is checked first because it is the only one that works when
+        # the upstream has no /v1/responses at all: the other two both end up
+        # calling it, and SGLang answers a Responses body with
+        # "1 validation error for ChatCompletionRequest".
         if "responses" in self.path:
-            if self.translate_responses:
+            if self.responses_via_chat:
+                self._handle_responses_via_chat(raw_body)
+            elif self.translate_responses:
                 self._handle_responses_translated(raw_body)
             else:
                 self._handle_responses_passthrough(raw_body)
@@ -2332,6 +2623,250 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
             self._handle_synthetic_openai_streaming(response)
         else:
             self._handle_non_streaming(response)
+
+    def _handle_responses_via_chat(self, raw_body: bytes) -> None:
+        """Translate a Codex Responses request through Chat Completions.
+
+        The path for upstreams that implement only ``/v1/chat/completions``.
+        Codex is a Responses client: it declares a tool set that includes
+        types like ``namespace`` and nests prior turns as ``function_call`` /
+        ``function_call_output`` items. A chat/completions endpoint rejects
+        that body outright, so the request has to be restructured rather than
+        forwarded -- and the reply restructured back, since Codex reads
+        ``response.output`` items, not ``choices[0].message``.
+
+        Streaming is relayed, not synthesized. Aggregating the whole upstream
+        reply before emitting anything makes the client wait out an entire
+        reasoning turn in silence, which trips its idle timeout on long tasks;
+        forwarding each delta as it arrives also keeps the token timestamps
+        that per-request throughput is measured from.
+        """
+        request_id = self.headers.get("x-request-id") or f"cx-{uuid.uuid4().hex[:12]}"
+        try:
+            body = json.loads(raw_body)
+            kwargs = responses_request_to_chat(body, self.litellm_model)
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as e:
+            logger.warning("codex proxy bad_request id=%s %s", request_id, e)
+            self._send_openai_error(400, f"Invalid Responses request: {e}")
+            return
+
+        if self.litellm_api_base:
+            kwargs["api_base"] = self.litellm_api_base
+        if self.litellm_api_key:
+            kwargs["api_key"] = self.litellm_api_key
+
+        wants_stream = bool(body.get("stream"))
+        logger.warning(
+            "codex proxy request_start id=%s model=%s stream=%s msgs=%d tools=%d "
+            "max_tokens=%s effort=%s",
+            request_id, kwargs.get("model"), wants_stream,
+            len(kwargs.get("messages") or []), len(kwargs.get("tools") or []),
+            kwargs.get("max_completion_tokens"), kwargs.get("reasoning_effort"),
+        )
+
+        started = time.time()
+        try:
+            import litellm
+            litellm.drop_params = True
+            # Always stream upstream: some gateways only make progress in
+            # streaming mode, where the equivalent blocking call can hang.
+            kwargs["stream"] = True
+            kwargs["stream_options"] = {"include_usage": True}
+            response = litellm.completion(**kwargs)
+        except Exception as e:
+            logger.exception("codex proxy upstream_failed id=%s", request_id)
+            self._send_openai_error(502, f"Upstream error: {type(e).__name__}: {e}")
+            return
+
+        if wants_stream:
+            self._relay_responses_stream(response, request_id=request_id, started=started)
+            return
+
+        try:
+            resp_dict = chat_completion_stream_to_responses(response, self.litellm_model)
+        except Exception as e:
+            logger.exception("codex proxy aggregate_failed id=%s", request_id)
+            self._send_openai_error(502, f"Upstream error: {type(e).__name__}: {e}")
+            return
+
+        usage = resp_dict.get("usage") or {}
+        logger.warning(
+            "codex proxy complete id=%s stream=False items=%d output_tokens=%s "
+            "elapsed=%.1fs",
+            request_id, len(resp_dict.get("output") or []),
+            usage.get("output_tokens"), time.time() - started,
+        )
+        resp_json = json.dumps(resp_dict, default=str).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(resp_json)))
+        self.end_headers()
+        try:
+            self.wfile.write(resp_json)
+        except (BrokenPipeError, ConnectionResetError):
+            logger.warning("codex proxy client_gone id=%s", request_id)
+
+    def _relay_responses_stream(self, chunks: Any, *, request_id: str,
+                                started: float) -> None:
+        """Forward Chat Completions deltas as Responses SSE, incrementally.
+
+        Codex consumes ``response.output_text.delta`` and
+        ``response.function_call_arguments.delta`` as they arrive. Text is
+        emitted chunk by chunk; tool-call arguments are accumulated and sent
+        at the end of the item, because a partial JSON fragment is not
+        something the client can act on.
+        """
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+
+        response_id = f"resp_{uuid.uuid4().hex[:24]}"
+        model = self.litellm_model
+        seq = 0
+
+        def emit(event_type: str, payload: dict) -> None:
+            nonlocal seq
+            seq += 1
+            frame = (
+                f"event: {event_type}\n"
+                f"data: {json.dumps({'type': event_type, 'sequence_number': seq, **payload}, default=str)}\n\n"
+            )
+            self.wfile.write(frame.encode())
+            self.wfile.flush()
+
+        def envelope(status: str, output: list) -> dict:
+            return {"id": response_id, "object": "response", "status": status,
+                    "model": model, "output": output}
+
+        text_parts: list[str] = []
+        tool_calls: dict[int, dict] = {}
+        usage: Any = {}
+        msg_id = f"msg_{response_id}"
+        text_open = False
+        first_token_at: float | None = None
+        outcome = "ok"
+
+        try:
+            emit("response.created", {"response": envelope("in_progress", [])})
+            emit("response.in_progress", {"response": envelope("in_progress", [])})
+
+            for chunk in chunks:
+                chunk_usage = _value(chunk, "usage")
+                if chunk_usage:
+                    usage = chunk_usage
+                model = str(_value(chunk, "model", model) or model)
+                choices = _value(chunk, "choices") or []
+                if not choices:
+                    continue
+                delta = _value(choices[0], "delta") or {}
+
+                piece = _value(delta, "content")
+                if isinstance(piece, str) and piece:
+                    if first_token_at is None:
+                        first_token_at = time.time()
+                    if not text_open:
+                        item = {"id": msg_id, "type": "message", "status": "in_progress",
+                                "role": "assistant", "content": []}
+                        emit("response.output_item.added", {"output_index": 0, "item": item})
+                        emit("response.content_part.added", {
+                            "output_index": 0, "content_index": 0, "item_id": msg_id,
+                            "part": {"type": "output_text", "text": "", "annotations": []},
+                        })
+                        text_open = True
+                    text_parts.append(piece)
+                    emit("response.output_text.delta", {
+                        "output_index": 0, "content_index": 0,
+                        "item_id": msg_id, "delta": piece,
+                    })
+
+                for position, call_delta in enumerate(_value(delta, "tool_calls") or []):
+                    if first_token_at is None:
+                        first_token_at = time.time()
+                    index = int(_value(call_delta, "index", position) or 0)
+                    call = tool_calls.setdefault(index, {
+                        "id": "", "name": "", "arguments": ""})
+                    call_id = _value(call_delta, "id")
+                    if call_id and not call["id"]:
+                        call["id"] = str(call_id)
+                    fn = _value(call_delta, "function") or {}
+                    name_delta = _value(fn, "name")
+                    if name_delta and str(name_delta) != call["name"]:
+                        call["name"] += str(name_delta)
+                    args_delta = _value(fn, "arguments")
+                    if args_delta:
+                        call["arguments"] += str(args_delta)
+
+            output: list[dict] = []
+            if text_open:
+                full = "".join(text_parts)
+                part = {"type": "output_text", "text": full, "annotations": []}
+                emit("response.output_text.done", {
+                    "output_index": 0, "content_index": 0,
+                    "item_id": msg_id, "text": full,
+                })
+                emit("response.content_part.done", {
+                    "output_index": 0, "content_index": 0,
+                    "item_id": msg_id, "part": part,
+                })
+                item = {"id": msg_id, "type": "message", "status": "completed",
+                        "role": "assistant", "content": [part]}
+                emit("response.output_item.done", {"output_index": 0, "item": item})
+                output.append(item)
+
+            for offset, index in enumerate(sorted(tool_calls)):
+                call = tool_calls[index]
+                out_index = len(output)
+                call_id = call["id"] or f"call_{response_id}_{offset}"
+                item = {"id": f"fc_{call_id}", "type": "function_call",
+                        "status": "in_progress", "call_id": call_id,
+                        "name": call["name"], "arguments": ""}
+                emit("response.output_item.added", {"output_index": out_index, "item": item})
+                if call["arguments"]:
+                    emit("response.function_call_arguments.delta", {
+                        "output_index": out_index, "item_id": item["id"],
+                        "delta": call["arguments"],
+                    })
+                emit("response.function_call_arguments.done", {
+                    "output_index": out_index, "item_id": item["id"],
+                    "arguments": call["arguments"],
+                })
+                done_item = dict(item, status="completed", arguments=call["arguments"])
+                emit("response.output_item.done", {"output_index": out_index, "item": done_item})
+                output.append(done_item)
+
+            in_tok = int(_value(usage, "prompt_tokens", 0) or 0)
+            out_tok = int(_value(usage, "completion_tokens", 0) or 0)
+            final = envelope("completed", output)
+            final["usage"] = {
+                "input_tokens": in_tok, "input_tokens_details": {"cached_tokens": 0},
+                "output_tokens": out_tok,
+                "output_tokens_details": {"reasoning_tokens": 0},
+                "total_tokens": int(_value(usage, "total_tokens", in_tok + out_tok) or 0),
+            }
+            emit("response.completed", {"response": final})
+        except (BrokenPipeError, ConnectionResetError):
+            outcome = "client_gone"
+        except Exception as e:
+            outcome = f"failed:{type(e).__name__}"
+            logger.exception("codex proxy stream_failed id=%s", request_id)
+            try:
+                emit("response.failed", {"response": envelope("failed", []),
+                                         "error": {"message": str(e)}})
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+        finally:
+            self.close_connection = True
+            ttft = f"{first_token_at - started:.2f}" if first_token_at else "none"
+            logger.warning(
+                "codex proxy stream_complete id=%s outcome=%s text_chars=%d "
+                "tool_calls=%d output_tokens=%s ttft=%ss elapsed=%.1fs events=%d",
+                request_id, outcome, len("".join(text_parts)), len(tool_calls),
+                _value(usage, "completion_tokens", 0), ttft,
+                time.time() - started, seq,
+            )
 
     def _handle_responses_translated(self, raw_body: bytes) -> None:
         """Translate Responses API via ``litellm.responses()``.
@@ -2750,6 +3285,7 @@ class LiteLLMOpenAIProxy:
         api_key: str | None = None,
         port: int = 0,
         translate_responses: bool = False,
+        responses_via_chat: bool = False,
         supports_image_input: bool = False,
     ) -> None:
         self.model = model
@@ -2757,6 +3293,7 @@ class LiteLLMOpenAIProxy:
         self.api_key = api_key
         self._port = port
         self._translate_responses = translate_responses
+        self._responses_via_chat = responses_via_chat
         self.supports_image_input = supports_image_input
         self._server: http.server.HTTPServer | None = None
         self._thread: threading.Thread | None = None
@@ -2774,6 +3311,7 @@ class LiteLLMOpenAIProxy:
             "litellm_api_base": self.api_base,
             "litellm_api_key": self.api_key,
             "translate_responses": self._translate_responses,
+            "responses_via_chat": self._responses_via_chat,
             "supports_image_input": self.supports_image_input,
         })
         self._server = http.server.ThreadingHTTPServer(

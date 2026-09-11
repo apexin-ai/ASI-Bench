@@ -80,6 +80,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         api_base: str | None = None,
         provider: str | None = None,
         codex_home: str | None = None,
+        responses_via_chat: bool = False,
         supports_image_input: bool = False,
     ):
         super().__init__(
@@ -100,6 +101,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         self.api_base = api_base
         self.provider = provider
         self.codex_home = codex_home
+        self.responses_via_chat = responses_via_chat
         self.supports_image_input = supports_image_input
         self._uses_native_provider = (
             provider is not None and api_key is not None and api_base is not None
@@ -182,6 +184,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
                 model=self.model,
                 api_base=self.api_base,
                 api_key=self.api_key,
+                responses_via_chat=self.responses_via_chat,
                 supports_image_input=self.supports_image_input,
             )
             return self._proxy.start()  # type: ignore[union-attr]
@@ -197,6 +200,19 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
             proxy_url = self._ensure_proxy()
             env["OPENAI_API_KEY"] = "sk-proxy-placeholder"
             env["OPENAI_BASE_URL"] = proxy_url
+            if self.responses_via_chat:
+                # OPENAI_BASE_URL alone is not enough: Codex resolves its
+                # provider from its own config and would otherwise talk to
+                # api.openai.com directly (observed as a 401 against
+                # wss://api.openai.com/v1/responses). These overrides point the
+                # frozen launcher's Responses provider at the local bridge
+                # instead.
+                env.update({
+                    "CODEX_HARNESS_PROVIDER": "openai-compatible",
+                    "CODEX_HARNESS_BASE_URL": f"{proxy_url}/v1",
+                    "CODEX_HARNESS_BEARER_TOKEN": "sk-proxy-placeholder",
+                    "CODEX_HARNESS_WIRE_API": "responses",
+                })
             logger.info("codex_cli: using litellm proxy at %s", proxy_url)
         elif self.api_key:
             env["OPENAI_API_KEY"] = self.api_key
