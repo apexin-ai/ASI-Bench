@@ -78,7 +78,8 @@ evaluation:
     weight: 15
     config:
       mode: vlm_judge
-      model: google/gemini-3.6-flash
+      model: openai/gpt-5.5
+      reasoning_effort: medium
       pred_image: results/carbon_balance.png
       ref_image: carbon_balance_ref.png
       rubric: "Compare the two soil carbon pool evolution figures.\nCheck: (1) Multiple\

@@ -70,7 +70,8 @@ evaluation:
     weight: 5
     config:
       mode: vlm_judge
-      model: google/gemini-3.5-flash
+      model: openai/gpt-5.5
+      reasoning_effort: medium
       pred_image: visualization.png
       ref_image: visualization_ref.png
       num_judges: 1

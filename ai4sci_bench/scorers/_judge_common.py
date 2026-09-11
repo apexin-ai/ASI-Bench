@@ -93,7 +93,7 @@ SUPPORTED_MODELS: dict[str, str] = {
     "openrouter/gemini-3.1-pro-preview": "openrouter/google/gemini-3.1-pro-preview",
 }
 
-DEFAULT_MODEL = "gemini/gemini-3.1-pro-preview"
+DEFAULT_MODEL = "openai/gpt-5.5"
 
 _PROVIDER_API_KEY_ENVS: dict[str, tuple[str, ...]] = {
     "gemini/": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),

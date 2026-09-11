@@ -734,7 +734,7 @@ class TestRegressionExistingScorers:
     def test_llm_judge_imports_from_common(self):
         from ai4sci_bench.scorers.llm_judge import SUPPORTED_MODELS, DEFAULT_MODEL
         assert "gpt-5.5" in SUPPORTED_MODELS
-        assert DEFAULT_MODEL == "gemini/gemini-3.1-pro-preview"
+        assert DEFAULT_MODEL == "openai/gpt-5.5"
 
     def test_multimodal_no_longer_imports_llm_judge_private(self):
         import inspect

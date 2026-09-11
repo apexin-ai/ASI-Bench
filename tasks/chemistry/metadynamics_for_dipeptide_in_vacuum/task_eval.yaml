@@ -70,7 +70,8 @@ evaluation:
   - scorer: llm_judge
     weight: 5
     config:
-      model: google/gemini-3.5-flash
+      model: openai/gpt-5.5
+      reasoning_effort: medium
       num_judges: 1
       temperature: 0.0
       rubric: "Evaluate the collective variable (CV) definition file for a metadynamics\

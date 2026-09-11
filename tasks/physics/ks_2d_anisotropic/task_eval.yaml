@@ -67,7 +67,8 @@ evaluation:
     weight: 10
     config:
       mode: vlm_judge
-      model: google/gemini-3.5-flash
+      model: openai/gpt-5.5
+      reasoning_effort: medium
       pred_image: field_visualization.png
       ref_image: field_visualization_ref.png
       num_judges: 3
@@ -97,7 +98,8 @@ evaluation:
     weight: 6
     config:
       mode: vlm_judge
-      model: google/gemini-3.5-flash
+      model: openai/gpt-5.5
+      reasoning_effort: medium
       pred_image: spectral_visualization.png
       ref_image: spectral_visualization_ref.png
       num_judges: 3

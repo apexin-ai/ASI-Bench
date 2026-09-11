@@ -623,3 +623,13 @@
 - Verification: targeted metadata, adapter, difficulty, and integration tests
   passed; `asibench --version` and metadata both report `0.1.5`.
 - Implementation commit: `c653ec4`.
+
+## 2026-09: Migrate Gemini scoring judges to GPT-5.5
+
+- Problem: formal task scoring still selected Gemini for text and image Judge
+  paths, and the generic Judge fallback defaulted to Gemini.
+- Resolution: migrate all formal Gemini Judge contracts to `openai/gpt-5.5`
+  with `reasoning_effort: medium`; change the generic Judge default likewise.
+- Verification: public-policy coverage rejects Gemini Judge configs and checks
+  all GPT Judge configs; targeted Judge and policy tests pass.
+- Implementation commit: `8e474b7`.

@@ -683,7 +683,25 @@ def test_gpt_judge_contracts_use_gpt55_with_medium_effort():
                 if model.startswith(("gpt-", "openai/gpt-")):
                     gpt_judge_configs.append((path, config))
 
-    assert len(gpt_judge_configs) == 7
+    assert len(gpt_judge_configs) == 17
     for path, config in gpt_judge_configs:
         assert config["model"] == "openai/gpt-5.5", path
         assert config["reasoning_effort"] == "medium", path
+
+
+def test_formal_judge_contracts_do_not_use_gemini():
+    violations = []
+    for path in TASKS.glob("*/*/task_eval.yaml"):
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        evaluation = data.get("evaluation") or {}
+        for section in ("gates", "scoring"):
+            for item in evaluation.get(section) or []:
+                config = item.get("config") or {}
+                scorer = item.get("scorer")
+                if scorer == "llm_judge" or (
+                    scorer == "multimodal" and config.get("mode", "vlm_judge") == "vlm_judge"
+                ):
+                    model = str(config.get("model") or "")
+                    if "gemini" in model.lower():
+                        violations.append(f"{path}: {model}")
+    assert not violations, "Formal Judge configs still use Gemini:\n" + "\n".join(violations)
