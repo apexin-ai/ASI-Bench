@@ -8,8 +8,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @anthropic-ai/claude-code @openai/codex
-
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && mv /root/.local/bin/uv /usr/local/bin/uv \
     && mv /root/.local/bin/uvx /usr/local/bin/uvx
@@ -32,8 +30,6 @@ RUN /opt/venv/bin/python --version \
     && /opt/venv/bin/python -c "import numpy, matplotlib, pandas, scipy, sympy" \
     && node --version \
     && npm --version \
-    && claude --version \
-    && codex --version \
     && ngspice --version
 
 RUN useradd -m -s /bin/bash -u 1000 agent \

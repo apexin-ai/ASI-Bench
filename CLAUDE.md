@@ -60,8 +60,10 @@
   `prediction_dir` 绑定到其 persisted outputs，分别报告 attempt 与 evaluation 状态。
 - 原生 pi/opencode adapter 必须先解析 `api_key_env`/api_base_env 再做校验；provenance 只保留 endpoint 和环境变量名，禁止持久化 API key。CLI 版本必须用 `--version`/help 实测确认。
 - pi/opencode 的 OS 镜像固定 pi `0.84.3`、opencode `1.17.15` 和 Node 22；
-  prompt 通过 `docker run -i` 的 stdin 传入。agent image cache identity 必须绑定
-  base schema 与精确安装命令，produce-only result 也必须持久化原生 token cost。
+  prompt 通过 `docker run -i` 的 stdin 传入。`runtime.dockerfile` 只构建可复用的
+  task 基础镜像，框架必须按当前 `agent_type` 单独叠加且只安装所选 CLI；无 agent
+  时直接使用 task 基础镜像。agent image cache identity 必须绑定 task/base image、
+  agent 类型与精确安装命令，produce-only result 也必须持久化原生 token cost。
 - 持久化元数据的路径脱敏必须保留完整 HTTP(S) API endpoint，只替换 URL
   之外的宿主机绝对路径；agent 执行失败必须报告为 `attempt_status:
   execution_failed`，不得与 scorer 完成或低分混淆。

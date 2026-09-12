@@ -163,7 +163,8 @@ class TaskImageBuilder:
                 )
             return custom_image
 
-        # 2. Custom Dockerfile
+        # 2. Custom Dockerfile. Treat the task image as a reusable base and
+        # add only the currently selected agent CLI in a separate overlay.
         custom_dockerfile = task_metadata.get("runtime", {}).get("dockerfile") if isinstance(task_metadata.get("runtime"), dict) else None
         if custom_dockerfile:
             task_dir = task_metadata.get("_task_dir")
@@ -172,24 +173,47 @@ class TaskImageBuilder:
             dockerfile_path = Path(task_dir) / custom_dockerfile
             if not dockerfile_path.exists():
                 raise RuntimeError(f"runtime.dockerfile '{custom_dockerfile}' not found at {dockerfile_path}")
-            tag = self._custom_dockerfile_tag(dockerfile_path)
-            if not self._image_exists(tag):
-                self._build_image_from_file(tag, dockerfile_path, Path(task_dir))
-            return tag
+            task_base_tag = self._custom_dockerfile_tag(dockerfile_path)
+            if not self._image_exists(task_base_tag):
+                self._build_image_from_file(task_base_tag, dockerfile_path, Path(task_dir))
+            return self._ensure_overlay(
+                task_base_tag,
+                task_metadata,
+                agent_type=agent_type,
+                runtime_packages=[],
+            )
 
         # 3. Default: base image + agent CLI + task packages overlay
         base_tag = self.ensure_base_image()
-        runtime_packages = list(task_metadata.get("_runtime_packages", []))
+        return self._ensure_overlay(
+            base_tag,
+            task_metadata,
+            agent_type=agent_type,
+            runtime_packages=list(task_metadata.get("_runtime_packages", [])),
+        )
+
+    def _ensure_overlay(
+        self,
+        base_image: str,
+        task_metadata: dict[str, Any],
+        *,
+        agent_type: str | None,
+        runtime_packages: list[str],
+    ) -> str:
+        """Add the selected agent and packages on top of one task base image."""
         agent_install_cmds = AGENT_INSTALL_COMMANDS.get(agent_type, [])
-
         if not runtime_packages and not agent_install_cmds:
-            return base_tag
+            return base_image
 
-        tag = self._task_agent_image_tag(task_metadata, agent_type)
+        tag = self._task_agent_image_tag(
+            task_metadata,
+            agent_type,
+            base_image=base_image,
+        )
         if self._image_exists(tag):
             return tag
 
-        lines = [f"FROM {base_tag}\n", "USER root\n"]
+        lines = [f"FROM {base_image}\n", "USER root\n"]
         if agent_install_cmds:
             lines.append(f"# Install {agent_type} CLI\n")
             for cmd in agent_install_cmds:
@@ -418,12 +442,19 @@ class TaskImageBuilder:
         cache_key = self.env_manager.compute_cache_key(task_metadata)
         return f"ai4sci-bench-task:{cache_key}"
 
-    def _task_agent_image_tag(self, task_metadata: dict[str, Any], agent_type: str | None) -> str:
+    def _task_agent_image_tag(
+        self,
+        task_metadata: dict[str, Any],
+        agent_type: str | None,
+        *,
+        base_image: str | None = None,
+    ) -> str:
         cache_key = self.env_manager.compute_cache_key(task_metadata)
         agent_suffix = agent_type or "base"
         install_identity = "\n".join(AGENT_INSTALL_COMMANDS.get(agent_type, []))
+        image_identity = base_image or self._base_image_tag()
         payload = (
-            f"{self._base_image_tag()}|{cache_key}|{agent_suffix}|{install_identity}"
+            f"{image_identity}|{cache_key}|{agent_suffix}|{install_identity}"
         ).encode("utf-8")
         digest = hashlib.sha256(payload).hexdigest()[:12]
         return f"ai4sci-bench-task:{digest}"

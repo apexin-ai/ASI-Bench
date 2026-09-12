@@ -133,6 +133,17 @@ uv run pytest -q tests/test_os_sandbox.py tests/test_os_sandbox_adapters.py \
   tests/test_native_agent_extractors.py tests/test_integration.py
 ```
 
+Custom task Dockerfile coverage verifies selected-agent overlays, per-agent
+cache identities, single-agent installation, and direct reuse of the task base
+when no agent is selected. A Docker integration probe builds the CMOS op-amp
+base plus the pi overlay, runs it as UID/GID `12345:12345`, and checks writable
+agent homes together with ngspice, the task Python environment, and the pi CLI:
+
+```bash
+uv run pytest -m integration -q \
+  tests/test_os_sandbox_p1p2p3.py::TestTaskDockerfileAgentOverlayIntegration
+```
+
 ## Per-run harness home isolation (claude_code / kimi_code / codex)
 
 CLI harnesses keep session transcripts, history, and auto-memory under their
