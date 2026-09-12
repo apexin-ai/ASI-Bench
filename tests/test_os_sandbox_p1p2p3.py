@@ -869,6 +869,95 @@ class TestDockerIntegration:
         assert builder.check_daemon_health() is True
 
 
+@pytest.mark.integration
+@needs_docker
+class TestTaskDockerfileAgentOverlayIntegration:
+    """Validate the formal CMOS task image and its selected-agent overlay."""
+
+    @staticmethod
+    def _metadata(repo_root: Path) -> tuple[Path, Path, dict]:
+        task_dir = repo_root / "tasks" / "electrical_engineering" / "cmos_opamp_design"
+        dockerfile = task_dir / "Dockerfile.os"
+        metadata = {
+            "runtime": {"dockerfile": dockerfile.name},
+            "_task_dir": str(task_dir),
+            "_runtime_packages": [],
+        }
+        return task_dir, dockerfile, metadata
+
+    def test_cmos_task_pi_overlay_runtime_contract(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        _, dockerfile, metadata = self._metadata(repo_root)
+        builder = TaskImageBuilder(repo_root)
+
+        task_base = builder.ensure_image(metadata)
+        pi_image = builder.ensure_image(metadata, agent_type="pi")
+
+        assert task_base == builder._custom_dockerfile_tag(dockerfile)
+        assert pi_image != task_base
+        probe = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--user",
+                "12345:12345",
+                pi_image,
+                "/bin/bash",
+                "-lc",
+                "set -eu; "
+                "touch /home/agent/.claude/session-env/probe "
+                "/home/agent/.claude/sessions/probe "
+                "/home/agent/.codex/probe "
+                "/home/agent/.kimi-code/probe "
+                "/home/agent/.local/share/mimocode/probe "
+                "/tmp/agent-auth/probe; "
+                "test \"$(command -v python)\" = /opt/venv/bin/python; "
+                "python -c 'import numpy, matplotlib, pandas, scipy, sympy'; "
+                "ngspice --version; "
+                "pi --version; "
+                "! command -v claude; "
+                "! command -v codex",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=1800,
+        )
+        assert probe.returncode == 0, probe.stderr or probe.stdout
+
+    def test_cmos_task_claude_code_overlay_cli_smoke(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        _, dockerfile, metadata = self._metadata(repo_root)
+        builder = TaskImageBuilder(repo_root)
+
+        task_base = builder.ensure_image(metadata)
+        claude_image = builder.ensure_image(metadata, agent_type="claude_code")
+
+        assert task_base == builder._custom_dockerfile_tag(dockerfile)
+        assert claude_image != task_base
+        probe = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--user",
+                "12345:12345",
+                claude_image,
+                "/bin/bash",
+                "-lc",
+                "set -eu; "
+                "test -x \"$(command -v claude)\"; "
+                "claude --version; "
+                "! command -v codex; "
+                "! command -v pi",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=1800,
+        )
+        assert probe.returncode == 0, probe.stderr or probe.stdout
+
+
 # ============================================================
 # P3: End-to-end benchmark test patterns
 # ============================================================

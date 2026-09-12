@@ -365,6 +365,13 @@ build execution-scoped, isolated per-run homes for
 `kimi_code_cli` (an explicitly configured `kimi_home` stays shared by choice).
 See TEST.md (“Per-run harness home isolation”) for details.
 
+For `runtime.dockerfile`, the declared Dockerfile builds the reusable task base
+image. When an OS-sandbox agent is selected, ASI-Bench layers only that agent's
+CLI onto the task base; runs without an agent use the task base directly. The
+agent type, exact install command, and task-base image identity are included in
+the derived image cache key. Formal-task Dockerfiles are fail-closed and must be
+listed exactly for their task in `config/public_task_runtimes.json`.
+
 ## Contribute a task
 
 We welcome project-level scientific tasks from the research community. Authors

@@ -802,6 +802,13 @@ class TestTaskImageBuilder:
                 tag2 = builder._task_agent_image_tag(metadata, "pi")
         assert tag1 != tag2
 
+    def test_agent_image_tag_depends_on_agent_type(self, builder: TaskImageBuilder):
+        metadata = {"_runtime_packages": []}
+        with patch.object(builder.env_manager, "compute_cache_key", return_value="task-key"):
+            pi_tag = builder._task_agent_image_tag(metadata, "pi", base_image="custom:base")
+            codex_tag = builder._task_agent_image_tag(metadata, "codex", base_image="custom:base")
+        assert pi_tag != codex_tag
+
     def test_ensure_base_image_returns_cached(self, builder: TaskImageBuilder):
         with patch.object(builder, "ensure_docker_available"), \
              patch.object(builder, "_image_exists", return_value=True):
@@ -840,6 +847,101 @@ class TestTaskImageBuilder:
         with patch.object(builder, "ensure_base_image", return_value="ai4sci-bench-base:abc"):
             tag = builder.ensure_image({})
             assert tag == "ai4sci-bench-base:abc"
+
+    def test_custom_dockerfile_with_pi_builds_agent_overlay(
+        self, builder: TaskImageBuilder, tmp_path: Path
+    ):
+        task_dir = tmp_path / "task"
+        task_dir.mkdir()
+        dockerfile = task_dir / "Dockerfile.os"
+        dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
+        metadata = {
+            "runtime": {"dockerfile": "Dockerfile.os"},
+            "_task_dir": str(task_dir),
+            "_runtime_packages": [],
+        }
+
+        with patch.object(builder, "_image_exists", return_value=False), \
+             patch.object(builder, "_build_image_from_file") as mock_build_base, \
+             patch.object(builder, "_build_image") as mock_build_overlay, \
+             patch.object(builder.env_manager, "compute_cache_key", return_value="task-key"):
+            image = builder.ensure_image(metadata, agent_type="pi")
+
+        custom_base = builder._custom_dockerfile_tag(dockerfile)
+        assert image.startswith("ai4sci-bench-task:")
+        mock_build_base.assert_called_once_with(custom_base, dockerfile, task_dir)
+        overlay = mock_build_overlay.call_args.args[1]
+        assert f"FROM {custom_base}" in overlay
+        assert "npm install -g @earendil-works/pi-coding-agent@0.84.3" in overlay
+
+    def test_custom_dockerfile_content_changes_agent_overlay_tag(
+        self, builder: TaskImageBuilder, tmp_path: Path
+    ):
+        task_dir = tmp_path / "task"
+        task_dir.mkdir()
+        dockerfile = task_dir / "Dockerfile.os"
+        metadata = {
+            "runtime": {"dockerfile": dockerfile.name},
+            "_task_dir": str(task_dir),
+            "_runtime_packages": [],
+        }
+
+        with patch.object(builder, "_image_exists", return_value=False), \
+             patch.object(builder, "_build_image_from_file"), \
+             patch.object(builder, "_build_image") as mock_build_overlay, \
+             patch.object(builder.env_manager, "compute_cache_key", return_value="task-key"):
+            dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
+            first_image = builder.ensure_image(metadata, agent_type="pi")
+            first_overlay = mock_build_overlay.call_args.args[1]
+
+            dockerfile.write_text(
+                "FROM python:3.12-slim\nRUN echo changed\n",
+                encoding="utf-8",
+            )
+            second_image = builder.ensure_image(metadata, agent_type="pi")
+            second_overlay = mock_build_overlay.call_args.args[1]
+
+        assert first_image != second_image
+        assert first_overlay != second_overlay
+        assert "FROM ai4sci-bench-custom:" in first_overlay
+        assert "FROM ai4sci-bench-custom:" in second_overlay
+
+    def test_agent_overlay_installs_only_selected_agent(
+        self, builder: TaskImageBuilder
+    ):
+        metadata = {"_runtime_packages": []}
+        with patch.object(builder, "ensure_base_image", return_value="base:test"), \
+             patch.object(builder, "_image_exists", return_value=False), \
+             patch.object(builder, "_build_image") as mock_build, \
+             patch.object(builder.env_manager, "compute_cache_key", return_value="task-key"):
+            builder.ensure_image(metadata, agent_type="pi")
+
+        overlay = mock_build.call_args.args[1]
+        assert "@earendil-works/pi-coding-agent@0.84.3" in overlay
+        assert "@anthropic-ai/claude-code" not in overlay
+        assert "@openai/codex" not in overlay
+        assert "opencode-ai" not in overlay
+
+    def test_custom_dockerfile_without_agent_returns_task_base(
+        self, builder: TaskImageBuilder, tmp_path: Path
+    ):
+        task_dir = tmp_path / "task"
+        task_dir.mkdir()
+        dockerfile = task_dir / "Dockerfile.os"
+        dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
+        metadata = {
+            "runtime": {"dockerfile": "Dockerfile.os"},
+            "_task_dir": str(task_dir),
+        }
+
+        with patch.object(builder, "_image_exists", return_value=False), \
+             patch.object(builder, "_build_image_from_file") as mock_build_base, \
+             patch.object(builder, "_build_image") as mock_build_overlay:
+            image = builder.ensure_image(metadata)
+
+        assert image == builder._custom_dockerfile_tag(dockerfile)
+        mock_build_base.assert_called_once()
+        mock_build_overlay.assert_not_called()
 
     def test_ensure_image_builds_task_image_with_packages(self, builder: TaskImageBuilder):
         with patch.object(builder, "ensure_base_image", return_value="ai4sci-bench-base:abc"), \

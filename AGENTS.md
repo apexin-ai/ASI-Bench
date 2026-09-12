@@ -10,12 +10,16 @@
 ## ASI-Bench 公开边界
 
 - 正式任务目录 `tasks/<domain>/<name>/` 公开 `task_meta.yaml`、只含
-  评分/输出契约的 `task_eval.yaml` 以及可选 `custom_scorer.py`；不跟踪
+  评分/输出契约的 `task_eval.yaml`、可选 `custom_scorer.py`，以及
+  `config/public_task_runtimes.json` 精确列出的 task runtime 文件；不跟踪
   benchmark prompts、`generation` 配置、GT 生成器、reference specs、参考
   答案或私有求解器资产。
 - `config/public_scorers.json` 是正式任务公开评分器的精确 allowlist 和来源
   revision；正式任务严禁出现 `generate_gt.py`、`precompute_gt.py`、
   `reference_specs.md`、reference/ground-truth 目录或 `private_assets` / `reference_solver`。
+- `config/public_task_runtimes.json` 是正式任务公开 runtime 文件的精确 task-level
+  allowlist；其中的文件必须由 `task_meta.yaml` 显式声明并仅提供可复现执行环境，
+  不得包含 prompt、reference、GT 或私有求解逻辑。
 - 公开 scorer 只消费预生成的 instance/reference bundle，不得接受 seed
   或重建 GT。`config/public_scorers.json` 可精确列出通用 helper 和
   evaluator-only `*_eval_runtime.py`；这些 runtime 不得包含 generator、
@@ -60,8 +64,10 @@
   `prediction_dir` 绑定到其 persisted outputs，分别报告 attempt 与 evaluation 状态。
 - 原生 pi/opencode adapter 必须先解析 `api_key_env`/api_base_env 再做校验；provenance 只保留 endpoint 和环境变量名，禁止持久化 API key。CLI 版本必须用 `--version`/help 实测确认。
 - pi/opencode 的 OS 镜像固定 pi `0.84.3`、opencode `1.17.15` 和 Node 22；
-  prompt 通过 `docker run -i` 的 stdin 传入。agent image cache identity 必须绑定
-  base schema 与精确安装命令，produce-only result 也必须持久化原生 token cost。
+  prompt 通过 `docker run -i` 的 stdin 传入。`runtime.dockerfile` 只构建可复用的
+  task 基础镜像，框架必须按当前 `agent_type` 单独叠加且只安装所选 CLI；无 agent
+  时直接使用 task 基础镜像。agent image cache identity 必须绑定 task/base image、
+  agent 类型与精确安装命令，produce-only result 也必须持久化原生 token cost。
 - 持久化元数据的路径脱敏必须保留完整 HTTP(S) API endpoint，只替换 URL
   之外的宿主机绝对路径；agent 执行失败必须报告为 `attempt_status:
   execution_failed`，不得与 scorer 完成或低分混淆。

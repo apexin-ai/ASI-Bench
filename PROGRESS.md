@@ -633,3 +633,39 @@
 - Verification: public-policy coverage rejects Gemini Judge configs and checks
   all GPT Judge configs; targeted Judge and policy tests pass.
 - Implementation commit: `8e474b7`.
+
+## 2026-09: Add selected-agent overlays for custom task images
+
+- Problem: `runtime.dockerfile` returned the task image directly, so formal task
+  Dockerfiles had to bundle agent CLIs and could not provide agent-specific
+  cache identities; the CMOS image also lacked regression coverage for Linux
+  host UID remapping.
+- Resolution: treat a custom Dockerfile as a reusable task base, layer only the
+  selected agent CLI on top, include the task-base identity and exact agent
+  install command in the overlay cache key, and keep no-agent runs on the task
+  base. Remove bundled Claude/Codex CLIs from the CMOS base image.
+- Verification: `218 passed, 2 skipped, 1 deselected` across the OS sandbox,
+  pi, and opencode suites; the Docker integration test built the CMOS base and
+  pi overlay, then passed ngspice, Python-package, pi CLI, agent-isolation, and
+  UID/GID `12345:12345` HOME-write probes.
+- Prevention: custom task Dockerfiles must provide task dependencies only;
+  agent installation belongs to framework-managed, agent-keyed overlays with
+  both mock coverage and an opt-in Docker runtime probe.
+- Implementation commit: `361f093`.
+
+## 2026-09: Close custom task image PR policy and CI gaps
+
+- Problem: the CMOS `Dockerfile.os` was rejected by the fail-closed public-task
+  policy, while its real UID-remapping and agent CLI probes were excluded from
+  the required CI workflow; cache tests also did not directly prove that a
+  Dockerfile content change invalidates the selected-agent overlay.
+- Resolution: add an exact task-level public runtime allowlist, require it to
+  match every formal `runtime.dockerfile` declaration, add the focused Docker
+  integration suite to `CI required`, and cover both Dockerfile-content cache
+  invalidation and the original Claude Code executable smoke path.
+- Verification: public policy, task image, and CI workflow tests pass; the
+  Docker integration suite validates pi and Claude Code overlays separately.
+- Prevention: formal task runtime files must be explicitly allowlisted, and any
+  custom-image agent regression must have both offline cache coverage and a
+  required Linux Docker smoke test.
+- Implementation commit: `41e5615`.
