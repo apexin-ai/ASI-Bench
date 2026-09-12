@@ -81,6 +81,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         provider: str | None = None,
         codex_home: str | None = None,
         responses_via_chat: bool = False,
+        stream_idle_timeout_ms: int = 1_800_000,
         supports_image_input: bool = False,
     ):
         super().__init__(
@@ -102,6 +103,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         self.provider = provider
         self.codex_home = codex_home
         self.responses_via_chat = responses_via_chat
+        self.stream_idle_timeout_ms = stream_idle_timeout_ms
         self.supports_image_input = supports_image_input
         self._uses_native_provider = (
             provider is not None and api_key is not None and api_base is not None
@@ -209,6 +211,17 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
             f'base_url = "{proxy_url}/v1"\n'
             'wire_api = "responses"\n'
             'experimental_bearer_token = "sk-proxy-placeholder"\n'
+            # Codex defaults this to 300_000 ms (5 min) and then treats the
+            # silence as a dead stream: it retries the turn five times and
+            # fails it. A long reasoning turn on these tasks has no SSE traffic
+            # for much longer than that, so the default fails exactly the
+            # compute-heavy instances -- hydrology, photosynthesis, phase
+            # transitions -- while easy ones pass.
+            #
+            # 1_800_000 ms matches what Claude Code is given for the same
+            # reason (CLAUDE_STREAM_IDLE_TIMEOUT_MS), so both harnesses get the
+            # same patience with a slow first token.
+            f'stream_idle_timeout_ms = {self.stream_idle_timeout_ms}\n'
         )
         with open(os.path.join(tmpdir, "config.toml"), "w", encoding="utf-8") as fh:
             fh.write(config)
