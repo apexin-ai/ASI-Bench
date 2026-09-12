@@ -39,8 +39,10 @@ RUN /opt/venv/bin/python --version \
 RUN useradd -m -s /bin/bash -u 1000 agent \
     && mkdir -p /opt/ai4sci-bench /home/agent /tmp/agent-auth /workspace \
     && mkdir -p /home/agent/.claude/session-env /home/agent/.claude/sessions \
-    && mkdir -p /home/agent/.codex \
-    && chown -R agent:agent /opt/venv /home/agent /tmp/agent-auth /workspace
+    && mkdir -p /home/agent/.codex /home/agent/.kimi-code \
+    && mkdir -p /home/agent/.local/share/mimocode \
+    && chown -R agent:agent /opt/venv /home/agent /tmp/agent-auth /workspace \
+    && chmod -R 0777 /home/agent /tmp/agent-auth
 
 ENV PATH="/opt/venv/bin:/usr/local/bin:/usr/bin:/bin"
 ENV VIRTUAL_ENV="/opt/venv"
