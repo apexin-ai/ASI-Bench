@@ -652,3 +652,20 @@
   agent installation belongs to framework-managed, agent-keyed overlays with
   both mock coverage and an opt-in Docker runtime probe.
 - Implementation commit: `361f093`.
+
+## 2026-09: Close custom task image PR policy and CI gaps
+
+- Problem: the CMOS `Dockerfile.os` was rejected by the fail-closed public-task
+  policy, while its real UID-remapping and agent CLI probes were excluded from
+  the required CI workflow; cache tests also did not directly prove that a
+  Dockerfile content change invalidates the selected-agent overlay.
+- Resolution: add an exact task-level public runtime allowlist, require it to
+  match every formal `runtime.dockerfile` declaration, add the focused Docker
+  integration suite to `CI required`, and cover both Dockerfile-content cache
+  invalidation and the original Claude Code executable smoke path.
+- Verification: public policy, task image, and CI workflow tests pass; the
+  Docker integration suite validates pi and Claude Code overlays separately.
+- Prevention: formal task runtime files must be explicitly allowlisted, and any
+  custom-image agent regression must have both offline cache coverage and a
+  required Linux Docker smoke test.
+- Implementation commit: `41e5615`.
