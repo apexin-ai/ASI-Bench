@@ -9,10 +9,12 @@ uv run pytest -q
 ```
 
 The `CI` GitHub Actions workflow runs this suite automatically on every push
-and pull request with Python 3.11 and 3.13. It uses `uv sync --locked` and
-`uv run --frozen`, so CI fails instead of silently rewriting a stale lockfile.
-The stable `CI required` job aggregates the test matrix and package build for
-use as a required branch-protection check.
+and pull request with Python 3.11 and 3.13. It also runs the focused custom-task
+Docker integration suite once on Ubuntu, including pi and Claude Code overlays.
+It uses `uv sync --locked` and `uv run --frozen`, so CI fails instead of silently
+rewriting a stale lockfile. The stable `CI required` job aggregates the test
+matrix, Docker runtime probe, and package build for use as a required
+branch-protection check.
 
 Publishing is tied to a GitHub Release by `.github/workflows/publish.yml`. The
 workflow checks that a tag such as `v0.1.2` matches the package version, reruns
@@ -329,6 +331,8 @@ allowlists and scan the public GitHub tree for GT generators, references, privat
 solver assets, undeclared artifacts, repository identifiers, and secret-like
 content. `config/public_scorers.json` locks all 60 formal scoring contracts, 57
 custom scorers, their exact per-task helper allowlists, and the private source revision.
+`config/public_task_runtimes.json` separately allowlists formal runtime files at
+task granularity and must exactly match `runtime.dockerfile` declarations.
 Formal `task_eval.yaml` files may contain only scoring/output contracts and must
 never contain `generation`. seed31415 references live on Hugging Face, not in
 formal GitHub task directories. The separate Example policy locks five full public

@@ -60,16 +60,39 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  docker-integration:
+    name: Docker runtime integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install Python
+        run: uv python install 3.11
+      - name: Sync the locked development environment
+        run: uv sync --locked --python 3.11
+      - name: Verify Docker is available
+        run: docker info
+      - name: Run custom task image integration tests
+        run: >-
+          uv run --frozen pytest -q -m integration
+          tests/test_os_sandbox_p1p2p3.py::TestTaskDockerfileAgentOverlayIntegration
+
   required:
     name: CI required
     if: ${{ always() }}
-    needs: [tests, build]
+    needs: [tests, build, docker-integration]
     runs-on: ubuntu-latest
     steps:
       - name: Verify required jobs
         env:
           TESTS_RESULT: ${{ needs.tests.result }}
           BUILD_RESULT: ${{ needs.build.result }}
+          DOCKER_INTEGRATION_RESULT: ${{ needs.docker-integration.result }}
         run: |
           test "$TESTS_RESULT" = success
           test "$BUILD_RESULT" = success
+          test "$DOCKER_INTEGRATION_RESULT" = success

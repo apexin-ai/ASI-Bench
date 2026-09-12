@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "tasks"
 POLICY_PATH = ROOT / "config" / "public_examples.json"
 SCORER_POLICY_PATH = ROOT / "config" / "public_scorers.json"
+RUNTIME_POLICY_PATH = ROOT / "config" / "public_task_runtimes.json"
 PROTECTED_FILENAMES = frozenset({
     "task.yaml",
             "task_eval.yaml",
@@ -157,6 +158,10 @@ def _load_scorer_policy() -> dict:
     return json.loads(SCORER_POLICY_PATH.read_text(encoding="utf-8"))
 
 
+def _load_runtime_policy() -> dict:
+    return json.loads(RUNTIME_POLICY_PATH.read_text(encoding="utf-8"))
+
+
 def _task_dir(task_id: str) -> Path:
     if task_id == "_template":
         return TASKS / task_id
@@ -205,6 +210,20 @@ def _scorer_public_paths() -> set[str]:
         for filename in helpers.get(task_id, []):
             paths.add((task_root / filename).as_posix())
     return paths
+
+
+def _runtime_public_paths() -> set[str]:
+    policy = _load_runtime_policy()
+    paths: set[str] = set()
+    for task_id, filenames in policy["task_runtime_files"].items():
+        task_root = _task_dir(task_id).relative_to(TASKS)
+        for filename in filenames:
+            paths.add((task_root / filename).as_posix())
+    return paths
+
+
+def _formal_public_paths() -> set[str]:
+    return _scorer_public_paths() | _runtime_public_paths()
 
 
 def _tracked_paths() -> list[Path]:
@@ -271,10 +290,12 @@ def _declared_public_files(task_dir: Path, entry: dict | None) -> set[str]:
     elif document.get("status") == "final":
         task_id = document["id"]
         scorer_policy = _load_scorer_policy()
+        runtime_policy = _load_runtime_policy()
         allowed.add("task_eval.yaml")
         if task_id in scorer_policy["tasks_with_custom_scorers"]:
             allowed.add("custom_scorer.py")
         allowed.update(scorer_policy["task_helper_files"].get(task_id, []))
+        allowed.update(runtime_policy["task_runtime_files"].get(task_id, []))
     return allowed
 
 
@@ -341,6 +362,36 @@ def test_formal_scorer_allowlist_is_exact_and_references_existing_files():
     for relative in _scorer_public_paths():
         target = TASKS / relative
         assert target.is_file() and not target.is_symlink(), relative
+
+
+def test_formal_task_runtime_allowlist_is_exact_and_matches_metadata():
+    policy = _load_runtime_policy()
+    assert policy["schema_version"] == 1
+    assert set(policy) == {"schema_version", "task_runtime_files"}
+
+    scorer_policy = _load_scorer_policy()
+    runtime_files = policy["task_runtime_files"]
+    assert set(runtime_files) <= set(scorer_policy["formal_tasks"])
+
+    declared: dict[str, list[str]] = {}
+    for task_id in scorer_policy["formal_tasks"]:
+        metadata = yaml.safe_load(
+            (_task_dir(task_id) / "task_meta.yaml").read_text(encoding="utf-8")
+        )
+        runtime = metadata.get("runtime", {})
+        dockerfile = runtime.get("dockerfile") if isinstance(runtime, dict) else None
+        if dockerfile is not None:
+            declared[task_id] = [dockerfile]
+
+    assert runtime_files == declared
+    for task_id, filenames in runtime_files.items():
+        assert filenames and len(filenames) == len(set(filenames)), task_id
+        for filename in filenames:
+            relative = PurePosixPath(filename)
+            assert filename == relative.as_posix(), (task_id, filename)
+            assert relative.parent == PurePosixPath("."), (task_id, filename)
+            target = _task_dir(task_id) / filename
+            assert target.is_file() and not target.is_symlink(), (task_id, filename)
 
 
 def test_formal_task_eval_files_publish_scoring_but_never_generation():
@@ -540,22 +591,22 @@ def test_public_catalog_has_exact_final_and_sample_statuses():
     assert stale_abandoned_reasons == []
 
 
-def test_non_example_benchmark_tasks_track_only_metadata_and_public_scorers():
+def test_non_example_benchmark_tasks_track_only_declared_public_files():
     example_dirs = {_task_dir(task_id) for task_id in EXPECTED_EXAMPLES}
-    scorer_paths = _scorer_public_paths()
+    public_paths = _formal_public_paths()
     violations = []
     for path in _tracked_paths():
         if TASKS not in path.parents or path.parent in example_dirs:
             continue
         relative = path.relative_to(TASKS).as_posix()
-        if path.name != "task_meta.yaml" and relative not in scorer_paths:
+        if path.name != "task_meta.yaml" and relative not in public_paths:
             violations.append(path.relative_to(ROOT).as_posix())
     assert violations == []
 
 
 def test_private_like_files_only_exist_at_allowlisted_example_paths():
     policy = _load_policy()
-    allowed_paths = _allowlisted_paths(policy) | _scorer_public_paths()
+    allowed_paths = _allowlisted_paths(policy) | _formal_public_paths()
 
     violations = []
     for path in TASKS.rglob("*"):

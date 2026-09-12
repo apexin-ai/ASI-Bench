@@ -21,8 +21,12 @@ def test_ci_runs_locked_tests_and_build_checks_on_push_and_pull_requests():
     assert workflow["permissions"] == {"contents": "read"}
 
     jobs = workflow["jobs"]
-    assert {"tests", "build", "required"} <= jobs.keys()
-    assert jobs["required"]["needs"] == ["tests", "build"]
+    assert {"tests", "build", "docker-integration", "required"} <= jobs.keys()
+    assert jobs["required"]["needs"] == [
+        "tests",
+        "build",
+        "docker-integration",
+    ]
 
     test_commands = "\n".join(
         step.get("run", "") for step in jobs["tests"]["steps"]
@@ -37,6 +41,13 @@ def test_ci_runs_locked_tests_and_build_checks_on_push_and_pull_requests():
     assert "twine check --strict" in build_commands
     assert "dist/*.whl" in build_commands
     assert "asibench --help" in build_commands
+
+    docker_commands = "\n".join(
+        step.get("run", "") for step in jobs["docker-integration"]["steps"]
+    )
+    assert "docker info" in docker_commands
+    assert "-m integration" in docker_commands
+    assert "TestTaskDockerfileAgentOverlayIntegration" in docker_commands
 
 
 def test_agent_instruction_files_are_regular_and_synchronized():

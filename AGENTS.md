@@ -10,12 +10,16 @@
 ## ASI-Bench 公开边界
 
 - 正式任务目录 `tasks/<domain>/<name>/` 公开 `task_meta.yaml`、只含
-  评分/输出契约的 `task_eval.yaml` 以及可选 `custom_scorer.py`；不跟踪
+  评分/输出契约的 `task_eval.yaml`、可选 `custom_scorer.py`，以及
+  `config/public_task_runtimes.json` 精确列出的 task runtime 文件；不跟踪
   benchmark prompts、`generation` 配置、GT 生成器、reference specs、参考
   答案或私有求解器资产。
 - `config/public_scorers.json` 是正式任务公开评分器的精确 allowlist 和来源
   revision；正式任务严禁出现 `generate_gt.py`、`precompute_gt.py`、
   `reference_specs.md`、reference/ground-truth 目录或 `private_assets` / `reference_solver`。
+- `config/public_task_runtimes.json` 是正式任务公开 runtime 文件的精确 task-level
+  allowlist；其中的文件必须由 `task_meta.yaml` 显式声明并仅提供可复现执行环境，
+  不得包含 prompt、reference、GT 或私有求解逻辑。
 - 公开 scorer 只消费预生成的 instance/reference bundle，不得接受 seed
   或重建 GT。`config/public_scorers.json` 可精确列出通用 helper 和
   evaluator-only `*_eval_runtime.py`；这些 runtime 不得包含 generator、

@@ -369,7 +369,8 @@ For `runtime.dockerfile`, the declared Dockerfile builds the reusable task base
 image. When an OS-sandbox agent is selected, ASI-Bench layers only that agent's
 CLI onto the task base; runs without an agent use the task base directly. The
 agent type, exact install command, and task-base image identity are included in
-the derived image cache key.
+the derived image cache key. Formal-task Dockerfiles are fail-closed and must be
+listed exactly for their task in `config/public_task_runtimes.json`.
 
 ## Contribute a task
 

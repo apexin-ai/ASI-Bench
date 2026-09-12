@@ -874,6 +874,38 @@ class TestTaskImageBuilder:
         assert f"FROM {custom_base}" in overlay
         assert "npm install -g @earendil-works/pi-coding-agent@0.84.3" in overlay
 
+    def test_custom_dockerfile_content_changes_agent_overlay_tag(
+        self, builder: TaskImageBuilder, tmp_path: Path
+    ):
+        task_dir = tmp_path / "task"
+        task_dir.mkdir()
+        dockerfile = task_dir / "Dockerfile.os"
+        metadata = {
+            "runtime": {"dockerfile": dockerfile.name},
+            "_task_dir": str(task_dir),
+            "_runtime_packages": [],
+        }
+
+        with patch.object(builder, "_image_exists", return_value=False), \
+             patch.object(builder, "_build_image_from_file"), \
+             patch.object(builder, "_build_image") as mock_build_overlay, \
+             patch.object(builder.env_manager, "compute_cache_key", return_value="task-key"):
+            dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
+            first_image = builder.ensure_image(metadata, agent_type="pi")
+            first_overlay = mock_build_overlay.call_args.args[1]
+
+            dockerfile.write_text(
+                "FROM python:3.12-slim\nRUN echo changed\n",
+                encoding="utf-8",
+            )
+            second_image = builder.ensure_image(metadata, agent_type="pi")
+            second_overlay = mock_build_overlay.call_args.args[1]
+
+        assert first_image != second_image
+        assert first_overlay != second_overlay
+        assert "FROM ai4sci-bench-custom:" in first_overlay
+        assert "FROM ai4sci-bench-custom:" in second_overlay
+
     def test_agent_overlay_installs_only_selected_agent(
         self, builder: TaskImageBuilder
     ):

@@ -874,8 +874,8 @@ class TestDockerIntegration:
 class TestTaskDockerfileAgentOverlayIntegration:
     """Validate the formal CMOS task image and its selected-agent overlay."""
 
-    def test_cmos_task_pi_overlay_runtime_contract(self):
-        repo_root = Path(__file__).resolve().parents[1]
+    @staticmethod
+    def _metadata(repo_root: Path) -> tuple[Path, Path, dict]:
         task_dir = repo_root / "tasks" / "electrical_engineering" / "cmos_opamp_design"
         dockerfile = task_dir / "Dockerfile.os"
         metadata = {
@@ -883,6 +883,11 @@ class TestTaskDockerfileAgentOverlayIntegration:
             "_task_dir": str(task_dir),
             "_runtime_packages": [],
         }
+        return task_dir, dockerfile, metadata
+
+    def test_cmos_task_pi_overlay_runtime_contract(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        _, dockerfile, metadata = self._metadata(repo_root)
         builder = TaskImageBuilder(repo_root)
 
         task_base = builder.ensure_image(metadata)
@@ -913,6 +918,38 @@ class TestTaskDockerfileAgentOverlayIntegration:
                 "pi --version; "
                 "! command -v claude; "
                 "! command -v codex",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=1800,
+        )
+        assert probe.returncode == 0, probe.stderr or probe.stdout
+
+    def test_cmos_task_claude_code_overlay_cli_smoke(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        _, dockerfile, metadata = self._metadata(repo_root)
+        builder = TaskImageBuilder(repo_root)
+
+        task_base = builder.ensure_image(metadata)
+        claude_image = builder.ensure_image(metadata, agent_type="claude_code")
+
+        assert task_base == builder._custom_dockerfile_tag(dockerfile)
+        assert claude_image != task_base
+        probe = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--user",
+                "12345:12345",
+                claude_image,
+                "/bin/bash",
+                "-lc",
+                "set -eu; "
+                "test -x \"$(command -v claude)\"; "
+                "claude --version; "
+                "! command -v codex; "
+                "! command -v pi",
             ],
             capture_output=True,
             text=True,

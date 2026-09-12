@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "task_runtime_files": {
+    "electrical_engineering.cmos_opamp_design": [
+      "Dockerfile.os"
+    ]
+  }
+}
