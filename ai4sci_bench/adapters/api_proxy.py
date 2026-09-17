@@ -302,12 +302,27 @@ def _anthropic_messages_to_openai_standard(body: dict[str, Any]) -> list[dict[st
     if isinstance(system, list):
         system = "\n".join(str(b.get("text", "")) for b in system
                            if isinstance(b, dict) and b.get("type") == "text")
-    if system:
-        messages.append({"role": "system", "content": str(system)})
+    systems = [str(system)] if system else []
+    # CC can retain environment context as a system-role history message after
+    # a user reminder. Qwen's chat template accepts system only at the start.
+    # Preserve its role/content and combine it with the leading system prompt.
+    for message in body.get("messages", []):
+        if not isinstance(message, dict) or message.get("role") != "system":
+            continue
+        content = message.get("content")
+        if isinstance(content, list):
+            content = "\n".join(str(b.get("text", "")) for b in content
+                                if isinstance(b, dict) and b.get("type") == "text")
+        if content:
+            systems.append(str(content))
+    if systems:
+        messages.append({"role": "system", "content": "\n\n".join(systems)})
     for message in body.get("messages", []):
         if not isinstance(message, dict):
             continue
         role, content = message.get("role"), message.get("content")
+        if role == "system":
+            continue
         if isinstance(content, str):
             messages.append({"role": role, "content": content})
             continue
@@ -1692,7 +1707,10 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                                    request_id, attempt, attempts)
                     continue
                 type(self)._inflight.pop(request_id, None)
-                self._send_anthropic_error(502, f"Upstream error: {type(e).__name__}: {e}")
+                status = getattr(e, "status_code", None)
+                if not isinstance(status, int) or not 400 <= status <= 599:
+                    status = 502
+                self._send_anthropic_error(status, f"Upstream error: {type(e).__name__}: {e}")
                 return
 
             if not real_streaming:
@@ -2051,10 +2069,13 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
 
     def _send_anthropic_error(self, code: int, message: str) -> None:
         """Return error in Anthropic API error format so Claude CLI can parse it."""
+        error_type = {400: "invalid_request_error", 401: "authentication_error",
+                      403: "permission_error", 404: "not_found_error",
+                      429: "rate_limit_error", 529: "overloaded_error"}.get(code, "api_error")
         body = json.dumps({
             "type": "error",
             "error": {
-                "type": "api_error",
+                "type": error_type,
                 "message": message,
             },
         }).encode()

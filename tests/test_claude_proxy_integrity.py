@@ -7,7 +7,7 @@ import types
 
 import pytest
 
-from ai4sci_bench.adapters.api_proxy import _LiteLLMProxyHandler
+from ai4sci_bench.adapters.api_proxy import _LiteLLMProxyHandler, _anthropic_messages_to_openai_standard
 
 
 def chunk(delta=None, finish=None, usage=None):
@@ -484,3 +484,31 @@ def test_explicit_empty_object_tool_input_remains_valid():
         chunk(finish="tool_calls"),
     ]) == "ok"
     assert json.loads(assert_valid_blocks(events(h))[0]["arguments"]) == {}
+
+
+@pytest.mark.parametrize("environment", ["environment", [{"type": "text", "text": "environment"}]])
+def test_cc_system_context_is_preserved_at_start_of_openai_messages(environment):
+    body = {"system": [{"type": "text", "text": "policy"}], "messages": [
+        {"role": "user", "content": "attribution"},
+        {"role": "system", "content": environment},
+        {"role": "user", "content": "task"},
+    ]}
+    messages = _anthropic_messages_to_openai_standard(body)
+    assert [m["role"] for m in messages] == ["system", "user", "user"]
+    assert messages[0]["content"] == "policy\n\nenvironment"
+    assert messages[1:]==[{"role":"user","content":"attribution"},{"role":"user","content":"task"}]
+    assert body["messages"][1]["role"] == "system"
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 429, 503])
+def test_upstream_http_status_is_preserved_instead_of_made_retryable(monkeypatch, status):
+    error = RuntimeError("fixture upstream HTTP failure")
+    error.status_code = status
+    monkeypatch.setenv("ASIBENCH_STREAM_RETRY_ATTEMPTS", "1")
+    calls = install_completion(monkeypatch, [error])
+    h = handler()
+    h.do_POST()
+    assert len(calls) == 1
+    assert h.statuses == [status]
+    if status == 429:
+        assert json.loads(h.wfile.getvalue())["error"]["type"] == "rate_limit_error"

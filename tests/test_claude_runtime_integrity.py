@@ -73,6 +73,7 @@ def test_os_forwards_runtime_env_and_keeps_success_text(tmp_path, monkeypatch):
     (tmp_path / "prompt.md").write_text("fixture")
     configured = {
         "API_TIMEOUT_MS": "123456", "ANTHROPIC_MAX_RETRIES": "0",
+        "CLAUDE_CODE_MAX_RETRIES": "0", "CLAUDE_CODE_RETRY_WATCHDOG": "0",
         "CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK": "1",
         "CLAUDE_ENABLE_BYTE_WATCHDOG": "1",
         "CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS": "10000",

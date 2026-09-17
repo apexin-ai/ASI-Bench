@@ -292,6 +292,7 @@ an explicit terminal result. Empty prose is allowed for tasks completed by
 writing files; missing terminal evidence is an execution failure.
 
 `API_TIMEOUT_MS`, `API_FORCE_IDLE_TIMEOUT`, `ANTHROPIC_MAX_RETRIES`,
+`CLAUDE_CODE_MAX_RETRIES`, `CLAUDE_CODE_RETRY_WATCHDOG`,
 `CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK`, the stream/byte watchdog switches and
 timeouts, `CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS`,
 `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS`,
