@@ -14,6 +14,7 @@ from ai4sci_bench.core.judge_api import (
     get_judge_api_override,
     use_judge_api_override,
 )
+from ai4sci_bench.core.types import ScoreDetail
 from ai4sci_bench.local_scoring import score_seed31415_results
 
 
@@ -188,6 +189,120 @@ def test_seed31415_missing_reference_fails_clearly(tmp_path):
 
     assert result.exit_code != 0
     assert "reference" in result.output.lower()
+
+
+def test_internal_scorer_error_is_unscored_and_excluded_from_totals(
+    monkeypatch, tmp_path
+):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    internal_error = ScoreDetail(
+        scorer_name="numerical",
+        score=0.0,
+        max_score=100.0,
+        passed=False,
+        details={
+            "failure_kind": "scorer_internal_error",
+            "scorer_internal_error": True,
+        },
+        message="reference bundle is incomplete",
+    )
+    monkeypatch.setattr(
+        "ai4sci_bench.runner.orchestrator._evaluate_gates_and_scores",
+        lambda *_args, **_kwargs: ([], True, 0, [internal_error], 0.0),
+    )
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+    )
+
+    assert report["schema_version"] == 2
+    assert report["instance_count"] == 1
+    assert report["scored_instance_count"] == 0
+    assert report["scorer_error_count"] == 1
+    assert report["total_score"] == 0.0
+    assert report["total_max_score"] == 0.0
+    assert report["mean_percent"] is None
+    scored = report["results"][0]
+    assert scored["evaluation_status"] == "evaluation_invalid"
+    assert scored["final_score"] is None
+    assert scored["max_score"] == 100.0
+
+
+def test_legitimate_zero_remains_a_scored_result(monkeypatch, tmp_path):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    scored_zero = ScoreDetail(
+        scorer_name="numerical",
+        score=0.0,
+        max_score=100.0,
+        passed=False,
+        details={"relative_l2": 10.0},
+        message="prediction is outside tolerance",
+    )
+    monkeypatch.setattr(
+        "ai4sci_bench.runner.orchestrator._evaluate_gates_and_scores",
+        lambda *_args, **_kwargs: ([], True, 0, [scored_zero], 0.0),
+    )
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+    )
+
+    assert report["scored_instance_count"] == 1
+    assert report["scorer_error_count"] == 0
+    assert report["total_score"] == 0.0
+    assert report["total_max_score"] == 100.0
+    assert report["mean_percent"] == 0.0
+    scored = report["results"][0]
+    assert scored["evaluation_status"] == "completed"
+    assert scored["final_score"] == 0.0
+
+
+def test_score_cli_displays_internal_error_as_not_scored(monkeypatch, tmp_path):
+    report_path = tmp_path / "score.json"
+    monkeypatch.setattr(
+        "ai4sci_bench.local_scoring.score_seed31415_results",
+        lambda *_args, **_kwargs: (
+            {
+                "results": [
+                    {
+                        "instance_id": "physics.example__seed31415",
+                        "prompt_level": "b1",
+                        "evaluation_status": "evaluation_invalid",
+                        "final_score": None,
+                        "max_score": 100.0,
+                    }
+                ],
+                "scored_instance_count": 0,
+                "scorer_error_count": 1,
+                "total_score": 0.0,
+                "total_max_score": 0.0,
+                "mean_percent": None,
+            },
+            report_path,
+        ),
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "score",
+            "--repo",
+            "seed31415",
+            "--results-dir",
+            str(tmp_path / "results"),
+            "--instances-dir",
+            str(tmp_path / "instances"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "NOT SCORED (internal scorer error)" in result.output
+    assert "0.00 / 100.00" not in result.output
+    assert "Total: no valid scores" in result.output
 
 
 def test_local_scoring_scopes_runtime_judge_override(monkeypatch, tmp_path):

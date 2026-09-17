@@ -288,12 +288,18 @@ commands (`batch-run`, `eval`, `quickeval`, `fullrun`, `rerun-flagged`, and
 old GitHub task-PR automation. Benchmark `run` remains produce-only. The separate
 `score --repo seed31415` command uses public HF references and GitHub scorers,
 writes a non-official report without rewriting run results, and rejects seed42
-before path access. Keep both boundaries covered with:
+before path access. Local score report schema v2 must preserve a legitimate
+scored zero while representing an internal scorer failure with
+`evaluation_status: evaluation_invalid`, `final_score: null`, and exclusion
+from the aggregate denominator. MPSC setup failures must classify missing
+trusted inputs/runtime as scorer errors and submitted controller failures as
+ordinary scored-zero submission errors. Keep these boundaries covered with:
 
 ```bash
 uv run pytest -q \
   tests/test_retired_features.py \
   tests/test_local_scoring.py \
+  tests/test_mpsc_error_classification.py \
   tests/test_no_local_scoring.py \
   tests/test_review.py \
   tests/test_hf_pull.py::TestUnscoredSubmissionReporting

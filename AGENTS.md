@@ -23,7 +23,9 @@
 - 公开 scorer 只消费预生成的 instance/reference bundle，不得接受 seed
   或重建 GT。`config/public_scorers.json` 可精确列出通用 helper 和
   evaluator-only `*_eval_runtime.py`；这些 runtime 不得包含 generator、
-  reference builder 或 hidden reference policy。
+  reference builder 或 hidden reference policy。custom scorer 必须显式区分
+  submission failure 与 evaluator/runtime failure；后者设置
+  `scorer_internal_error: true`，不得伪装成正常零分。
 - `config/public_examples.json` 明确列出的五个公开示例任务是唯一例外，可保留
   B1–B4 prompts、GT 生成器、评分配置和 reference specs；不得扩展到其他任务。
 - `tasks/_template/` 是框架级任务作者脚手架，不属于正式 benchmark 任务。
@@ -53,7 +55,9 @@
 - `--instances-dir` 是只读输入；运行专属的 `framework_task_info.json` 必须写入
   output 目录，不得新增或覆盖 Hugging Face 拉取目录中的文件。
 - produce-only 的数值零只是序列化占位符；报告不得将未评分结果显示为
-  `0.0`，全未评分时应隐藏 per-task 分数表。
+  `0.0`，全未评分时应隐藏 per-task 分数表。seed31415 本地评分器内部错误
+  必须记录 `evaluation_status: evaluation_invalid` 和 `final_score: null`，并从
+  聚合分子、分母中排除，同时计入 `scorer_error_count`。
 - BenchFlow 适配只接受已物化的 seed31415 manifest：必须校验
   `seed: 31415`、`instance_id` 后缀、现有 `instance_dir/reference/`、prediction artifact
   目录和 task bundle。`benchflow-score` 不得接受 seed 生成请求、调用

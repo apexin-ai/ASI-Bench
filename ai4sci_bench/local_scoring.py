@@ -186,6 +186,7 @@ def score_seed31415_results(
         max_score = float(
             sum(float(config.get("weight", 1.0)) for config in evaluation.get("scoring", []))
         )
+        evaluation_status = "evaluation_invalid" if internal_error else "completed"
         scored_results.append(
             {
                 "source_result": str(result_path.relative_to(results_root)),
@@ -197,25 +198,30 @@ def score_seed31415_results(
                 "soft_gate_failures": soft_failures,
                 "gate_results": [_detail_dict(item) for item in gates],
                 "score_results": [_detail_dict(item) for item in scores],
-                "final_score": float(final_score),
+                "evaluation_status": evaluation_status,
+                "final_score": None if internal_error else float(final_score),
                 "max_score": max_score,
                 "scorer_internal_error": internal_error,
             }
         )
 
-    total_score = sum(item["final_score"] for item in scored_results)
-    total_max = sum(item["max_score"] for item in scored_results)
+    valid_results = [
+        item for item in scored_results if item["evaluation_status"] == "completed"
+    ]
+    total_score = sum(float(item["final_score"]) for item in valid_results)
+    total_max = sum(item["max_score"] for item in valid_results)
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "repo": PUBLIC_LOCAL_SCORING_REPO,
         "official": False,
         "score_scope": "public_local",
         "instance_count": len(scored_results),
+        "scored_instance_count": len(valid_results),
         "scorer_error_count": scorer_error_count,
         "total_score": total_score,
         "total_max_score": total_max,
-        "mean_percent": (100.0 * total_score / total_max) if total_max else 0.0,
+        "mean_percent": (100.0 * total_score / total_max) if total_max else None,
         "results": scored_results,
     }
     destination = (

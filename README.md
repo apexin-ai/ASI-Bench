@@ -166,7 +166,12 @@ asibench score \
 ```
 
 The command writes a separate `local_score_seed31415.json` and never overwrites
-the produce-only result. Local scores are reproducible but non-official.
+the produce-only result. Local scores are reproducible but non-official. Report
+schema v2 keeps a valid scored zero as `0.0`, but records an internal scorer
+failure as `evaluation_status: evaluation_invalid` with `final_score: null`.
+Invalid evaluations are shown as `NOT SCORED`, excluded from aggregate score
+denominators, counted in `scorer_error_count`, and make the command exit
+non-zero after the report is written.
 
 #### BenchFlow integration
 
@@ -272,7 +277,7 @@ seed42 GT is not public. Local benchmark runs never calculate official scores.
 | Timeout | `--timeout` defaults to 10,800 seconds and applies uniformly to every task |
 | Produce-only reports | Unscored placeholders are never displayed as `0.0`; all-unscored per-task score tables are omitted |
 | Submission | seed42 requires verified `--sandbox os` results; `submit` uploads a draft by default and `--no-upload` creates a local bundle only |
-| Local scoring | `score --repo seed31415` writes a separate non-official JSON report; seed42 is rejected |
+| Local scoring | `score --repo seed31415` writes a separate non-official JSON report; internal scorer failures are unscored and excluded from aggregates; seed42 is rejected |
 | Judge API | `score`, `run-score`, and `benchflow-score` accept credential-safe runtime overrides for native providers and OpenAI-compatible gateways |
 | Custom agents | `--agent-cmd` supports the `none` and `linux_ns` sandboxes for local runs; official seed42 submission requires an `os`-compatible built-in adapter |
 | Built-in agents | Use `--agent` with `--agent-config`; compatible adapters can use Docker-based `os` isolation |

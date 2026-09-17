@@ -773,15 +773,23 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
 
     click.echo("ASI-Bench public local scoring (seed31415; non-official)")
     for item in report["results"]:
-        click.echo(
-            f"  {item['instance_id']} {item['prompt_level']}: "
-            f"{item['final_score']:.2f} / {item['max_score']:.2f}"
-        )
-    click.echo(
-        f"Total: {report['total_score']:.2f} / "
-        f"{report['total_max_score']:.2f} "
-        f"({report['mean_percent']:.2f}%)"
+        if item.get("evaluation_status") == "evaluation_invalid":
+            outcome = "NOT SCORED (internal scorer error)"
+        else:
+            outcome = f"{item['final_score']:.2f} / {item['max_score']:.2f}"
+        click.echo(f"  {item['instance_id']} {item['prompt_level']}: {outcome}")
+    scored_count = report.get(
+        "scored_instance_count",
+        len(report["results"]) - report["scorer_error_count"],
     )
+    if scored_count:
+        click.echo(
+            f"Total: {report['total_score']:.2f} / "
+            f"{report['total_max_score']:.2f} "
+            f"({report['mean_percent']:.2f}%)"
+        )
+    else:
+        click.echo("Total: no valid scores")
     click.echo(f"Report: {destination}")
     if report["scorer_error_count"]:
         raise click.ClickException(
