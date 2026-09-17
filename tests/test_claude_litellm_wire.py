@@ -100,3 +100,29 @@ def test_real_sdk_cannot_turn_unfinished_wire_into_success(monkeypatch, upstream
         upstream.shutdown()
         upstream.server_close()
         thread.join()
+
+
+def test_locked_sdk_inner_generator_releases_http_connection_on_early_exit():
+    import httpx
+    from types import SimpleNamespace
+    from litellm.llms.base_llm.base_model_iterator import BaseModelResponseIterator
+    from ai4sci_bench.adapters.api_proxy import _close_upstream_stream
+
+    class Wire(httpx.SyncByteStream):
+        closed = False
+        def __iter__(self):
+            try:
+                yield b'data: {"choices":[]}\n\n'
+                yield b'data: [DONE]\n\n'
+            finally:
+                self.closed = True
+        def close(self):
+            self.closed = True
+
+    wire = Wire()
+    response = httpx.Response(200, stream=wire)
+    iterator = BaseModelResponseIterator(response.iter_lines(), sync_stream=True)
+    next(iterator)
+    assert not wire.closed
+    _close_upstream_stream(SimpleNamespace(completion_stream=iterator))
+    assert wire.closed, "an incomplete SDK iterator must not rely on later garbage collection"

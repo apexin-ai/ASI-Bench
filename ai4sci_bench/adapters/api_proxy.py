@@ -1068,19 +1068,22 @@ def _configure_proxy_logging() -> None:
 def _close_upstream_stream(response: Any, request_id: str = "") -> None:
     """Release the upstream HTTP connection held by a streaming response.
 
-    ``litellm.completion(stream=True)`` returns a ``CustomStreamWrapper`` whose
-    only release path is the async ``aclose()``; the sync path has none. When we
-    stop iterating early -- which happens on roughly one stream in ten, because
-    the CLI abandons a stream once it has what it needs -- the wrapper keeps the
-    underlying ``httpx`` response open and its connection checked out of the
-    pool. The socket then closes whenever the wrapper is garbage collected,
-    which is a different thread at an arbitrary later moment, and an unrelated
-    in-flight read on a reused descriptor fails with
-    ``httpcore.ReadError: [Errno 9] Bad file descriptor``. Closing here makes
-    the release deterministic and on this thread.
+    The locked LiteLLM BaseModelResponseIterator has no close() method, but
+    owns a closeable HTTPX iter_lines generator. Close that generator explicitly
+    on early termination. Otherwise later GC may finalize it while HTTPcore
+    already holds its non-reentrant pool lock, deadlocking unrelated requests.
+    Never close the shared HTTP client/pool, which can serve other requests.
     """
     stream = getattr(response, "completion_stream", None)
-    for candidate in (stream, response):
+    candidates = [stream, response]
+    if stream is not None:
+        candidates.extend(getattr(stream, name, None)
+                          for name in ("streaming_response", "response_iterator"))
+    seen = set()
+    for candidate in candidates:
+        if candidate is None or id(candidate) in seen:
+            continue
+        seen.add(id(candidate))
         closer = getattr(candidate, "close", None)
         if callable(closer):
             try:
@@ -1088,7 +1091,6 @@ def _close_upstream_stream(response: Any, request_id: str = "") -> None:
             except Exception:  # noqa: BLE001 - cleanup must never mask the outcome
                 logger.debug("litellm proxy stream_close_failed id=%s", request_id,
                              exc_info=True)
-            return
 
 
 def _describe_request_shape(body: dict) -> str:
