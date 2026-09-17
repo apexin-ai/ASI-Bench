@@ -190,6 +190,7 @@ class OSSandbox:
         allow_external_tools: bool = False,
         extra_mounts: list[str] | None = None,
         stdin_input: str | None = None,
+        raise_on_timeout: bool = False,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         """Run an arbitrary agent command inside the task container.
 
@@ -271,6 +272,9 @@ class OSSandbox:
             )
         except subprocess.TimeoutExpired as exc:
             self._stop_container(container_name)
+            if raise_on_timeout:
+                exc.image_identity = image_identity
+                raise
             return False, f"OS sandbox agent execution timed out ({timeout}s)", exc.stdout or "", exc.stderr or "", image_identity
         except Exception as exc:
             self._kill_container(container_name)

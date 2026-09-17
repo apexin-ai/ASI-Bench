@@ -74,6 +74,11 @@
 - host-side Claude/Kimi harness home 必须同时按 benchmark execution 与
   instance run 隔离；execution 结束必须 teardown 清理。目录键须包含原始
   run key 哈希，Kimi 临时根初始化须支持并发。
+- Claude 的 LiteLLM 桥接须校验 SSE 内容块及真实上游终止状态；
+  `ASIBENCH_FORCE_UPSTREAM_STREAMING=1` 允许下游 JSON 请求使用上游流式再聚合。
+  CLI 完成必须具有有效 terminal result；缺失证据不得判为 completed。
+  OS 运行显式传入 CC timeout/watchdog 控制变量，超时使用结构化异常判定。
+  实时日志与结果采集必须消费相同完整字节；文件名包含 run key 和 attempt 随机标识。
 
 ## 任务生命周期
 

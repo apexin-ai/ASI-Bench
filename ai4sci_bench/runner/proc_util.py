@@ -15,8 +15,13 @@ spurious logout problem documented in ``docs/cc_session_stability_fix.md``.
 
 from __future__ import annotations
 
+from contextlib import ExitStack
+import io
+import os
+import signal
 import subprocess
-import threading
+import tempfile
+import time
 from pathlib import Path
 
 # Grace period (seconds) a child gets after SIGTERM before we escalate to
@@ -40,8 +45,8 @@ def run_subprocess_with_graceful_timeout(
     """Run a subprocess, escalating SIGTERM → grace → SIGKILL on timeout.
 
     Drop-in replacement for the ``subprocess.run(timeout=...)`` call sites that
-    capture stdout/stderr as UTF-8 text.  stdout and stderr are always piped
-    and decoded with ``errors="replace"`` (matching issue #30).
+    capture stdout/stderr as UTF-8 text. The child writes directly to capture
+    files, which are decoded with ``errors="replace"`` (matching issue #30).
 
     On timeout the child first receives ``SIGTERM`` (catchable — the agent can
     clean up), then ``SIGKILL`` if it does not exit within ``grace`` seconds.
@@ -49,70 +54,97 @@ def run_subprocess_with_graceful_timeout(
     keep treating the run as a timeout), carrying any captured partial output.
     The raised exception has a ``forced_kill`` attribute: ``True`` when
     escalation to SIGKILL was required, ``False`` when the child exited within
-    the grace period.
+    the grace period. On POSIX, the CLI and tools remaining in its process
+    group are terminated together, including tools left after normal CLI exit.
 
     Returns a :class:`subprocess.CompletedProcess` on normal completion.
     """
-    proc = subprocess.Popen(
-        cmd,
-        cwd=str(cwd) if cwd is not None else None,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=subprocess.PIPE if input is not None else None,
-        env=env,
-        shell=shell,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    live_files = [(proc.stdout, live_stdout_path), (proc.stderr, live_stderr_path)]
-    threads = []
-    for stream, path in live_files:
-        if stream is None or path is None:
-            continue
-        live_path = Path(path)
-        live_path.parent.mkdir(parents=True, exist_ok=True)
-        live_path.write_text("", encoding="utf-8")
-        def copy_live(source=stream, destination=live_path):
-            with destination.open("a", encoding="utf-8") as output:
-                try:
-                    for line in source:
-                        output.write(line)
-                        output.flush()
-                except (ValueError, OSError):
-                    # communicate() may close the pipe while this reader is
-                    # between iterations.  The child output is already
-                    # captured by communicate(); there is nothing left for
-                    # the live-copy thread to recover in this race.
-                    return
-        thread = threading.Thread(target=copy_live, daemon=True)
-        thread.start()
-        threads.append(thread)
-    try:
-        stdout, stderr = proc.communicate(input=input, timeout=timeout)
-        for thread in threads:
-            thread.join()
-        return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=proc.returncode,
-            stdout=stdout,
-            stderr=stderr,
+    with ExitStack() as stack:
+        captures = []
+        for path in (live_stdout_path, live_stderr_path):
+            if path is None:
+                capture = stack.enter_context(tempfile.TemporaryFile(mode="w+b"))
+            else:
+                live_path = Path(path)
+                live_path.parent.mkdir(parents=True, exist_ok=True)
+                capture = stack.enter_context(live_path.open("w+b"))
+            captures.append(capture)
+
+        def captured_text():
+            values = []
+            for capture in captures:
+                capture.seek(0)
+                # Match subprocess(text=True), including replacement decoding
+                # and universal newlines, while retaining raw bytes on disk.
+                with io.TextIOWrapper(io.BytesIO(capture.read()), encoding="utf-8",
+                                      errors="replace") as reader:
+                    values.append(reader.read())
+            return values
+
+        # The child writes directly to the retained capture. Live observers
+        # and final parsing never compete for bytes from a pipe.
+        proc = subprocess.Popen(
+            cmd, cwd=str(cwd) if cwd is not None else None,
+            stdout=captures[0], stderr=captures[1],
+            stdin=subprocess.PIPE if input is not None else None,
+            env=env, shell=shell, text=True, encoding="utf-8", errors="replace",
+            start_new_session=os.name == "posix",
         )
-    except subprocess.TimeoutExpired:
-        forced = False
-        # Phase 1: SIGTERM — let the child flush credentials / session state.
-        proc.terminate()
+
+        def group_alive():
+            if os.name != "posix":
+                return proc.poll() is None
+            try:
+                os.killpg(proc.pid, 0)
+                return True
+            except ProcessLookupError:
+                return False
+            except PermissionError:
+                # Darwin can briefly report EPERM for an exiting orphaned
+                # group. Keep waiting; an actual signal permission failure is
+                # still surfaced by signal_group rather than ignored.
+                return True
+
+        def signal_group(force=False):
+            try:
+                if os.name == "posix":
+                    os.killpg(proc.pid, signal.SIGKILL if force else signal.SIGTERM)
+                elif proc.poll() is None:
+                    proc.kill() if force else proc.terminate()
+            except ProcessLookupError:
+                pass
+
+        def stop_group():
+            """Stop tools as well as the CLI before returning its artifacts."""
+            if not group_alive():
+                return False
+            deadline = time.monotonic() + grace
+            signal_group()
+            try:
+                proc.communicate(timeout=max(0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                pass
+            while group_alive() and time.monotonic() < deadline:
+                time.sleep(min(.01, max(0, deadline - time.monotonic())))
+            forced = group_alive()
+            if forced:
+                signal_group(force=True)
+            proc.communicate()
+            return forced
+
         try:
-            stdout, stderr = proc.communicate(timeout=grace)
+            proc.communicate(input=input, timeout=timeout)
         except subprocess.TimeoutExpired:
-            # Phase 2: SIGKILL — child ignored SIGTERM within the grace period.
-            forced = True
-            proc.kill()
-            stdout, stderr = proc.communicate()
-        for thread in threads:
-            thread.join()
-        exc = subprocess.TimeoutExpired(
-            cmd, timeout, output=stdout or "", stderr=stderr or ""
-        )
-        exc.forced_kill = forced
-        raise exc
+            forced = stop_group()
+            stdout, stderr = captured_text()
+            exc = subprocess.TimeoutExpired(cmd, timeout, output=stdout, stderr=stderr)
+            exc.forced_kill = forced
+            raise exc
+        except BaseException:
+            stop_group()
+            raise
+        # A CLI may exit while a background tool still owns the capture files
+        # or workspace. End that tool's lifetime before taking the snapshot.
+        stop_group()
+        stdout, stderr = captured_text()
+        return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)

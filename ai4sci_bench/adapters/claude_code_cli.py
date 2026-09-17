@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -36,6 +37,17 @@ CLAUDE_SEARCH_TOOLS = CLAUDE_CORE_TOOLS + ",WebSearch,WebFetch"
 # history, todos, auto-memory files, user-scoped MCP servers, skills — is
 # deliberately NOT copied: that is the cross-instance memory surface.
 CLAUDE_AUTH_FILENAMES = (".credentials.json", "settings.json")
+
+# Forward only explicit, non-secret runtime controls to the CC container.
+CLAUDE_RUNTIME_ENV_VARS = (
+    "API_TIMEOUT_MS", "API_FORCE_IDLE_TIMEOUT", "ANTHROPIC_MAX_RETRIES",
+    "CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK",
+    "CLAUDE_ENABLE_STREAM_WATCHDOG", "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
+    "CLAUDE_ENABLE_BYTE_WATCHDOG", "CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS",
+    "CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS", "CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS", "MAX_THINKING_TOKENS",
+    "MCP_TIMEOUT", "MCP_TOOL_TIMEOUT",
+)
 
 
 class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
@@ -384,7 +396,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             output = super().solve(task_instance)
             if output.cost is None and output.raw_stdout:
                 output.cost = self._extract_usage_from_jsonl(output.raw_stdout)
-            if output.raw_stdout:
+            if output.status == RunStatus.COMPLETED:
                 terminal_error = self._extract_terminal_error_from_jsonl(output.raw_stdout)
                 if terminal_error is not None:
                     output.status = RunStatus.FAILED
@@ -395,14 +407,17 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         workspace = task_instance.workspace_dir
         cmd = self._build_os_agent_cmd(workspace)
 
-        extra_env: dict[str, str] | None = self._build_api_env() or None
+        extra_env = {name: os.environ[name] for name in CLAUDE_RUNTIME_ENV_VARS
+                     if name in os.environ}
+        extra_env.update(self._build_api_env())
         if self._uses_proxy or self._uses_anthropic_rewrite_proxy or self._uses_tokenrouter_openai_chat_proxy:
             os.environ.setdefault("AI4SCI_DOCKER_NETWORK", "host")
 
         t0 = time.time()
         assert self._os_sandbox is not None
-        success, log, raw_stdout, raw_stderr, image_identity = (
-            self._os_sandbox.run_agent(
+        timed_out = False
+        try:
+            success, log, raw_stdout, raw_stderr, image_identity = self._os_sandbox.run_agent(
                 task_metadata=task_instance.metadata,
                 agent_cmd=cmd,
                 workspace=workspace,
@@ -410,21 +425,32 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
                 agent_type="claude_code",
                 allow_external_tools=self.allow_external_tools,
                 extra_env=extra_env,
+                raise_on_timeout=True,
             )
-        )
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            success = False
+            log = f"OS sandbox agent execution timed out ({eff_timeout}s)"
+            raw_stdout = exc.stdout or ""
+            raw_stderr = exc.stderr or ""
+            if isinstance(raw_stdout, bytes):
+                raw_stdout = raw_stdout.decode("utf-8", errors="replace")
+            if isinstance(raw_stderr, bytes):
+                raw_stderr = raw_stderr.decode("utf-8", errors="replace")
+            image_identity = getattr(exc, "image_identity", None)
         elapsed = time.time() - t0
         self._sandbox_image_identity = image_identity
 
         produced_files = collect_output_files(workspace, task_instance)
         parsed_log = self._parse_log(raw_stdout or "") if raw_stdout else log
 
-        if "timed out" in log:
+        if timed_out:
             status = RunStatus.TIMEOUT
         elif success:
             status = RunStatus.COMPLETED
         else:
             status = RunStatus.FAILED
-        terminal_error = self._extract_terminal_error_from_jsonl(raw_stdout or "")
+        terminal_error = self._extract_terminal_error_from_jsonl(raw_stdout or "") if success else None
         if terminal_error is not None:
             status = RunStatus.FAILED
 
@@ -460,7 +486,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         Forces bypassPermissions so the agent doesn't block on non-interactive
         write-file approval inside the container.
         """
-        prompt = (workspace / "prompt.md").read_text(encoding="utf-8")
+        prompt = self._prepare_prompt((workspace / "prompt.md").read_text(encoding="utf-8"))
         cmd = [
             "claude",
             "--model", self.model,
@@ -523,17 +549,32 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             return None
         prompt_path = task_instance.workspace_dir / "prompt.md"
         if prompt_path.exists():
-            prompt = prompt_path.read_text(encoding="utf-8")
-            if self._uses_proxy or self._uses_tokenrouter_openai_chat_proxy or (
-                self._uses_anthropic_rewrite_proxy
-                and "claude" not in self.model.lower()
-            ):
-                prompt = self._PROXY_AGENT_PREFIX + prompt
-            return prompt
+            return self._prepare_prompt(prompt_path.read_text(encoding="utf-8"))
         return None
 
+    def _prepare_prompt(self, prompt: str) -> str:
+        if self._uses_proxy or self._uses_tokenrouter_openai_chat_proxy or (
+            self._uses_anthropic_rewrite_proxy and "claude" not in self.model.lower()
+        ):
+            return self._PROXY_AGENT_PREFIX + prompt
+        return prompt
+
     @staticmethod
-    def _extract_terminal_error_from_jsonl(stdout: str) -> str | None:
+    def _valid_jsonl_record(event) -> bool:
+        if not isinstance(event, dict) or not isinstance(event.get("type"), str):
+            return False
+        if event.get("type") in {"assistant", "user"}:
+            message = event.get("message")
+            if not isinstance(message, dict):
+                return False
+            content = message.get("content", [])
+            if isinstance(content, str) and event["type"] == "user":
+                return True
+            return isinstance(content, list) and all(isinstance(block, dict) for block in content)
+        return True
+
+    @staticmethod
+    def _extract_terminal_error_from_jsonl(stdout: str | None) -> str | None:
         """Return a terminal Claude Code error encoded in an otherwise-0 exit.
 
         Claude Code can exit with status 0 while the JSONL ``result`` event
@@ -542,18 +583,27 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         complete cleanly and should not be treated as a normal scored solution.
         """
         terminal: dict | None = None
-        for line in stdout.splitlines():
+        malformed = False
+        unfinished_turn = False
+        for line in (stdout or "").splitlines():
             stripped = line.strip()
             if not stripped:
                 continue
             try:
                 event = json.loads(stripped)
             except json.JSONDecodeError:
+                malformed = True
+                continue
+            if not ClaudeCodeCLIAdapter._valid_jsonl_record(event):
+                malformed = True
                 continue
             if event.get("type") == "result":
                 terminal = event
+                unfinished_turn = False
+            elif event.get("type") in {"assistant", "user", "stream_event", "error"}:
+                unfinished_turn = True
         if terminal is None:
-            return None
+            return "Claude Code output is incomplete: missing terminal result"
 
         result = str(terminal.get("result") or "")
         api_status = terminal.get("api_error_status")
@@ -561,6 +611,12 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             if api_status:
                 return f"Claude Code API error {api_status}: {result}".strip()
             return f"Claude Code reported is_error=true: {result}".strip()
+        if str(terminal.get("subtype", "")).startswith("error"):
+            return f"Claude Code reported {terminal['subtype']}: {result}".strip()
+        if malformed or unfinished_turn:
+            return "Claude Code output is incomplete: invalid or unfinished JSONL after/before result"
+        if terminal.get("is_error") is not False or "result" not in terminal:
+            return "Claude Code terminal result is missing explicit success fields"
         if result.strip() == "[Tool use interrupted]":
             return "Claude Code ended with interrupted tool use"
         if ClaudeCodeCLIAdapter._looks_like_terminal_pseudo_tool_call(result):
@@ -621,6 +677,10 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
                 event = json.loads(stripped)
             except json.JSONDecodeError:
                 lines.append(line)
+                continue
+
+            if not self._valid_jsonl_record(event):
+                lines.append(f"[invalid_jsonl] {stripped}")
                 continue
 
             etype = event.get("type", "")
@@ -736,6 +796,8 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
                 event = json.loads(stripped)
             except json.JSONDecodeError:
                 continue
+            if not ClaudeCodeCLIAdapter._valid_jsonl_record(event):
+                continue
             if event.get("type") != "result":
                 continue
             usage = event.get("usage")
@@ -743,6 +805,9 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
                 continue
             input_tokens = usage.get("input_tokens", 0)
             output_tokens = usage.get("output_tokens", 0)
+            if any(not isinstance(value, int) or value < 0
+                   for value in (input_tokens, output_tokens)):
+                continue
             return CostInfo(
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,

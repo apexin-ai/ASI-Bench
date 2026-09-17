@@ -12,6 +12,7 @@ import signal as _signal_module
 import hashlib
 import subprocess
 import time
+import uuid
 from abc import abstractmethod
 from pathlib import Path
 from typing import Any
@@ -213,6 +214,7 @@ class SubprocessAgentAdapter(AgentAdapter):
                     ),
                 )
 
+            capture_id = f"{safe_run_key(task_instance.run_key)}.{uuid.uuid4().hex}"
             result = run_subprocess_with_graceful_timeout(
                 cmd,
                 cwd=str(cwd),
@@ -220,8 +222,8 @@ class SubprocessAgentAdapter(AgentAdapter):
                 env=env,
                 shell=use_shell,
                 input=stdin_input,
-                live_stdout_path=(self.live_log_dir / f"{task_instance.instance_id}.stdout" if self.live_log_dir else None),
-                live_stderr_path=(self.live_log_dir / f"{task_instance.instance_id}.stderr" if self.live_log_dir else None),
+                live_stdout_path=(self.live_log_dir / f"{capture_id}.stdout" if self.live_log_dir else None),
+                live_stderr_path=(self.live_log_dir / f"{capture_id}.stderr" if self.live_log_dir else None),
             )
             elapsed = time.time() - t0
             raw_stdout = result.stdout

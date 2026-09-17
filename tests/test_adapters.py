@@ -449,7 +449,7 @@ class TestClaudeCodeCLIAdapter:
         # Replace the OSSandbox instance created during setup
         mock_sandbox = MagicMock()
         mock_sandbox.run_agent.return_value = (
-            True, "agent completed", '{"type":"result"}', "", "sha256:abc"
+            True, "agent completed", '{"type":"result","is_error":false,"result":"done"}', "", "sha256:abc"
         )
         adapter._os_sandbox = mock_sandbox
 
@@ -457,7 +457,7 @@ class TestClaudeCodeCLIAdapter:
 
         assert result.status == RunStatus.COMPLETED
         assert result.error_message is None
-        assert result.raw_stdout == '{"type":"result"}'
+        assert result.raw_stdout == '{"type":"result","is_error":false,"result":"done"}'
         assert result.raw_stdout_format == "jsonl"
         mock_sandbox.run_agent.assert_called_once()
         call_kwargs = mock_sandbox.run_agent.call_args[1]
@@ -487,9 +487,7 @@ class TestClaudeCodeCLIAdapter:
         adapter = ClaudeCodeCLIAdapter(timeout_seconds=120)
         adapter.setup({"sandbox": "os"})
         mock_sandbox = MagicMock()
-        mock_sandbox.run_agent.return_value = (
-            False, "OS sandbox agent execution timed out (120s)", "", "", "sha256:abc"
-        )
+        mock_sandbox.run_agent.side_effect = subprocess.TimeoutExpired(["claude"], 120)
         adapter._os_sandbox = mock_sandbox
 
         result = adapter.solve(sample_task_instance)
@@ -646,7 +644,8 @@ class TestClaudeCodeCLIAdapter:
     def test_solve_blocks_external_tools_by_default(self, mock_run, sample_task_instance):
         """Default restricted mode: --tools whitelist via _build_command()."""
         adapter = ClaudeCodeCLIAdapter()
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_run.return_value = MagicMock(returncode=0,
+            stdout='{"type":"result","is_error":false,"result":""}\n', stderr="")
 
         result = adapter.solve(sample_task_instance)
 

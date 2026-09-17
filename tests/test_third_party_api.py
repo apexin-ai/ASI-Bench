@@ -2011,7 +2011,8 @@ class TestNonStreamingTerminalLogging:
         handler.wfile = types.SimpleNamespace(write=write)
         return handler
 
-    def test_success_logs_outcome_with_stop_reason_and_usage(self, caplog):
+    def test_success_logs_outcome_with_stop_reason_and_usage(self, caplog, monkeypatch):
+        monkeypatch.setattr(logging.getLogger("ai4sci_bench.adapters.api_proxy"), "propagate", True)
         handler = self._handler(lambda payload: None)
         with caplog.at_level(logging.WARNING, logger="ai4sci_bench.adapters.api_proxy"):
             handler._handle_non_streaming(
@@ -2023,7 +2024,8 @@ class TestNonStreamingTerminalLogging:
         assert "stop_reason=max_tokens" in line
         assert "output_tokens" in line
 
-    def test_broken_pipe_logs_client_gone(self, caplog):
+    def test_broken_pipe_logs_client_gone(self, caplog, monkeypatch):
+        monkeypatch.setattr(logging.getLogger("ai4sci_bench.adapters.api_proxy"), "propagate", True)
         def boom(_payload):
             raise BrokenPipeError("client hung up")
 
@@ -2072,7 +2074,7 @@ class TestUpstreamStreamRelease:
         assert self._drive(Wrapper()) == "ok"
         assert closed == ["inner"]
 
-    def test_stream_is_closed_even_when_the_client_disconnects(self):
+    def test_stream_is_closed_when_upstream_iteration_disconnects(self):
         closed = []
 
         class Wrapper:
@@ -2084,7 +2086,7 @@ class TestUpstreamStreamRelease:
             def __iter__(self):
                 raise ConnectionResetError("client hung up")
 
-        assert self._drive(Wrapper()) == "client_gone"
+        assert self._drive(Wrapper()) == "failed_before_write"
         assert closed == ["wrapper"]
 
     def test_a_failing_close_does_not_change_the_outcome(self):

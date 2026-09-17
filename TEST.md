@@ -8,6 +8,24 @@ agent CLI cannot trigger paid/external execution unexpectedly:
 uv run pytest -q
 ```
 
+Claude stream integrity and capture regressions use deterministic fixtures and
+localhost HTTP only (no provider credentials or model calls):
+
+```bash
+uv run pytest -q tests/test_claude_proxy_integrity.py \
+  tests/test_claude_litellm_wire.py tests/test_claude_runtime_integrity.py \
+  tests/test_capture_integrity.py
+```
+
+These cover thinking/text transitions, fragmented tool metadata/arguments,
+truncated SSE, actual locked LiteLLM EOF behavior, upstream streaming with a
+JSON downstream client, retry boundaries, terminal-result validation, Docker
+environment forwarding, timeout evidence and lossless live capture. Keep a
+valid real-SDK control alongside injected faults: SDKs can append usage chunks
+or manufacture finish markers on EOF. Real CC/container and model smoke runs
+must record the exact code revision, image digest, requests, raw outputs and
+assertions separately from benchmark scores.
+
 The `CI` GitHub Actions workflow runs this suite automatically on every push
 and pull request with Python 3.11 and 3.13. It uses `uv sync --locked` and
 `uv run --frozen`, so CI fails instead of silently rewriting a stale lockfile.

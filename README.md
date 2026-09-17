@@ -274,6 +274,43 @@ seed42 GT is not public. Local benchmark runs never calculate official scores.
 See [Getting Started](docs/guide/getting-started.md) for agent configuration,
 sandbox selection, and platform-specific commands.
 
+### Claude Code with OpenAI-compatible models
+
+The Claude adapter emits `stream-json` logs. This controls CLI output, not the
+upstream HTTP protocol. The LiteLLM bridge normally streams when Claude requests
+a stream. For endpoints that support streaming, set
+`ASIBENCH_FORCE_UPSTREAM_STREAMING=1` to require streaming on every upstream
+completion, including Claude requests with `stream=false`. Those requests receive
+a validated JSON response assembled from the stream. This switch overrides the
+legacy `ASIBENCH_REAL_STREAMING_PROXY=0` compatibility setting. It applies to the
+LiteLLM bridge, not direct Anthropic or TokenRouter routes.
+
+The bridge preserves thinking/text block boundaries and rejects incomplete
+streams. Tool metadata and arguments are validated before a complete tool block
+is exposed; tool argument deltas may therefore be buffered. A CLI success needs
+an explicit terminal result. Empty prose is allowed for tasks completed by
+writing files; missing terminal evidence is an execution failure.
+
+`API_TIMEOUT_MS`, `API_FORCE_IDLE_TIMEOUT`, `ANTHROPIC_MAX_RETRIES`,
+`CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK`, the stream/byte watchdog switches and
+timeouts, `CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS`,
+`CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS`,
+`MAX_THINKING_TOKENS`, `MCP_TIMEOUT`, and `MCP_TOOL_TIMEOUT` are explicitly
+forwarded into `--sandbox os`. Their availability and semantics depend on the
+pinned Claude version; forwarding does not guarantee that a version supports
+every variable. Increasing `API_TIMEOUT_MS` alone does not disable other idle
+guards. Proxy upstream read timeouts are controlled separately by
+`ASIBENCH_STREAM_IDLE_TIMEOUT_SECONDS` (default 600 seconds) and
+`ASIBENCH_BLOCKING_TIMEOUT_SECONDS` (default 3600 seconds). HTTP read timeout is
+not a whole-generation deadline. The benchmark `--timeout` remains independent
+(Docker currently allows an additional 30 seconds before process cleanup).
+
+Record the image digest, CLI/SDK versions, environment settings and retry policy
+with each evaluation. Start diagnostics with `ASIBENCH_STREAM_RETRY_ATTEMPTS=1`
+to reveal the first failure. Do not use score-selected reruns to hide transport
+failures. Host and Docker OpenAI-compatible runs now use the same agent prompt
+prefix; historical Docker runs without it have a different prompt protocol.
+
 ### Package and CLI compatibility
 
 - `asibench` is the only published Python distribution and the canonical CLI.
