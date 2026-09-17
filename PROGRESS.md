@@ -1,5 +1,26 @@
 # Progress
 
+## Claude stream and evaluation attempt integrity
+
+- Problem: mixed thinking/text blocks triggered CC nonstreaming fallback;
+  fragmented tool names, racing stdout consumers, dropped Docker controls and
+  missing terminal evidence changed observed outcomes. Real SDK tests exposed
+  synthesized EOF finishes and delayed HTTP iterator cleanup; Qwen tool turns
+  exposed late system messages. Real CC still retried after proxy failure.
+- Resolution: validate and translate streams, force upstream streaming when
+  configured, preserve HTTP status, normalize system context, capture one byte
+  source, forward runtime controls and validate terminal results. Optional
+  strict session mode prevents a failed CLI attempt from calling the model again.
+- Prevention: deterministic protocol/fault tests plus actual locked LiteLLM
+  HTTP tests; pin CLI/SDK/image and audit requests, artifacts and terminal state.
+  New proxy configurations must be explicitly passed to the process running it.
+- Verification at implementation `1c33b30`: macOS 2460 passed with four existing
+  unrelated failures; Linux 2463 passed with two existing Codex failures. Real
+  CC held a 315-second silence and strict EOF/429 cases made one upstream call.
+  Two real Qwen endpoints completed four fixed file tasks with 26/26 upstream
+  requests streaming. These are integration checks, not formal benchmark scores.
+- Implementation commits: `657247b`, `5d27e3a`, `3b460fc`, `1c33b30`.
+
 ## Public formal-task scorers without GT disclosure
 
 - Problem: formal task scoring logic was not auditable in the public repository,

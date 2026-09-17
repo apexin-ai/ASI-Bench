@@ -79,6 +79,8 @@
   CLI 完成必须具有有效 terminal result；缺失证据不得判为 completed。
   OS 运行显式传入 CC timeout/watchdog 控制变量，超时使用结构化异常判定。
   实时日志与结果采集必须消费相同完整字节；文件名包含 run key 和 attempt 随机标识。
+  严格评测可启用 `ASIBENCH_STRICT_STREAM_ATTEMPTS=1`，以 CC session UUID
+  保留失败状态，阻止客户端恢复请求重新生成；显式恢复必须使用新 session。
 
 ## 任务生命周期
 
