@@ -17,6 +17,11 @@ uv run pytest -q tests/test_claude_proxy_integrity.py \
   tests/test_capture_integrity.py
 ```
 
+`tests/test_claude_strict_attempts.py` verifies that a failed CC session cannot
+call the model again, even with a new HTTP request, changed recovery prompt or
+nonstreaming fallback. It covers independent sessions, valid tool followups,
+missing session IDs and concurrent requests queued behind a failure.
+
 These cover thinking/text transitions, fragmented tool metadata/arguments,
 truncated SSE, actual locked LiteLLM EOF behavior, upstream streaming with a
 JSON downstream client, retry boundaries, terminal-result validation, Docker

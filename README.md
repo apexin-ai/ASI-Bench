@@ -291,6 +291,16 @@ is exposed; tool argument deltas may therefore be buffered. A CLI success needs
 an explicit terminal result. Empty prose is allowed for tasks completed by
 writing files; missing terminal evidence is an execution failure.
 
+For strict evaluations, also enable `ASIBENCH_STRICT_STREAM_ATTEMPTS=1`.
+It requires Claude's `metadata.user_id.session_id`, serializes requests within
+that CLI session, and closes the session after an unrecovered upstream failure.
+Later CC retries, fallback or recovery prompts receive an explicit error without
+a new model call. A new declared attempt needs a new CC session ID. This mode is
+off by default, requires real upstream streaming, and retains failure state for
+the lifetime of the proxy. Auxiliary requests in the same session share this
+failure boundary. The adapter also rejects apparent CLI success when the proxy
+records a failed or still-incomplete response for that session.
+
 `API_TIMEOUT_MS`, `API_FORCE_IDLE_TIMEOUT`, `ANTHROPIC_MAX_RETRIES`,
 `CLAUDE_CODE_MAX_RETRIES`, `CLAUDE_CODE_RETRY_WATCHDOG`,
 `CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK`, the stream/byte watchdog switches and

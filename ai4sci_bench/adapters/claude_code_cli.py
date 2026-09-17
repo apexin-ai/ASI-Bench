@@ -398,7 +398,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             if output.cost is None and output.raw_stdout:
                 output.cost = self._extract_usage_from_jsonl(output.raw_stdout)
             if output.status == RunStatus.COMPLETED:
-                terminal_error = self._extract_terminal_error_from_jsonl(output.raw_stdout)
+                terminal_error = self._proxy_attempt_error(output.raw_stdout) or self._extract_terminal_error_from_jsonl(output.raw_stdout)
                 if terminal_error is not None:
                     output.status = RunStatus.FAILED
                     output.error_message = terminal_error
@@ -451,7 +451,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             status = RunStatus.COMPLETED
         else:
             status = RunStatus.FAILED
-        terminal_error = self._extract_terminal_error_from_jsonl(raw_stdout or "") if success else None
+        terminal_error = (self._proxy_attempt_error(raw_stdout) or self._extract_terminal_error_from_jsonl(raw_stdout or "")) if success else None
         if terminal_error is not None:
             status = RunStatus.FAILED
 
@@ -559,6 +559,21 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         ):
             return self._PROXY_AGENT_PREFIX + prompt
         return prompt
+
+    def _proxy_attempt_error(self, stdout: str | None) -> str | None:
+        lookup = getattr(self._proxy, "attempt_failure", None)
+        if not callable(lookup):
+            return None
+        for line in (stdout or "").splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(event, dict) and isinstance(event.get("session_id"), str):
+                reason = lookup(event["session_id"])
+                if reason:
+                    return f"Claude Code evaluation attempt failed upstream integrity: {reason}"
+        return None
 
     @staticmethod
     def _valid_jsonl_record(event) -> bool:

@@ -1620,6 +1620,8 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
     # returned.  ``LiteLLMProxy.stop`` reports the leftovers, which is the only
     # way a hung thread (killed silently as a daemon at process exit) shows up.
     _inflight: dict[str, str] = {}
+    _attempts: dict[str, dict[str, Any]] = {}
+    _attempts_lock = threading.Lock()
 
     @staticmethod
     def _real_streaming_enabled() -> bool:
@@ -1649,6 +1651,45 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
             self._send_error(400, f"Invalid JSON: {e}")
             return
 
+        self._attempt_state = None
+        strict = os.getenv("ASIBENCH_STRICT_STREAM_ATTEMPTS", "0").lower() in {"1", "true", "yes", "on"}
+        if strict:
+            try:
+                metadata = body.get("metadata") or {}
+                user = metadata.get("user_id")
+                user = json.loads(user) if isinstance(user, str) else user
+                session_id = str(uuid.UUID(user["session_id"]))
+            except (AttributeError, KeyError, TypeError, ValueError):
+                self._send_anthropic_error(400, "Strict evaluation requires CC metadata.user_id.session_id")
+                return
+            with type(self)._attempts_lock:
+                state = type(self)._attempts.setdefault(session_id, {"lock": threading.Lock(), "failure": None})
+            # One session is one declared CLI attempt. Serialize auxiliary
+            # requests so none start upstream after an earlier failure.
+            with state["lock"]:
+                if state["failure"]:
+                    self._send_anthropic_error(400, "Evaluation attempt closed after upstream failure; start a new CC session for declared recovery")
+                    logger.warning("litellm proxy blocked_session session=%s reason=%s", session_id, state["failure"])
+                    return
+                self._attempt_state = state
+                state["active"] = True
+                try:
+                    self._serve_message(body)
+                except Exception:
+                    state["failure"] = "proxy_handler_exception"
+                    raise
+                finally:
+                    state["active"] = False
+            return
+        self._serve_message(body)
+
+    def _fail_attempt(self, reason: str) -> None:
+        state = getattr(self, "_attempt_state", None)
+        if state is not None:
+            state["failure"] = reason
+
+    def _serve_message(self, body: dict[str, Any]) -> None:
+
         body = prepare_model_input_for_endpoint(
             body,
             supports_image_input=self.supports_image_input,
@@ -1657,6 +1698,10 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
         real_streaming = self._force_upstream_streaming() or (
             is_stream and self._real_streaming_enabled()
         )
+        if getattr(self, "_attempt_state", None) is not None and not real_streaming:
+            self._fail_attempt("strict_requires_upstream_streaming")
+            self._send_anthropic_error(400, "Strict evaluation requires ASIBENCH_FORCE_UPSTREAM_STREAMING=1")
+            return
         request_id = self.headers.get("x-request-id") or f"proxy-{uuid.uuid4().hex[:12]}"
 
         kwargs = self._build_litellm_kwargs(body)
@@ -1712,6 +1757,7 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                 status = getattr(e, "status_code", None)
                 if not isinstance(status, int) or not 400 <= status <= 599:
                     status = 502
+                self._fail_attempt(f"upstream_http_{status}")
                 self._send_anthropic_error(status, f"Upstream error: {type(e).__name__}: {e}")
                 return
 
@@ -1725,11 +1771,15 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
             # replayed; once deltas are out, a second attempt would duplicate
             # content the client has already committed to its transcript.
             if outcome in {"integrity_failed_before_write", "nonretryable_before_write"}:
+                self._fail_attempt(outcome)
                 self._send_anthropic_error(502, "Upstream response failed integrity validation")
                 return
             if outcome != "failed_before_write":
+                if outcome != "ok":
+                    self._fail_attempt(outcome)
                 return
             if attempt >= attempts:
+                self._fail_attempt(outcome)
                 self._send_anthropic_error(502, "Upstream stream failed before a complete response")
                 return
             logger.warning("litellm proxy stream_retry id=%s attempt=%d/%d reason=%s",
@@ -2148,6 +2198,8 @@ class LiteLLMProxy:
             # parallelism the benchmark is launched with, and a shared dict
             # would make each one report the others' requests.
             "_inflight": {},
+            "_attempts": {},
+            "_attempts_lock": threading.Lock(),
         })
         self._server = http.server.ThreadingHTTPServer(
             ("127.0.0.1", self._port), handler_cls,
@@ -2160,6 +2212,17 @@ class LiteLLMProxy:
         url = self.local_url
         logger.info("litellm proxy started: %s → %s (%s)", url, self.api_base, self.model)
         return url
+
+    def attempt_failure(self, session_id: str) -> str | None:
+        """Return a sticky strict-mode failure for a CC CLI session."""
+        if self._handler_cls is None:
+            return None
+        with self._handler_cls._attempts_lock:
+            state = self._handler_cls._attempts.get(session_id)
+        if state is None:
+            return None
+        # Never wait on an upstream read after the CLI has already exited.
+        return state["failure"] or ("upstream_response_not_complete" if state.get("active") else None)
 
     def stop(self) -> None:
         leftover = dict(getattr(self._handler_cls, "_inflight", {}) or {})
