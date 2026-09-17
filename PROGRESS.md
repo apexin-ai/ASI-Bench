@@ -679,3 +679,21 @@
   custom-image agent regression must have both offline cache coverage and a
   required Linux Docker smoke test.
 - Implementation commit: `41e5615`.
+
+## 2026-09: Distinguish scorer failures from scored zeros
+
+- Problem: the MPSC scorer caught trusted bundle/runtime failures and submitted
+  controller failures under the same `setup_error` shape, so infrastructure
+  failures could leave `scorer_error_count` at zero and depress aggregate scores
+  as if the submission had legitimately scored zero.
+- Resolution: classify MPSC evaluator/runtime/reference failures with
+  `scorer_internal_error: true` while retaining submitted-code failures as
+  scored-zero submission errors. Upgrade the seed31415 local report to schema
+  v2, mark invalid evaluations with `final_score: null`, and exclude them from
+  aggregate numerators and denominators while preserving legitimate zero scores.
+- Verification: focused scoring, CLI, BenchFlow, policy, and fault-isolation
+  tests passed (`197 passed`); the full offline suite passed `2350` tests, with
+  `2 skipped` and `24 deselected`.
+- Prevention: custom scorers must identify failure ownership explicitly, and
+  aggregate reports must never serialize evaluator failures as numeric scores.
+- Implementation commit: `68b599d`.
