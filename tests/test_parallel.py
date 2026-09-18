@@ -172,7 +172,7 @@ class TestRunMetadata:
         meta = collect_run_metadata()
         assert meta["framework_version"] == FRAMEWORK_VERSION
         from ai4sci_bench import __version__
-        assert FRAMEWORK_VERSION == __version__ == "0.1.5"
+        assert FRAMEWORK_VERSION == __version__ == "0.1.6"
         assert "python_version" in meta
         assert "timestamp" in meta
         assert "dependencies" in meta
