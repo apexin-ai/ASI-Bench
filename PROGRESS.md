@@ -697,3 +697,20 @@
 - Prevention: custom scorers must identify failure ownership explicitly, and
   aggregate reports must never serialize evaluator failures as numeric scores.
 - Implementation commit: `68b599d`.
+
+## 2026-09: PyPI 0.1.6 release
+
+- Problem: the published `0.1.5` release predated the MPSC solution-constructor
+  fix and the distinction between evaluator failures and legitimate zero scores,
+  so Issue #2 did not yet have a complete released validation target.
+- Resolution: synchronize the package, runtime, lockfile, and version regression
+  at `0.1.6`, then publish the current public scorer contracts through the
+  repository's tagged GitHub Release workflow.
+- Verification: the full locked offline suite passed `2350` tests, with `2
+  skipped` and `24 deselected`; wheel and sdist passed strict Twine checks; both
+  CLI entry points reported `0.1.6`; and all six Issue #2 custom scorers imported
+  against the built wheel in an isolated `asibench[full]` environment.
+- Prevention: release validation must compare both package metadata and runtime
+  `__version__`, and exercise public task scorers against the built wheel before
+  publishing.
+- Version bump commit: `80b0968`.
