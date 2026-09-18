@@ -11,9 +11,13 @@
 - Prevention: real HTTP fixtures plus pinned CC fault injection; record both
   HTTP hops and task artifacts. Unknown block types fail explicitly; new CLI
   recovery behavior and native server tools need separate validation.
-- Implementation: `6a75cf4`. Native regression 29 passed; Linux full suite
-  2492 passed with the same two pre-existing Codex failures. Real Sonnet 4.6
-  completed a fixed CSV file task through the guard with six streamed calls.
+- Implementation: `6a75cf4`, with completion/error-read boundaries corrected
+  in `0f6f08a`: valid message_stop finishes without HTTP EOF, and optional
+  error bodies have a two-second total budget. Native regression 31 passed;
+  Linux full suite 2494 passed with the same two pre-existing Codex failures.
+  Final real Sonnet 4.6 CSV task completed with five streamed calls; the earlier
+  six-call successful run is retained separately. Final real-CC fault matrix
+  has 28 cases: valid text succeeds, injected failures make one upstream call.
   This is connectivity/integrity validation, not a benchmark score.
 
 ## Claude stream and evaluation attempt integrity
