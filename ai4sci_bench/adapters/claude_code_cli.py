@@ -138,6 +138,13 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             api_base=self.api_base,
             api_protocol=api_protocol,
         )
+        self._uses_native_stream_guard = (
+            self.api_base is not None and api_protocol == "anthropic"
+            and not self._uses_anthropic_rewrite_proxy
+            and not self._uses_tokenrouter_openai_chat_proxy
+            and os.getenv("ASIBENCH_NATIVE_STREAM_GUARD", "0").strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
         self._os_sandbox: OSSandbox | None = None
         self._sandbox_image_identity: str | None = None
         self._proxy: object | None = None
@@ -251,6 +258,15 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             )
             return self._proxy.start()  # type: ignore[union-attr]
 
+    def _ensure_native_stream_guard(self) -> str:
+        with self._proxy_lock:
+            if self._proxy is not None:
+                return self._proxy.local_url  # type: ignore[union-attr]
+            from ai4sci_bench.adapters.native_anthropic_guard import NativeAnthropicGuard
+            assert self.api_base is not None
+            self._proxy = NativeAnthropicGuard(api_base=self.api_base, api_key=self.api_key)
+            return self._proxy.start()  # type: ignore[union-attr]
+
     @staticmethod
     def _normalize_anthropic_base(api_base: str) -> str:
         """Return ``api_base`` fit for ``ANTHROPIC_BASE_URL``.
@@ -287,6 +303,11 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             # Claude CLI requires a non-empty key; the proxy forwards api_key.
             env["ANTHROPIC_API_KEY"] = "sk-proxy-placeholder"
             logger.info("claude_code_cli: using anthropic rewrite proxy at %s", proxy_url)
+        elif self._uses_native_stream_guard:
+            env["ANTHROPIC_BASE_URL"] = self._ensure_native_stream_guard()
+            env["ANTHROPIC_API_KEY"] = "sk-proxy-placeholder"
+            env["ANTHROPIC_AUTH_TOKEN"] = "sk-proxy-placeholder"
+            logger.info("claude_code_cli: using native streaming guard at %s", env["ANTHROPIC_BASE_URL"])
         elif self.api_base is not None:
             # Mode 3, anthropic protocol: target speaks the Messages API
             # natively — point Claude straight at it, no proxy translation.
@@ -411,7 +432,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         extra_env = {name: os.environ[name] for name in CLAUDE_RUNTIME_ENV_VARS
                      if name in os.environ}
         extra_env.update(self._build_api_env())
-        if self._uses_proxy or self._uses_anthropic_rewrite_proxy or self._uses_tokenrouter_openai_chat_proxy:
+        if self._uses_proxy or self._uses_anthropic_rewrite_proxy or self._uses_tokenrouter_openai_chat_proxy or self._uses_native_stream_guard:
             os.environ.setdefault("AI4SCI_DOCKER_NETWORK", "host")
 
         t0 = time.time()
