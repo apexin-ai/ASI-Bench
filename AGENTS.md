@@ -63,6 +63,12 @@
   目录和 task bundle。`benchflow-score` 不得接受 seed 生成请求、调用
   `generate_gt.py` 或评分 seed42。输出必须包含固定 schema 的 ScoreDetail、
   artifact SHA-256、scorer/task revision 和 harness/model/effort provenance。
+- `benchflow/asi_bench/` 是独立的 BenchFlow-native 适配器包：只接受已物化
+  seed31415 task，使用 BenchFlow 原生 Agent/ACP rollout 和 Docker verifier；
+  仅支持 `os` 语义、导出 task 声明的 outputs，不支持 seed42、Daytona 或
+  LLM/VLM Judge。其 `prepare`/`solve`/`scorer` 边界和限制必须同步维护
+  `benchflow/asi_bench/README.md`，不得与原生 `asibench benchflow-score`
+  manifest bridge 混为一谈。
 - BenchFlow 运行 `asibench run` 必须启用 `--fail-on-agent-error`，且不得只信任
   进程退出码；manifest schema v2 必须提供对应 run result JSON，并将
   `prediction_dir` 绑定到其 persisted outputs，分别报告 attempt 与 evaluation 状态。

@@ -183,6 +183,15 @@ See the **[BenchFlow integration guide](docs/guide/benchflow.md)** for the
 end-to-end run, schema-v2 manifest, scoring command, status fields, retries,
 and Judge API configuration.
 
+For the separate BenchFlow-native adapter package, see
+**[`benchflow/asi_bench/README.md`](benchflow/asi_bench/README.md)**. It maps a
+materialized seed31415 task into BenchFlow `prepare`/`solve`/`score` stages,
+uses BenchFlow's native Agent/ACP rollout, exports only declared outputs, and
+runs scoring in an isolated Docker verifier. This adapter is intentionally
+more restrictive than the native `asibench benchflow-score` bridge: it supports
+only the Docker-style `os` execution path, does not support seed42, and does
+not run LLM/VLM Judge scorers.
+
 #### Configure an LLM/VLM Judge API
 
 Some seed31415 scoring contracts use an LLM or VLM Judge. Judge credentials and
