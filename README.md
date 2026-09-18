@@ -284,7 +284,9 @@ provider. HTTP failures, invalid/truncated SSE and disconnects close that CC
 session; subsequent recovery needs a new, explicitly recorded session.
 
 The guard requires a provider key and CC session UUID. It checks block types,
-tool JSON and a complete `message_stop`, released after response-body EOF.
+tool JSON and a complete `message_stop`. A validated terminal event completes
+the response without waiting for HTTP closure. Already-read trailing corruption
+is rejected; unread bytes after the protocol boundary are not consumed.
 It preserves a legitimate empty response, but blocks the observed CC prompt
 that silently requests a replacement after no visible output. Empty prose alone
 does not invalidate a file-producing task; evaluate its output contract.
@@ -297,6 +299,9 @@ wait (default 600 seconds); retain a separate task deadline. Native guard is
 off by default and excludes TokenRouter special routes. The two LiteLLM
 FORCE/STRICT switches below do not activate it. Pin CC and retest upgrades,
 especially internal fallback and empty-response recovery behavior.
+Known HTTP errors retain their status immediately after a separate error-body
+read budget (at most two seconds); a stalled diagnostic body cannot consume the
+full generation idle timeout.
 
 ### Claude Code with OpenAI-compatible models
 

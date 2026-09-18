@@ -165,7 +165,7 @@ def test_http_error_body_is_bounded(monkeypatch):
 @pytest.mark.parametrize("mutate", [
     lambda chunks: chunks[:-1],
     lambda chunks: chunks[:1] + [frame("message_stop")],
-    lambda chunks: chunks + [frame("message_stop")],
+    lambda chunks: [b"".join(chunks) + frame("message_stop")],
     lambda chunks: chunks[:1] + [frame("content_block_start", index=0, content_block={"type": "unknown"})],
     lambda chunks: chunks[:2] + [frame("content_block_delta", index=0, delta={"type": "thinking_delta", "thinking": "bad"})],
     lambda chunks: chunks[:1] + [b"event: content_block_start\ndata: {bad json}\n\n"],
@@ -222,6 +222,37 @@ def test_first_event_is_not_buffered_until_64k_or_eof():
             assert b"message_start" in response.read1(65536)
             release.set()
             assert b"message_stop" in response.read()
+
+
+def test_message_stop_completes_without_waiting_for_http_close():
+    release = threading.Event()
+    session = str(uuid.uuid4())
+    with running([[b"".join(stream()), release]]) as (guard, calls):
+        started = time.monotonic()
+        status, raw, _ = request(guard, body(session))
+        elapsed = time.monotonic() - started
+        release.set()
+        assert status == 200 and raw == b"".join(stream())
+        assert elapsed < 1.0
+        assert guard.attempt_failure(session) is None
+        assert len(calls) == 1
+
+
+def test_error_body_has_separate_short_total_budget(monkeypatch):
+    import ai4sci_bench.adapters.native_anthropic_guard as module
+    monkeypatch.setattr(module, "ERROR_BODY_TIMEOUT_SECONDS", .15)
+    release = threading.Event()
+    session = str(uuid.uuid4())
+    with running([(429, [release])]) as (guard, calls):
+        started = time.monotonic()
+        status, raw, _ = request(guard, body(session))
+        elapsed = time.monotonic() - started
+        release.set()
+        assert status == 429 and elapsed < 1.0
+        assert json.loads(raw)["upstream_error"]["incomplete"] is True
+        assert guard.attempt_failure(session) == "upstream_http_429"
+        assert request(guard, body(session))[0] == 400
+        assert len(calls) == 1
 
 
 def test_disconnect_is_sticky_and_stop_closes_waiting_upstream():

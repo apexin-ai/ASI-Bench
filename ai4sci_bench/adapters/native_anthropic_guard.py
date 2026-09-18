@@ -15,6 +15,7 @@ import os
 import select
 import socket
 import threading
+import time
 from typing import Any
 from urllib.parse import urlsplit
 import uuid
@@ -26,6 +27,7 @@ MAX_EVENT = 2 * 1024 * 1024
 MAX_BLOCK = 4 * 1024 * 1024
 MAX_BLOCKS = 4096
 MAX_SESSIONS = 10000
+ERROR_BODY_TIMEOUT_SECONDS = 2.0
 MAX_ERROR_BODY = 64 * 1024
 EMPTY_RECOVERY = "[Your previous response had no visible output. Please continue and produce a user-visible response.]"
 
@@ -315,11 +317,18 @@ class _NativeHandler(http.server.BaseHTTPRequestHandler):
                 value = value.replace(secret, "[REDACTED]")
         return value
 
-    def _upstream_error(self, response: http.client.HTTPResponse) -> None:
+    def _upstream_error(self, response: http.client.HTTPResponse, wire_socket: socket.socket | None) -> None:
         raw = bytearray()
         incomplete = False
+        deadline = time.monotonic() + min(self.owner._timeout, ERROR_BODY_TIMEOUT_SECONDS)
         try:
             while len(raw) <= MAX_ERROR_BODY:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    incomplete = True
+                    break
+                if wire_socket is not None:
+                    wire_socket.settimeout(remaining)
                 chunk = response.read1(min(8192, MAX_ERROR_BODY + 1 - len(raw)))
                 if not chunk:
                     break
@@ -461,7 +470,7 @@ class _NativeHandler(http.server.BaseHTTPRequestHandler):
             response = connection.getresponse()
             if response.status != 200:
                 state["failure"] = f"upstream_http_{response.status}"
-                self._upstream_error(response)
+                self._upstream_error(response, wire_socket)
                 return
             if response.headers.get_content_type() != "text/event-stream" or response.headers.get("Content-Encoding", "identity").lower() != "identity":
                 raise StreamIntegrityError("upstream_not_native_sse")
@@ -487,6 +496,10 @@ class _NativeHandler(http.server.BaseHTTPRequestHandler):
                         started = True
                     self.wfile.write(frame)
                     self.wfile.flush()
+                if validator.stopped:
+                    # message_stop is the protocol boundary. Do not require
+                    # the provider to close its HTTP body before completing.
+                    break
             validator.finish()
             monitor_done.set()
             if monitor is not None:
@@ -495,8 +508,8 @@ class _NativeHandler(http.server.BaseHTTPRequestHandler):
                 raise StreamIntegrityError(state["failure"])
             if not started:
                 raise StreamIntegrityError("empty_native_stream")
-            # Do not expose success until EOF proves there was no trailing
-            # protocol corruption after message_stop.
+            # The current read was fully validated before its terminal event
+            # is exposed; unread bytes after message_stop are not consumed.
             state["empty"] = not validator.visible and not validator.has_tool
             # Upstream validation is already complete. Mark it before exposing
             # message_stop so a fast CLI exit cannot race the adapter lookup.
