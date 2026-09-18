@@ -41,6 +41,8 @@ import urllib.request
 import uuid
 from typing import Any
 
+from ai4sci_bench.adapters.native_anthropic_guard import EMPTY_RECOVERY
+
 logger = logging.getLogger(__name__)
 
 VALID_API_PROTOCOLS = ("openai", "anthropic")
@@ -1663,7 +1665,7 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                 self._send_anthropic_error(400, "Strict evaluation requires CC metadata.user_id.session_id")
                 return
             with type(self)._attempts_lock:
-                state = type(self)._attempts.setdefault(session_id, {"lock": threading.Lock(), "failure": None})
+                state = type(self)._attempts.setdefault(session_id, {"lock": threading.Lock(), "failure": None, "empty": False})
             # One session is one declared CLI attempt. Serialize auxiliary
             # requests so none start upstream after an earlier failure.
             with state["lock"]:
@@ -1672,6 +1674,11 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                     logger.warning("litellm proxy blocked_session session=%s reason=%s", session_id, state["failure"])
                     return
                 self._attempt_state = state
+                if state["empty"] and self._is_empty_recovery(body):
+                    self._fail_attempt("client_recovery_after_empty_response")
+                    self._send_anthropic_error(400, "Hidden client recovery after an empty response is not a declared attempt")
+                    logger.warning("litellm proxy blocked_session session=%s reason=%s", session_id, state["failure"])
+                    return
                 state["active"] = True
                 try:
                     self._serve_message(body)
@@ -1682,6 +1689,29 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                     state["active"] = False
             return
         self._serve_message(body)
+
+    @staticmethod
+    def _is_empty_recovery(body: dict[str, Any]) -> bool:
+        messages = body.get("messages")
+        if not isinstance(messages, list):
+            return False
+        # CC can append date/system messages after its modified user prompt.
+        for message in reversed(messages):
+            if not isinstance(message, dict):
+                return False
+            if message.get("role") == "system":
+                continue
+            if message.get("role") != "user":
+                return False
+            content = message.get("content")
+            if isinstance(content, str):
+                return EMPTY_RECOVERY in content
+            return isinstance(content, list) and any(
+                isinstance(block, dict) and block.get("type") == "text"
+                and isinstance(block.get("text"), str) and EMPTY_RECOVERY in block["text"]
+                for block in content
+            )
+        return False
 
     def _fail_attempt(self, reason: str) -> None:
         state = getattr(self, "_attempt_state", None)
@@ -2062,6 +2092,15 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                         outcome = "client_gone"
                         return outcome
             message = state.finish()
+            attempt = getattr(self, "_attempt_state", None)
+            if attempt is not None:
+                attempt["empty"] = not any(
+                    block.get("type") == "tool_use" or (
+                        block.get("type") == "text" and isinstance(block.get("text"), str)
+                        and block["text"].strip()
+                    )
+                    for block in message.get("content", [])
+                )
             try:
                 if downstream_stream:
                     write_event({"type": "message_stop"})
