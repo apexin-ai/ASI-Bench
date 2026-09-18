@@ -1,5 +1,21 @@
 # Progress
 
+## Native Anthropic stream integrity
+
+- Problem: direct native endpoints bypass the LiteLLM guard. Actual CC 2.1.268
+  still falls back after 404 with fallback disabled, silently requests another
+  generation after an empty response, and can accept missing message_stop.
+- Resolution: opt-in native guard preserves the protocol and signed history,
+  validates SSE, rejects nonstream requests, and closes failed sessions. It
+  retains valid empty output but blocks the observed hidden recovery prompt.
+- Prevention: real HTTP fixtures plus pinned CC fault injection; record both
+  HTTP hops and task artifacts. Unknown block types fail explicitly; new CLI
+  recovery behavior and native server tools need separate validation.
+- Implementation: `6a75cf4`. Native regression 29 passed; Linux full suite
+  2492 passed with the same two pre-existing Codex failures. Real Sonnet 4.6
+  completed a fixed CSV file task through the guard with six streamed calls.
+  This is connectivity/integrity validation, not a benchmark score.
+
 ## Claude stream and evaluation attempt integrity
 
 - Problem: mixed thinking/text blocks triggered CC nonstreaming fallback;

@@ -274,6 +274,30 @@ seed42 GT is not public. Local benchmark runs never calculate official scores.
 See [Getting Started](docs/guide/getting-started.md) for agent configuration,
 sandbox selection, and platform-specific commands.
 
+### Claude Code with native Anthropic endpoints
+
+For `api_protocol=anthropic`, opt in with `ASIBENCH_NATIVE_STREAM_GUARD=1`
+to validate native Messages streams without converting the protocol. The guard
+preserves request bodies, thinking signatures and client headers. It accepts
+only `stream=true` and rejects nonstreaming fallback before contacting the
+provider. HTTP failures, invalid/truncated SSE and disconnects close that CC
+session; subsequent recovery needs a new, explicitly recorded session.
+
+The guard requires a provider key and CC session UUID. It checks block types,
+tool JSON and a complete `message_stop`, released after response-body EOF.
+It preserves a legitimate empty response, but blocks the observed CC prompt
+that silently requests a replacement after no visible output. Empty prose alone
+does not invalidate a file-producing task; evaluate its output contract.
+
+Supported blocks are text, thinking, redacted_thinking and tool_use. Unknown
+blocks fail explicitly; native server tools require separate validation. State
+is in memory until proxy teardown. Requests/events/blocks/session counts are
+bounded. `ASIBENCH_STREAM_IDLE_TIMEOUT_SECONDS` controls the upstream socket
+wait (default 600 seconds); retain a separate task deadline. Native guard is
+off by default and excludes TokenRouter special routes. The two LiteLLM
+FORCE/STRICT switches below do not activate it. Pin CC and retest upgrades,
+especially internal fallback and empty-response recovery behavior.
+
 ### Claude Code with OpenAI-compatible models
 
 The Claude adapter emits `stream-json` logs. This controls CLI output, not the

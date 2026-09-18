@@ -81,6 +81,10 @@
   实时日志与结果采集必须消费相同完整字节；文件名包含 run key 和 attempt 随机标识。
   严格评测可启用 `ASIBENCH_STRICT_STREAM_ATTEMPTS=1`，以 CC session UUID
   保留失败状态，阻止客户端恢复请求重新生成；显式恢复必须使用新 session。
+- 普通原生 Anthropic 路径可选 `ASIBENCH_NATIVE_STREAM_GUARD=1`，保留原生
+  body/headers/thinking signature，校验 SSE 完整终止，拒绝非流式及失败后重发。
+  LiteLLM 的 FORCE/STRICT 开关不覆盖原生直连。空正文与协议断流须区分；
+  guard 仅拦截已观测到的空回复恢复提示，产物仍按任务契约评分。
 
 ## 任务生命周期
 

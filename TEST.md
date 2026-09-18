@@ -22,6 +22,14 @@ call the model again, even with a new HTTP request, changed recovery prompt or
 nonstreaming fallback. It covers independent sessions, valid tool followups,
 missing session IDs and concurrent requests queued behind a failure.
 
+`tests/test_native_anthropic_guard.py` uses real localhost HTTP to cover native
+Anthropic bodies/headers/signatures, gzip, incremental SSE, malformed blocks,
+missing terminators, HTTP status and sanitized provider errors, sticky sessions,
+nonstream rejection, empty-response recovery, disconnect cleanup and adapter
+opt-in routing. No provider key or model call is used. Validate actual CC and
+native-provider tool turns separately; a JSONL success alone cannot prove that
+the native HTTP stream ended correctly.
+
 These cover thinking/text transitions, fragmented tool metadata/arguments,
 truncated SSE, actual locked LiteLLM EOF behavior, upstream streaming with a
 JSON downstream client, retry boundaries, terminal-result validation, Docker
