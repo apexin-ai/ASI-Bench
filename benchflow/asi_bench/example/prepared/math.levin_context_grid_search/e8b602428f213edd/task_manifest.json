@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "converter_version": "prepare-v5",
+  "status": "prepared",
+  "benchmark": "ASI-Bench",
+  "official": false,
+  "seed": 31415,
+  "task": {
+    "id": "math.levin_context_grid_search",
+    "anonymous_id": "task_2cb514e61b85",
+    "level": "b1",
+    "timeout_seconds": 3600
+  },
+  "instance": {
+    "id": "math.levin_context_grid_search__seed31415"
+  },
+  "runtime": {
+    "profile_id": "cpu-v1",
+    "path": "environment/runtime-profile.json"
+  },
+  "paths": {
+    "task_document": "task.md",
+    "agent_inputs": "environment/inputs",
+    "instance_parameters": "verifier/instance_parameters.json"
+  },
+  "sources": {
+    "hf": {
+      "repo": "Apexintelligence-AI/ASI-Bench-seed31415",
+      "requested_revision": "main",
+      "resolved_revision": "9622c6339298804883e189edd1bb36434e7555d5",
+      "path": "tasks/math.levin_context_grid_search__seed31415"
+    },
+    "github": {
+      "repo": "apexin-ai/ASI-Bench",
+      "requested_revision": "main",
+      "resolved_revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+      "path": "tasks/math/levin_context_grid_search"
+    }
+  },
+  "files": [
+    {
+      "target": "task.md",
+      "size": 4502,
+      "sha256": "647c1e2e9e71d675955968292ad13b483eab6835f797214c7301e0a9c757e7ce",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "environment/runtime-constraints.txt",
+      "size": 582,
+      "sha256": "8169801c23fc9d82fb9a545fcbedd057914105b42f67af8ddfeb4a922bd4b0fb",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "environment/Dockerfile",
+      "size": 277,
+      "sha256": "7cc7deb2c1f5ea5540d150f4f335f8ab5999e44e6a1f340085345c64983298cd",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "environment/runtime-profile.json",
+      "size": 165,
+      "sha256": "338b24866a03065062e5125c83b0b026fe347f0c3f401d5a6b921fb7498c4053",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "verifier/scoring.py",
+      "size": 7659,
+      "sha256": "1e4e6481d3e67f210d5ad14ce28094aa1b221dca06cab5de460d1ef2d6042450",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "verifier/instance_parameters.json",
+      "size": 265,
+      "sha256": "dacb593e0e5cdfb09ce1d20117f67eaee71f92668fe90fe63c70a70c3b021334",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "verifier/score_entry.py",
+      "size": 21422,
+      "sha256": "9b6f90917cdfedf8c8ea35b01b2b1730830cd31127c28e862e3a6355f1f793a2",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "verifier/test.sh",
+      "size": 349,
+      "sha256": "5706c797e3ae7a4eab965aa4b8012c31c46e0d8eecafe447fb0251a212b4c380",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "environment/inputs/prompt.md",
+      "size": 4268,
+      "sha256": "748ac850b5dff2f208ef8fa237696cc43f023acbc1d6f318220ebcca8344b3c7",
+      "visibility": [
+        "agent"
+      ]
+    },
+    {
+      "target": "environment/inputs/task_info.json",
+      "size": 202,
+      "sha256": "907d2d01fb127b5f18fc0716a1d004b8b70783d25b0bce06744fa1d8b7816c27",
+      "visibility": [
+        "agent"
+      ]
+    },
+    {
+      "target": "environment/inputs/data/training_levels.json",
+      "size": 412086,
+      "sha256": "cf94c168bf839744a1676c2b338e2983801bd82042dec937f570a8c0ab6061f1",
+      "visibility": [
+        "agent"
+      ]
+    },
+    {
+      "target": "environment/inputs/data/public_eval_levels.json",
+      "size": 5030,
+      "sha256": "8da1e7b84de4330519bd13d7d7dea6c24d31cd1817845b9d96e1429693c8b702",
+      "visibility": [
+        "agent"
+      ]
+    }
+  ],
+  "scoring": {
+    "profile_id": "asi-seed31415-v1",
+    "launcher": "verifier/test.sh",
+    "entrypoint": "verifier/score_entry.py",
+    "evaluator_spec_sha256": "af9853554cb2b0f81025a68774ce6513e7add76330e6edf934052203eea7d3b4",
+    "expected_evaluator_bundle_digest": "5cec3c95c9411dfb73ee45d883851fa1f535284e05a8b429afff1525ffdcd68b"
+  },
+  "source_assets": {
+    "raw_dir": "/Users/linying/Developer/work/raw",
+    "manifest_sha256": "2fdf566255d670fd8f31d7ef7d2bd4a95d3427df7023beb6dc5e9638531e1373"
+  }
+}

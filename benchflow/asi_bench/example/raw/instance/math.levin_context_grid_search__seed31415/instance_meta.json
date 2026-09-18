@@ -1,0 +1,29 @@
+{
+  "task_id": "math.levin_context_grid_search",
+  "params_used": {
+    "seed": 20260606,
+    "train_count": 260,
+    "public_count": 4,
+    "hidden_count": 24,
+    "grid_size": 27,
+    "train_path_min": 20,
+    "train_path_max": 30,
+    "hidden_path_min": 44,
+    "hidden_path_max": 58,
+    "branch_length": 15,
+    "branch_count": 3,
+    "budget": 95
+  },
+  "input_files": [
+    "training_levels.json",
+    "public_eval_levels.json"
+  ],
+  "reference_files": [
+    "hidden_eval.json",
+    "reference_summary.json",
+    "analysis.py",
+    "data/training_levels.json",
+    "data/public_eval_levels.json"
+  ],
+  "generation_time_seconds": 6.918
+}

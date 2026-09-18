@@ -1,0 +1,80 @@
+[
+  {
+    "revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+    "source": "ai4sci_bench/adapters/subprocess_base.py",
+    "source_sha256": "815d276f7645f1c6c7cf55e1c91c0fd12dcb8d3259908d5eeba2798a5cbc6396",
+    "fixture": "subprocess_base.txt",
+    "fixture_sha256": "c0dba2066a46ddcbc6d25c79ffc59c8ab440a66286de2c767bf780ad796f847f",
+    "functions": [
+      "collect_output_files"
+    ]
+  },
+  {
+    "revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+    "source": "ai4sci_bench/adapters/pi_cli.py",
+    "source_sha256": "ca9c6e29dc6234c99669deb93636c474aa78f3c35fc121c90d1662fc17ef6175",
+    "fixture": "pi_cli.txt",
+    "fixture_sha256": "cda3ebcae725dd807ed854caf697f66de145baae0417cd9fd7cb11250e7bf073",
+    "functions": [
+      "_get_stdin_input"
+    ]
+  },
+  {
+    "revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+    "source": "ai4sci_bench/generators/instance_generator.py",
+    "source_sha256": "7b2484df9eb67c331ab878e8010b13186853f0b2b4f95de2f3a401579f3e158b",
+    "fixture": "instance_generator.txt",
+    "fixture_sha256": "9b5d7ed256c079df882a6871035d02c3a3d3b4faee8fb6ca80f7072ae6a120eb",
+    "functions": [
+      "_build_expected_outputs",
+      "_anonymize_task_id",
+      "_build_agent_task_info"
+    ]
+  },
+  {
+    "revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+    "source": "ai4sci_bench/adapters/pi_cli.py",
+    "source_sha256": "ca9c6e29dc6234c99669deb93636c474aa78f3c35fc121c90d1662fc17ef6175",
+    "fixture": "pi_os_solve.txt",
+    "fixture_sha256": "9790654ec31be964c06a59a96af4ce35603391396a8f4a9400438d3adb325728",
+    "functions": [
+      "solve"
+    ],
+    "lines": [
+      {
+        "function": "solve",
+        "start": 372,
+        "end": 434
+      }
+    ]
+  },
+  {
+    "revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+    "source": "ai4sci_bench/generators/instance_generator.py",
+    "source_sha256": "7b2484df9eb67c331ab878e8010b13186853f0b2b4f95de2f3a401579f3e158b",
+    "fixture": "workspace.txt",
+    "fixture_sha256": "b80e620376274f98351308245babc7882792476b6701d10b3fdfb7acc9142d09",
+    "functions": [
+      "_prepare_workspace",
+      "_strip_agent_memory_files",
+      "_build_framework_task_info"
+    ],
+    "lines": [
+      {
+        "function": "_prepare_workspace",
+        "start": 543,
+        "end": 627
+      },
+      {
+        "function": "_strip_agent_memory_files",
+        "start": 653,
+        "end": 678
+      },
+      {
+        "function": "_build_framework_task_info",
+        "start": 753,
+        "end": 769
+      }
+    ]
+  }
+]

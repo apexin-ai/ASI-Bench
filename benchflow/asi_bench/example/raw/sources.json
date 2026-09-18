@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "status": "downloaded",
+  "seed": 31415,
+  "task_id": "math.levin_context_grid_search",
+  "instance_id": "math.levin_context_grid_search__seed31415",
+  "instance_dir": "instance/math.levin_context_grid_search__seed31415",
+  "task_bundle_dir": "task_bundle/tasks/math/levin_context_grid_search",
+  "hf": {
+    "repo": "Apexintelligence-AI/ASI-Bench-seed31415",
+    "requested_revision": "main",
+    "resolved_revision": "9622c6339298804883e189edd1bb36434e7555d5",
+    "path": "tasks/math.levin_context_grid_search__seed31415"
+  },
+  "github": {
+    "repo": "apexin-ai/ASI-Bench",
+    "requested_revision": "main",
+    "resolved_revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+    "path": "tasks/math/levin_context_grid_search"
+  },
+  "files": [
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/data/public_eval_levels.json",
+      "size": 5030,
+      "sha256": "8da1e7b84de4330519bd13d7d7dea6c24d31cd1817845b9d96e1429693c8b702"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/data/training_levels.json",
+      "size": 412086,
+      "sha256": "cf94c168bf839744a1676c2b338e2983801bd82042dec937f570a8c0ab6061f1"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/framework_task_info.json",
+      "size": 626,
+      "sha256": "302f06ba92c1f0bc455893ccc565fcd5ea06cc63f2a632576b49ace3d091e299"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/instance_meta.json",
+      "size": 645,
+      "sha256": "de8fc0b6c78bab303f8b2f0280f22ae369c4d330221d336c6cb11745f2ea92c3"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/prompt_b1.md",
+      "size": 4268,
+      "sha256": "748ac850b5dff2f208ef8fa237696cc43f023acbc1d6f318220ebcca8344b3c7"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/prompt_b2.md",
+      "size": 1899,
+      "sha256": "6443f27967b04cfca74d92e63cc31e47143fb0ccc56dee6e96101cac620c2cc7"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/prompt_b3.md",
+      "size": 1464,
+      "sha256": "436d74a093190c978186dfbd20be0074a8f87958232f826456b5679ab8b20fff"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/prompt_b4.md",
+      "size": 2221,
+      "sha256": "b568865ec82340c808f2339dbb18027ba2a96f461308f57c116c09813cb5f1b3"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/reference/analysis.py",
+      "size": 369,
+      "sha256": "7265c51aeb18b9a667d12c7805353bcb4d2fa077221dad0d6e307765890a5aa5"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/reference/data/public_eval_levels.json",
+      "size": 5030,
+      "sha256": "8da1e7b84de4330519bd13d7d7dea6c24d31cd1817845b9d96e1429693c8b702"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/reference/data/training_levels.json",
+      "size": 412086,
+      "sha256": "cf94c168bf839744a1676c2b338e2983801bd82042dec937f570a8c0ab6061f1"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/reference/hidden_eval.json",
+      "size": 55898,
+      "sha256": "973667711d90e9419abbcf432b0cb3740421e54f69d60382d17b18841916b2ef"
+    },
+    {
+      "path": "instance/math.levin_context_grid_search__seed31415/reference/reference_summary.json",
+      "size": 12350,
+      "sha256": "2af05490d4ba2b348c27ec1f3bc8ec0e0a982da5a3f83aba95bae6e63c39072d"
+    },
+    {
+      "path": "task_bundle/tasks/math/levin_context_grid_search/custom_scorer.py",
+      "size": 12797,
+      "sha256": "530ecc0993b269242ced5e158b7aa80efe2737346ff68a5293e396d7d856cbbc"
+    },
+    {
+      "path": "task_bundle/tasks/math/levin_context_grid_search/lts_eval_runtime.py",
+      "size": 9377,
+      "sha256": "4a00144616fd0d248f4afb63f81d89e1312af4ca78d4bfe441a794de41601f95"
+    },
+    {
+      "path": "task_bundle/tasks/math/levin_context_grid_search/task_eval.yaml",
+      "size": 722,
+      "sha256": "301f4265cd00c9ab9d6960e6332b6ae32715615ba862e1f1c09c9ba7727bcb29"
+    },
+    {
+      "path": "task_bundle/tasks/math/levin_context_grid_search/task_meta.yaml",
+      "size": 1298,
+      "sha256": "ef9abc4775689f75af6b1156eb11148dadf6eec2d266af469c3378e18648bb6b"
+    }
+  ]
+}

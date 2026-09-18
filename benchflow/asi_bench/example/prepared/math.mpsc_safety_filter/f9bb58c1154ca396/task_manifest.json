@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "converter_version": "prepare-v5",
+  "status": "prepared",
+  "benchmark": "ASI-Bench",
+  "official": false,
+  "seed": 31415,
+  "task": {
+    "id": "math.mpsc_safety_filter",
+    "anonymous_id": "task_e716c06a8b17",
+    "level": "b1",
+    "timeout_seconds": 3600
+  },
+  "instance": {
+    "id": "math.mpsc_safety_filter__seed31415"
+  },
+  "runtime": {
+    "profile_id": "cpu-v1",
+    "path": "environment/runtime-profile.json"
+  },
+  "paths": {
+    "task_document": "task.md",
+    "agent_inputs": "environment/inputs",
+    "instance_parameters": "verifier/instance_parameters.json"
+  },
+  "sources": {
+    "hf": {
+      "repo": "Apexintelligence-AI/ASI-Bench-seed31415",
+      "requested_revision": "main",
+      "resolved_revision": "9622c6339298804883e189edd1bb36434e7555d5",
+      "path": "tasks/math.mpsc_safety_filter__seed31415"
+    },
+    "github": {
+      "repo": "apexin-ai/ASI-Bench",
+      "requested_revision": "main",
+      "resolved_revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+      "path": "tasks/math/mpsc_safety_filter"
+    }
+  },
+  "files": [
+    {
+      "target": "task.md",
+      "size": 5328,
+      "sha256": "a687fdeda9fa78c3dde57540107bb8aaea348133f9e016d4be474c54914fa4b0",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "environment/runtime-constraints.txt",
+      "size": 582,
+      "sha256": "8169801c23fc9d82fb9a545fcbedd057914105b42f67af8ddfeb4a922bd4b0fb",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "environment/Dockerfile",
+      "size": 350,
+      "sha256": "1a12a5049cabfd86b80a2a1af2851125fa1e667990c3d41e821eaf57ca811314",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "environment/runtime-profile.json",
+      "size": 165,
+      "sha256": "338b24866a03065062e5125c83b0b026fe347f0c3f401d5a6b921fb7498c4053",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "verifier/scoring.py",
+      "size": 7659,
+      "sha256": "1e4e6481d3e67f210d5ad14ce28094aa1b221dca06cab5de460d1ef2d6042450",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "verifier/instance_parameters.json",
+      "size": 315,
+      "sha256": "93f805a591a34115e5669b73ae9aa1bd7f1779153ba3cf1c8b0df6794e1226a1",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "verifier/score_entry.py",
+      "size": 21416,
+      "sha256": "fe1a40a27b592720f8fc24d343790a63c00975ddcb98e8dae112a5584c78395e",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "verifier/test.sh",
+      "size": 349,
+      "sha256": "5706c797e3ae7a4eab965aa4b8012c31c46e0d8eecafe447fb0251a212b4c380",
+      "visibility": [
+        "scoring"
+      ]
+    },
+    {
+      "target": "environment/inputs/prompt.md",
+      "size": 5094,
+      "sha256": "81c454f0f2d231ea5a6f3b49c6fc221003dc96391ee769cd77f2a1054f9114f2",
+      "visibility": [
+        "agent"
+      ]
+    },
+    {
+      "target": "environment/inputs/task_info.json",
+      "size": 270,
+      "sha256": "8f66311f108543749506656eafb7ff93a19b3962665f4144ed96d287fd151aee",
+      "visibility": [
+        "agent"
+      ]
+    },
+    {
+      "target": "environment/inputs/data/public_cases.json",
+      "size": 2121,
+      "sha256": "e93d486dc6ebcf456b4042dad9f40ac8b4c94357a5613c711b5a4549db5b5f11",
+      "visibility": [
+        "agent"
+      ]
+    },
+    {
+      "target": "environment/inputs/data/system.json",
+      "size": 46864,
+      "sha256": "4f5d1f111899596d2fe39042ce6bef4ad9e4e6a9f15f8fc8daeb193f67afd4f8",
+      "visibility": [
+        "agent"
+      ]
+    }
+  ],
+  "scoring": {
+    "profile_id": "asi-seed31415-v1",
+    "launcher": "verifier/test.sh",
+    "entrypoint": "verifier/score_entry.py",
+    "evaluator_spec_sha256": "ebf05aa8afc6867b08414420441bd31df046537611cde4f1bbd713f23964a28d",
+    "expected_evaluator_bundle_digest": "51b56bbd8a5e30541585cc2a16bcb064dfee945c6dc906ca9e1745bc236ce054"
+  },
+  "source_assets": {
+    "raw_dir": "/Users/linying/Developer/work/raw/math.mpsc_safety_filter",
+    "manifest_sha256": "5b410703528c1f23068e1ac83efa475eb819863446ddad2e99b4c255dc620324"
+  }
+}

@@ -1,0 +1,63 @@
+    def solve(self, task_instance: TaskInstance) -> AgentOutput:
+        if self.sandbox != "os":
+            output = super().solve(task_instance)
+            if output.cost is None and output.raw_stdout:
+                output.cost = self._extract_usage_from_jsonl(output.raw_stdout)
+            if output.raw_stdout:
+                terminal_error = self._extract_terminal_error_from_jsonl(output.raw_stdout)
+                if terminal_error is not None:
+                    output.status = RunStatus.FAILED
+                    output.error_message = terminal_error
+            return output
+
+        eff_timeout = self._get_effective_timeout(task_instance)
+        workspace = task_instance.workspace_dir
+        cmd = self._build_os_agent_cmd(workspace)
+        extra_env: dict[str, str] | None = self._build_os_api_env() or None
+        extra_mounts: list[str] = self._build_os_extra_mounts()
+
+        t0 = time.time()
+        assert self._os_sandbox is not None
+        success, log, raw_stdout, raw_stderr, image_identity = (
+            self._os_sandbox.run_agent(
+                task_metadata=task_instance.metadata,
+                agent_cmd=cmd,
+                workspace=workspace,
+                timeout=eff_timeout,
+                agent_type="pi",
+                allow_external_tools=self.allow_external_tools,
+                extra_env=extra_env,
+                extra_mounts=extra_mounts,
+                stdin_input=(workspace / "prompt.md").read_text(encoding="utf-8"),
+            )
+        )
+        elapsed = time.time() - t0
+        self._sandbox_image_identity = image_identity
+
+        produced_files = collect_output_files(workspace, task_instance)
+        parsed_log = self._parse_log(raw_stdout or "") if raw_stdout else log
+
+        if "timed out" in log:
+            status = RunStatus.TIMEOUT
+        elif success:
+            status = RunStatus.COMPLETED
+        else:
+            status = RunStatus.FAILED
+        terminal_error = self._extract_terminal_error_from_jsonl(raw_stdout or "")
+        if terminal_error is not None:
+            status = RunStatus.FAILED
+
+        return AgentOutput(
+            instance_id=task_instance.instance_id,
+            output_dir=workspace,
+            code_files=[f for f in produced_files if f.endswith(".py")],
+            data_files=[f for f in produced_files if not f.endswith(".py")],
+            log=parsed_log,
+            execution_time_seconds=elapsed,
+            status=status,
+            error_message=terminal_error if terminal_error is not None else (None if success else log),
+            raw_stdout=raw_stdout,
+            raw_stderr=raw_stderr,
+            raw_stdout_format="jsonl" if raw_stdout else None,
+            cost=self._extract_usage_from_jsonl(raw_stdout) if raw_stdout else None,
+        )

@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "status": "downloaded",
+  "seed": 31415,
+  "task_id": "math.mpsc_safety_filter",
+  "instance_id": "math.mpsc_safety_filter__seed31415",
+  "instance_dir": "instance/math.mpsc_safety_filter__seed31415",
+  "task_bundle_dir": "task_bundle/tasks/math/mpsc_safety_filter",
+  "hf": {
+    "repo": "Apexintelligence-AI/ASI-Bench-seed31415",
+    "requested_revision": "main",
+    "resolved_revision": "9622c6339298804883e189edd1bb36434e7555d5",
+    "path": "tasks/math.mpsc_safety_filter__seed31415"
+  },
+  "github": {
+    "repo": "apexin-ai/ASI-Bench",
+    "requested_revision": "main",
+    "resolved_revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+    "path": "tasks/math/mpsc_safety_filter"
+  },
+  "files": [
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/data/public_cases.json",
+      "size": 2121,
+      "sha256": "e93d486dc6ebcf456b4042dad9f40ac8b4c94357a5613c711b5a4549db5b5f11"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/data/system.json",
+      "size": 46864,
+      "sha256": "4f5d1f111899596d2fe39042ce6bef4ad9e4e6a9f15f8fc8daeb193f67afd4f8"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/framework_task_info.json",
+      "size": 694,
+      "sha256": "719e5c50d132fefea730e1e96f2982a97a404e08d7375bd4f4f964da118e4d6d"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/instance_meta.json",
+      "size": 629,
+      "sha256": "8d4f9f5c74a384443a626fdec5fd9669445907fc2484b18c93f111f6eaf4105b"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/prompt_b1.md",
+      "size": 5094,
+      "sha256": "81c454f0f2d231ea5a6f3b49c6fc221003dc96391ee769cd77f2a1054f9114f2"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/prompt_b2.md",
+      "size": 3388,
+      "sha256": "d2e947b9ee3655442e1f10ce5e5e48b360da913112a1226e3b47d6e952c08d77"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/prompt_b3.md",
+      "size": 3132,
+      "sha256": "75a1734e919837f9c0ab0f1a3ee8f71e86b0c519de68a6fb88a82a67e1cc1832"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/prompt_b4.md",
+      "size": 4395,
+      "sha256": "45bf6d21ab55d2af9398c8c27bfa3f449154577693ddc1be62ab8bb57953198d"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/reference/analysis.py",
+      "size": 28212,
+      "sha256": "70bd358eb25a5f8e4754e29f5895511f6104cb92c4dad961a9d80611958d105a"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/reference/certificate.json",
+      "size": 43984,
+      "sha256": "8a74124586b33dfd4b92f9a7887af958b74a78d5dcdc6720c8a04f3a9ea2feeb"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/reference/data/public_cases.json",
+      "size": 2121,
+      "sha256": "e93d486dc6ebcf456b4042dad9f40ac8b4c94357a5613c711b5a4549db5b5f11"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/reference/data/system.json",
+      "size": 46864,
+      "sha256": "4f5d1f111899596d2fe39042ce6bef4ad9e4e6a9f15f8fc8daeb193f67afd4f8"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/reference/hidden_cases.json",
+      "size": 56139,
+      "sha256": "8ca200bcbc3c7265d5e6addabbcaac8c98e8e485fb35c5d0ac914850b51c44ac"
+    },
+    {
+      "path": "instance/math.mpsc_safety_filter__seed31415/reference/reference_summary.json",
+      "size": 573,
+      "sha256": "cafe294b1c4e657fc511afb74d79f6d96ddb305e92c31c21605bf970c8c7323c"
+    },
+    {
+      "path": "task_bundle/tasks/math/mpsc_safety_filter/custom_scorer.py",
+      "size": 43989,
+      "sha256": "65c547b0021038f782d1c024ee3804ceb87298badb96e6e22bdb3cd9fa6cc5d2"
+    },
+    {
+      "path": "task_bundle/tasks/math/mpsc_safety_filter/mpsc_eval_runtime.py",
+      "size": 42932,
+      "sha256": "772894d76c4dce41ff071885b6e2dc60c5c76a5b8f6c25dcbe3a1a3c01e0734d"
+    },
+    {
+      "path": "task_bundle/tasks/math/mpsc_safety_filter/task_eval.yaml",
+      "size": 819,
+      "sha256": "734023ecb957f9bdccd8a9799a3dde3818ebf7f2c10323fff29c1b0b2425ed03"
+    },
+    {
+      "path": "task_bundle/tasks/math/mpsc_safety_filter/task_meta.yaml",
+      "size": 1883,
+      "sha256": "60572d4352f872698a604bcf143950d5cfcb9673d65a54fd58f1ecf87a13abcb"
+    }
+  ]
+}

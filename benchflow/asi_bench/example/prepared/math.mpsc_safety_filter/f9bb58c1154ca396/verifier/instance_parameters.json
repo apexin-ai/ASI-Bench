@@ -1,0 +1,13 @@
+{
+  "seed": 20260616,
+  "horizon": 13,
+  "public_count": 8,
+  "public_scenario_count": 56,
+  "hidden_query_count": 24,
+  "holdout_scenario_count": 96,
+  "rollout_count": 4,
+  "rollout_steps": 16,
+  "terminal_library_direction_pairs": 16,
+  "terminal_library_chain_length": 6,
+  "terminal_library_decoy_pairs": 12
+}

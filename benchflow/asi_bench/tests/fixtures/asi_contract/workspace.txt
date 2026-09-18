@@ -1,0 +1,130 @@
+    def _prepare_workspace(
+        self,
+        instance_dir: Path,
+        workspace_dir: Path,
+        instance_id: str,
+        prompt_level: PromptLevel,
+        task_metadata: dict[str, Any],
+        params: dict[str, Any],
+        *,
+        effective_timeout_seconds: int | None = None,
+        framework_task_info_dir: Path | None = None,
+    ) -> None:
+        """Prepare the agent workspace and framework-only metadata.
+
+        instance_dir may be a shared, downloaded --instances-dir and must
+        therefore remain read-only. Callers loading pre-generated instances
+        provide a run-owned framework_task_info_dir.
+        """
+        import shutil
+        import sys
+
+        # Preflight: check for Windows MAX_PATH (260 chars) risk (fixes #9).
+        if sys.platform == "win32":
+            # Estimate longest sub-path: workspace/data/<longest_data_file>
+            longest_data_name = ""
+            data_src = instance_dir / "data"
+            if data_src.exists():
+                for p in data_src.rglob("*"):
+                    rel = str(p.relative_to(data_src))
+                    if len(rel) > len(longest_data_name):
+                        longest_data_name = rel
+            estimated = len(str(workspace_dir.resolve())) + 1 + len("data") + 1 + len(longest_data_name)
+            if estimated > 250:
+                raise RuntimeError(
+                    f"Estimated path length ({estimated} chars) exceeds Windows "
+                    f"MAX_PATH limit. Shorten --output-dir or use a shorter "
+                    f"base directory. Current workspace: {workspace_dir}"
+                )
+
+        # Copy data files
+        data_src = instance_dir / "data"
+        data_dst = workspace_dir / "data"
+        if data_src.exists():
+            if data_dst.exists():
+                shutil.rmtree(data_dst)
+            shutil.copytree(data_src, data_dst)
+
+        # Copy the selected prompt level as prompt.md
+        prompt_file = instance_dir / f"prompt_{prompt_level.value}.md"
+        if prompt_file.exists():
+            shutil.copy2(prompt_file, workspace_dir / "prompt.md")
+        else:
+            raise FileNotFoundError(
+                f"Prompt file not found for {instance_id} level {prompt_level.value}: "
+                f"{prompt_file}. Ensure generate_gt.py renders prompts or task.yaml "
+                "prompts point to existing task prompt templates."
+            )
+
+        task_info = self._build_agent_task_info(
+            task_metadata, prompt_level,
+            effective_timeout_seconds=effective_timeout_seconds,
+        )
+        framework_task_info = self._build_framework_task_info(
+            task_metadata,
+            instance_id=instance_id,
+            prompt_level=prompt_level,
+            resolved_params=params,
+            effective_timeout_seconds=effective_timeout_seconds,
+        )
+        (workspace_dir / AGENT_TASK_INFO_FILENAME).write_text(
+            json.dumps(task_info, indent=2), encoding="utf-8"
+        )
+        framework_info_dir = framework_task_info_dir or instance_dir
+        framework_info_dir.mkdir(parents=True, exist_ok=True)
+        (framework_info_dir / FRAMEWORK_TASK_INFO_FILENAME).write_text(
+            json.dumps(framework_task_info, indent=2), encoding="utf-8"
+        )
+
+        # Strip any stray CLAUDE.md / AGENTS.md that may have been copied in
+        # from the task's data directory. Claude Code and other CLI agents
+        # will auto-load these and they can leak hints or cross-agent bias.
+        # Raw sidecar logs are preserved elsewhere, so nothing user-visible
+        # is lost here. See benchmark_issues_and_proposals.md §"workspace
+        # CLAUDE.md leakage".
+        self._strip_agent_memory_files(workspace_dir)
+
+    def _strip_agent_memory_files(self, workspace_dir: Path) -> None:
+        """Remove agent-memory files that would taint a benchmark run.
+
+        These files (CLAUDE.md, AGENTS.md, .claude/) are auto-loaded by
+        the CLI agents we evaluate and would otherwise smuggle context
+        from the task authoring repo into the agent's view of the
+        workspace. Only the workspace root is scrubbed — we do not walk
+        into ``data/`` because task inputs are agent-facing.
+        """
+        import shutil
+
+        if not workspace_dir.exists():
+            return
+        for name in self._AGENT_MEMORY_FILENAMES:
+            target = workspace_dir / name
+            if not target.exists() and not target.is_symlink():
+                continue
+            try:
+                if target.is_dir() and not target.is_symlink():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            except OSError as exc:  # pragma: no cover - defensive
+                logger.warning(
+                    "Failed to strip agent memory file %s: %s", target, exc
+                )
+
+    def _build_framework_task_info(
+        self,
+        task_metadata: dict[str, Any],
+        *,
+        instance_id: str,
+        prompt_level: PromptLevel,
+        resolved_params: dict[str, Any],
+        effective_timeout_seconds: int | None = None,
+    ) -> dict[str, Any]:
+        """Build framework-only metadata used for re-eval and provenance."""
+        task_info = self._build_agent_task_info(
+            task_metadata, prompt_level,
+            effective_timeout_seconds=effective_timeout_seconds,
+        )
+        task_info["instance_id"] = instance_id
+        task_info["parameters"] = resolved_params
+        return task_info

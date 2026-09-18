@@ -1,0 +1,12 @@
+    def _get_stdin_input(self, task_instance=None, task_env=None) -> str | None:
+        """Feed the prompt via stdin (pi merges piped stdin into the prompt).
+
+        Avoids Windows ~8KB argv limits (#27) and shell-quoting issues; the
+        prompt never appears in the process argv or the provenance metadata.
+        """
+        if task_instance is None:
+            return None
+        prompt_path = task_instance.workspace_dir / "prompt.md"
+        if prompt_path.exists():
+            return prompt_path.read_text(encoding="utf-8")
+        return None

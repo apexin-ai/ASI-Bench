@@ -1,0 +1,175 @@
+{
+  "action_order": [
+    "U",
+    "D",
+    "L",
+    "R"
+  ],
+  "budget": 95,
+  "levels": [
+    {
+      "id": "public_000",
+      "grid": [
+        "###########################",
+        "#qqhkbqlcfqhkbhcratsnapdti#",
+        "#bidkjlkjmtcoghjskklqnoehj#",
+        "#Gql##########qbfgoktabicm#",
+        "##ip##########lifrsscdgebd#",
+        "##ci##########dibososjsqrk#",
+        "##dc##########danonoqlcbjk#",
+        "##ml#########phtlqfchinotf#",
+        "##ra##########gtqjcpefktmb#",
+        "##kf##########ghajglmrstmr#",
+        "##ho##########sdirotebodig#",
+        "##ah##########pqfgdefklmgp#",
+        "##fi##########ircdmnopmspm#",
+        "##sf##########bglirktmodab#",
+        "##ds##########opmrkpqopefo#",
+        "##qt##########dqnchmsdajkp#",
+        "##ri##########enkpiopajkde#",
+        "##############ngticdifctar#",
+        "##############kpeoperkpefk#",
+        "##############lasdmfstqnsd#",
+        "##############iolabchqfchq#",
+        "##############ctarspmjolib#",
+        "##############hijotmnsdibc#",
+        "###########################",
+        "###########################",
+        "###########################",
+        "###########################"
+      ],
+      "start": [
+        7,
+        13
+      ],
+      "goal": [
+        3,
+        1
+      ],
+      "max_depth": 71
+    },
+    {
+      "id": "public_001",
+      "grid": [
+        "###########################",
+        "#oofmdkfaaqnj##kslq########",
+        "#petshrfcccnpqaanqf########",
+        "#hgmqaofpebmfkcpspmr#######",
+        "#dinpgrideatc#frrkde#######",
+        "#qnkhnapjifgacpjbfspm######",
+        "#gj#jatjqlnbbfrhfbrgl######",
+        "#ln#epfaltnqmmqrtfrncd#####",
+        "#arepfihptjddhlebdfjbc#####",
+        "#blhbaldpjhosgglqftbjrk####",
+        "#spjmhpdqosfjfrolenpffn####",
+        "#pjqhpdabjfeamabslaflbjr###",
+        "#aepdtmfqmadphpirkhifdjj###",
+        "#bdtdefmtplgskstabohabtbf##",
+        "#gdhmjqtgogcbrjgpibghefpb##",
+        "#hlenmlgjbbomambchmnslqfpj#",
+        "#iinqpsbeaaaphhirktinotqnt#",
+        "#nksoifspilf###############",
+        "#gdlijcdmtcf###############",
+        "#lajnctqdggn###############",
+        "#qkgspqdsckc###############",
+        "#ofm###kkslp###############",
+        "#hleltttghei###############",
+        "#erffsrepafn###############",
+        "#jleimjdjg#g###############",
+        "#adphqGmrrnm###############",
+        "###########################"
+      ],
+      "start": [
+        16,
+        11
+      ],
+      "goal": [
+        25,
+        6
+      ],
+      "max_depth": 81
+    },
+    {
+      "id": "public_002",
+      "grid": [
+        "###########################",
+        "#hlkrmpkjahcfporitojemefjt#",
+        "#adcfihcobelobhkripgsspoir#",
+        "#ilgbqdclsrtormhsjihsoobib#",
+        "#edcnipssrpojetsbmtsjjneab#",
+        "#katsjidftgbalsbqtgjiqqdi##",
+        "#pcilorqtsbmdgbatkfqllpjp##",
+        "#adoedgjgfitsnadkfihogfarl#",
+        "#rqloatkrmpsnmlgjelsjqqdif#",
+        "#kfedsehilormpcnapgrdhpspi#",
+        "#Gsnidoqpsfilgfaloftcscnkp#",
+        "##dsjihcgbqhojalcblsnbrqrs#",
+        "##ehobqtjetgrmdcjpsfaaqpin#",
+        "##nqtgjmqtkfalkblgbmpldkha#",
+        "##ofalkbdobmpsnhorepcssjst#",
+        "##pcbalcgrqpkbpgfadsjffqjk#",
+        "##ahofihbahcfdcfahkjmaipef#",
+        "########ilofpcnitkbqpllkam#",
+        "########dcfpkbqdsfapskgkim#",
+        "########gblcfqlgfmtojfjkbi#",
+        "########nhsnipknehonqeaele#",
+        "#######################f###",
+        "#######################r###",
+        "#######################f###",
+        "#######################k###",
+        "#############bporitsnjrm###",
+        "###########################"
+      ],
+      "start": [
+        20,
+        23
+      ],
+      "goal": [
+        10,
+        1
+      ],
+      "max_depth": 77
+    },
+    {
+      "id": "public_003",
+      "grid": [
+        "###########################",
+        "###bponqloskd##############",
+        "#qrtcjitoggda##############",
+        "#qhcbapdpa#el##############",
+        "#nbfeptpen#lg##############",
+        "#ngjthhnkn#to############q#",
+        "#pflltqlkr#do############p#",
+        "#ppgfmdcrqamgddlmnslifohas#",
+        "#qpsjmhsja#cj##############",
+        "#alcrehsna#sf##############",
+        "#edgbihgre#gn####d#########",
+        "#oqhsjitkj#dc####b#########",
+        "#toqlgnets#mh####i#########",
+        "#elsadknal#ne####l#########",
+        "#jehcmhgji#or####c#########",
+        "#onapomlof#hg####n#########",
+        "#lgrehsqhk#eh####i#########",
+        "#ehkripgmh#jq####t#########",
+        "#nalgnehoi#cj####o#########",
+        "#cbihkfmdc#hg####b#########",
+        "#dobqdsbeh#ip####m#########",
+        "#apsfmdcfm#cm####h#########",
+        "#fahkrepsn#dc####k#########",
+        "#gllqfgtifgperspqs#########",
+        "#lqrbchijopanohibc#########",
+        "#oksspqfgdefodifcifcG######",
+        "###########################"
+      ],
+      "start": [
+        7,
+        12
+      ],
+      "goal": [
+        25,
+        20
+      ],
+      "max_depth": 75
+    }
+  ]
+}

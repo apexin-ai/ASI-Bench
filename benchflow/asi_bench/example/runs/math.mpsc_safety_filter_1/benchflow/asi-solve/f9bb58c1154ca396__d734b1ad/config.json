@@ -1,0 +1,93 @@
+{
+  "task_path": "f9bb58c1154ca396",
+  "agent": "claude-agent-acp",
+  "model": "vllm/gpt-6-astra",
+  "reasoning_effort": null,
+  "environment": "docker",
+  "acp_transport": "docker-stdio",
+  "environment_manifest": null,
+  "skill_mode": "no-skill",
+  "skill_source": "none",
+  "requested_skills_dir": null,
+  "effective_skills_dir": null,
+  "skills_sandbox_dir": null,
+  "include_task_skills": false,
+  "sandbox_user": "agent",
+  "sandbox_locked_paths": [
+    "/oracle",
+    "/solution",
+    "/verifier",
+    "/tests",
+    "/testbed_verify"
+  ],
+  "sandbox_setup_timeout": 120,
+  "skip_install": false,
+  "agent_install_timeout": 900,
+  "context_root": null,
+  "base_image_override": null,
+  "timeout_sec": 3600,
+  "concurrency": 1,
+  "agent_idle_timeout_sec": 600,
+  "started_at": "2026-09-17 20:10:29.355094",
+  "agent_env": {
+    "BENCHFLOW_PROVIDER_BASE_URL": "https://api.apexin.ai/v1",
+    "BENCHFLOW_PROVIDER_MODEL": "gpt-6-astra",
+    "BENCHFLOW_PROVIDER_NAME": "vllm",
+    "BENCHFLOW_PROVIDER_PROTOCOL": "anthropic-messages",
+    "ANTHROPIC_BASE_URL": "https://api.apexin.ai/v1",
+    "ANTHROPIC_MODEL": "gpt-6-astra",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "BENCHFLOW_DISALLOW_WEB_TOOLS": "1"
+  },
+  "scenes": [
+    {
+      "name": "default",
+      "skills_dir": null,
+      "roles": [
+        {
+          "name": "agent",
+          "agent": "claude-agent-acp",
+          "model": "vllm/gpt-6-astra",
+          "reasoning_effort": null,
+          "timeout_sec": null,
+          "idle_timeout_sec": null,
+          "skills_dir": null,
+          "capabilities": null,
+          "env_keys": []
+        }
+      ],
+      "turns": [
+        {
+          "role": "agent",
+          "has_prompt": true
+        }
+      ]
+    }
+  ],
+  "loop": {
+    "strategy": "single-shot"
+  },
+  "usage_tracking": {
+    "requested": "auto"
+  },
+  "config_override": {
+    "keys": [
+      "agent",
+      "sandbox"
+    ],
+    "sha256": "sha256:bda853514a60a5e7d3a37c3c1971b86753d51e244409427c784f7858ca79ce2a",
+    "patch": {
+      "sandbox": {
+        "workdir": "/workspace",
+        "cpus": 2,
+        "memory_mb": 4096,
+        "network_mode": "no-network",
+        "allow_internet": false
+      },
+      "agent": {
+        "timeout_sec": 3600,
+        "prompt_prefix": null
+      }
+    }
+  }
+}

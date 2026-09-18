@@ -1,0 +1,51 @@
+    def _build_expected_outputs(self, task_metadata: dict[str, Any]) -> list[dict[str, str]]:
+        """Build the agent-facing list of expected output files.
+
+        **Allowlist**: only ``name`` and ``type`` are forwarded to the
+        agent-facing ``task_info.json``.  Fields like ``shape``,
+        ``dtype``, ``tolerance``, or any evaluation-specific keys must
+        **never** be added here — they would leak scoring criteria to
+        the agent under test.
+        """
+        expected_outputs = []
+        for output_file in task_metadata.get("output", {}).get("files", []):
+            # ALLOWLIST: only name + type — do not add shape/dtype/tolerance
+            expected_outputs.append(
+                {"name": output_file["name"], "type": output_file.get("type", "data")}
+            )
+        return expected_outputs
+
+    @staticmethod
+    def _anonymize_task_id(task_id: str) -> str:
+        """Return a deterministic, de-semanticized alias for a task_id.
+
+        Agents see this instead of the real task_id so that names like
+        ``physics.ks_2d_anisotropic`` do not leak equation / method
+        family information (fixes #11).
+        """
+        import hashlib
+
+        return f"task_{hashlib.sha256(task_id.encode()).hexdigest()[:12]}"
+
+    def _build_agent_task_info(
+        self,
+        task_metadata: dict[str, Any],
+        prompt_level: PromptLevel,
+        *,
+        effective_timeout_seconds: int | None = None,
+    ) -> dict[str, Any]:
+        """Build the agent-facing task contract exposed inside the workspace."""
+        # Always anonymize to prevent method/equation leakage (fixes #11).
+        agent_task_id = self._anonymize_task_id(task_metadata["id"])
+        timeout = (
+            effective_timeout_seconds
+            if effective_timeout_seconds is not None
+            else self.execution_timeout_seconds
+        )
+        return {
+            "schema_version": 3,
+            "task_id": agent_task_id,
+            "prompt_level": prompt_level.value,
+            "expected_outputs": self._build_expected_outputs(task_metadata),
+            "timeout_seconds": timeout,
+        }

@@ -1,0 +1,113 @@
+{
+  "adapter_schema_version": 1,
+  "mode": "produce-only",
+  "official": false,
+  "task_id": "math.levin_context_grid_search",
+  "instance_id": "math.levin_context_grid_search__seed31415",
+  "prompt_level": "b1",
+  "attempt": 1,
+  "agent": "claude-agent-acp",
+  "model": "vllm/gpt-6-astra",
+  "requested_effort": null,
+  "model_route": {
+    "endpoint": "https://api.apexin.ai/v1",
+    "api_key_env": "ASI_MODEL_API_KEY",
+    "routing": "explicit"
+  },
+  "sources": {
+    "hf": {
+      "repo": "Apexintelligence-AI/ASI-Bench-seed31415",
+      "requested_revision": "main",
+      "resolved_revision": "9622c6339298804883e189edd1bb36434e7555d5",
+      "path": "tasks/math.levin_context_grid_search__seed31415"
+    },
+    "github": {
+      "repo": "apexin-ai/ASI-Bench",
+      "requested_revision": "main",
+      "resolved_revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+      "path": "tasks/math/levin_context_grid_search"
+    }
+  },
+  "prepared": {
+    "converter_version": "prepare-v5",
+    "manifest_sha256": "440fdb694b8723432feea3ab7b2f3bf08e064ad5a1610bd798ad34ba913a55f2"
+  },
+  "started_at": "2026-09-17T11:14:48.471012+00:00",
+  "evaluation_status": "pending",
+  "status": "completed",
+  "budgets": {
+    "lifecycle_seconds": 7200.0,
+    "export_seconds": 120,
+    "cleanup_seconds": 120,
+    "max_artifact_bytes": 67108864
+  },
+  "attempt_status": "completed",
+  "failure_reason": null,
+  "collection_status": "collected",
+  "prediction_status": "present",
+  "cleanup_status": "completed",
+  "execution_time_seconds": 447.97299054200994,
+  "diagnostics": [],
+  "collection": {
+    "artifacts": [
+      {
+        "name": "analysis.py",
+        "type": "code",
+        "size": 9949,
+        "sha256": "93f6726e85b48a3faf8f081c4f434d7438328651ff2d1ad4726100c4a9e40a44"
+      }
+    ],
+    "missing": [],
+    "invalid": [],
+    "prediction_status": "present",
+    "freeze": {
+      "method": "docker-stop",
+      "container_id": "c5dcd1b93e57db7058d41b840397a185edf69be26a32c674ebab958a4e356f3d",
+      "running": false,
+      "pid": 0,
+      "shared_workspace": false
+    }
+  },
+  "native_result": "benchflow/asi-solve/e8b602428f213edd__819ac408/result.json",
+  "native_error_category": null,
+  "native_error_present": false,
+  "network": {
+    "task_network": false,
+    "preserve_agent_network": true,
+    "network_mode": "e8b602428f213edd__819ac408_default",
+    "cap_add": [
+      "CAP_NET_ADMIN"
+    ],
+    "privileged": false,
+    "agent_uid": 1000,
+    "agent_cap_eff": 0,
+    "firewall": "-P OUTPUT ACCEPT\n-A OUTPUT -o lo -m owner --uid-owner 1000 -j ACCEPT\n-A OUTPUT -m owner --uid-owner 1000 -j REJECT --reject-with icmp-port-unreachable\n-P OUTPUT ACCEPT\n-A OUTPUT -o lo -m owner --uid-owner 1000 -j ACCEPT\n-A OUTPUT -m owner --uid-owner 1000 -j REJECT --reject-with icmp6-port-unreachable\n",
+    "container_id": "c5dcd1b93e57db7058d41b840397a185edf69be26a32c674ebab958a4e356f3d",
+    "image_id": "sha256:37642af40a94900a3f4a649ce4e4e61e723486894528c3547baca5123a373d3f"
+  },
+  "agent_output": {
+    "code_files": [
+      "analysis.py"
+    ],
+    "data_files": [],
+    "persisted_outputs": {
+      "dir": "math.levin_context_grid_search__seed31415__b1.outputs",
+      "files": [
+        {
+          "path": "analysis.py",
+          "bytes": 9949,
+          "sha256": "93f6726e85b48a3faf8f081c4f434d7438328651ff2d1ad4726100c4a9e40a44"
+        }
+      ]
+    }
+  },
+  "cost": {
+    "n_input_tokens": 465335,
+    "n_output_tokens": 7110,
+    "n_cache_read_tokens": 430720,
+    "n_cache_creation_tokens": 0,
+    "total_tokens": 472445,
+    "cost_usd": 1.13237,
+    "usage_source": "provider_response"
+  }
+}

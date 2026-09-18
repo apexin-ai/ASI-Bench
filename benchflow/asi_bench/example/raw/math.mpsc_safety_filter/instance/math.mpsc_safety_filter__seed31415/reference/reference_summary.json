@@ -1,0 +1,20 @@
+{
+  "hidden_query_count": 24,
+  "holdout_scenario_count": 96,
+  "rollout_count": 4,
+  "rollout_steps": 64,
+  "terminal_candidate_count": 145,
+  "terminal_accepted_count": 121,
+  "terminal_rejected_count": 24,
+  "terminal_library_audit": {
+    "available": true,
+    "quality": 1.0,
+    "accepted_count": 121,
+    "rejected_count": 24,
+    "closure_iterations": 3,
+    "max_state_residual": -0.010000000005705778,
+    "max_input_residual": -0.010000000003919651,
+    "max_terminal_residual": 1.6653345369377348e-16,
+    "max_successor_residual": 4.651834473179406e-14
+  }
+}

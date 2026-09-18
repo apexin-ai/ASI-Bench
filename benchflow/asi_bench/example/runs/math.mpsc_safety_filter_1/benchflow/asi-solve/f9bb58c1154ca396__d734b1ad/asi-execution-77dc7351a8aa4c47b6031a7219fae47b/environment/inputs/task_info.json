@@ -1,0 +1,16 @@
+{
+  "schema_version": 3,
+  "task_id": "task_e716c06a8b17",
+  "prompt_level": "b1",
+  "expected_outputs": [
+    {
+      "name": "analysis.py",
+      "type": "code"
+    },
+    {
+      "name": "certificate.json",
+      "type": "data"
+    }
+  ],
+  "timeout_seconds": 3600
+}

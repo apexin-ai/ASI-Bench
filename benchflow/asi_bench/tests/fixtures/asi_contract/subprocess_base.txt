@@ -1,0 +1,9 @@
+def collect_output_files(
+    workspace: Path, task_instance: TaskInstance
+) -> list[str]:
+    """Collect expected output files that exist in the workspace."""
+    files = []
+    for f in task_instance.metadata.get("output", {}).get("files", []):
+        if (workspace / f["name"]).exists():
+            files.append(f["name"])
+    return files

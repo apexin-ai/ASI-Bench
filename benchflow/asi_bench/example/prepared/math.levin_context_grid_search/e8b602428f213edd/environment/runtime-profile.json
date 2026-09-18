@@ -1,0 +1,9 @@
+{
+  "profile_id": "cpu-v1",
+  "variant": "os",
+  "cpus": 2,
+  "memory_mb": 4096,
+  "workdir": "/workspace",
+  "network": false,
+  "base_image": "python:3.11-slim"
+}

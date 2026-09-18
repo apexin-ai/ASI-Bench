@@ -1,0 +1,513 @@
+{
+  "budget": 95,
+  "baselines": {
+    "reference_context_lts": {
+      "solved": 24,
+      "total": 24,
+      "mean_expansions": 51.333333333333336,
+      "per_level": {
+        "hidden_000": {
+          "solved": true,
+          "expansions": 48,
+          "solution_length": 47
+        },
+        "hidden_001": {
+          "solved": true,
+          "expansions": 53,
+          "solution_length": 52
+        },
+        "hidden_002": {
+          "solved": true,
+          "expansions": 48,
+          "solution_length": 47
+        },
+        "hidden_003": {
+          "solved": true,
+          "expansions": 52,
+          "solution_length": 51
+        },
+        "hidden_004": {
+          "solved": true,
+          "expansions": 55,
+          "solution_length": 54
+        },
+        "hidden_005": {
+          "solved": true,
+          "expansions": 46,
+          "solution_length": 45
+        },
+        "hidden_006": {
+          "solved": true,
+          "expansions": 45,
+          "solution_length": 44
+        },
+        "hidden_007": {
+          "solved": true,
+          "expansions": 54,
+          "solution_length": 53
+        },
+        "hidden_008": {
+          "solved": true,
+          "expansions": 46,
+          "solution_length": 45
+        },
+        "hidden_009": {
+          "solved": true,
+          "expansions": 46,
+          "solution_length": 45
+        },
+        "hidden_010": {
+          "solved": true,
+          "expansions": 59,
+          "solution_length": 58
+        },
+        "hidden_011": {
+          "solved": true,
+          "expansions": 49,
+          "solution_length": 48
+        },
+        "hidden_012": {
+          "solved": true,
+          "expansions": 54,
+          "solution_length": 53
+        },
+        "hidden_013": {
+          "solved": true,
+          "expansions": 53,
+          "solution_length": 52
+        },
+        "hidden_014": {
+          "solved": true,
+          "expansions": 50,
+          "solution_length": 49
+        },
+        "hidden_015": {
+          "solved": true,
+          "expansions": 46,
+          "solution_length": 45
+        },
+        "hidden_016": {
+          "solved": true,
+          "expansions": 53,
+          "solution_length": 52
+        },
+        "hidden_017": {
+          "solved": true,
+          "expansions": 50,
+          "solution_length": 49
+        },
+        "hidden_018": {
+          "solved": true,
+          "expansions": 56,
+          "solution_length": 55
+        },
+        "hidden_019": {
+          "solved": true,
+          "expansions": 58,
+          "solution_length": 57
+        },
+        "hidden_020": {
+          "solved": true,
+          "expansions": 46,
+          "solution_length": 45
+        },
+        "hidden_021": {
+          "solved": true,
+          "expansions": 50,
+          "solution_length": 49
+        },
+        "hidden_022": {
+          "solved": true,
+          "expansions": 57,
+          "solution_length": 56
+        },
+        "hidden_023": {
+          "solved": true,
+          "expansions": 58,
+          "solution_length": 57
+        }
+      }
+    },
+    "uniform_lts": {
+      "solved": 1,
+      "total": 24,
+      "mean_expansions": 92.58333333333333,
+      "per_level": {
+        "hidden_000": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_001": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_002": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_003": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_004": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_005": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_006": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_007": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_008": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_009": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_010": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_011": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_012": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_013": {
+          "solved": true,
+          "expansions": 37,
+          "solution_length": 4
+        },
+        "hidden_014": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_015": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_016": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_017": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_018": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_019": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_020": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_021": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_022": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_023": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        }
+      }
+    },
+    "shallow_context_lts": {
+      "solved": 23,
+      "total": 24,
+      "mean_expansions": 64.08333333333333,
+      "per_level": {
+        "hidden_000": {
+          "solved": true,
+          "expansions": 79,
+          "solution_length": 47
+        },
+        "hidden_001": {
+          "solved": true,
+          "expansions": 59,
+          "solution_length": 52
+        },
+        "hidden_002": {
+          "solved": true,
+          "expansions": 77,
+          "solution_length": 47
+        },
+        "hidden_003": {
+          "solved": true,
+          "expansions": 64,
+          "solution_length": 51
+        },
+        "hidden_004": {
+          "solved": true,
+          "expansions": 56,
+          "solution_length": 54
+        },
+        "hidden_005": {
+          "solved": true,
+          "expansions": 46,
+          "solution_length": 45
+        },
+        "hidden_006": {
+          "solved": true,
+          "expansions": 45,
+          "solution_length": 44
+        },
+        "hidden_007": {
+          "solved": true,
+          "expansions": 54,
+          "solution_length": 53
+        },
+        "hidden_008": {
+          "solved": true,
+          "expansions": 46,
+          "solution_length": 45
+        },
+        "hidden_009": {
+          "solved": true,
+          "expansions": 92,
+          "solution_length": 45
+        },
+        "hidden_010": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_011": {
+          "solved": true,
+          "expansions": 49,
+          "solution_length": 48
+        },
+        "hidden_012": {
+          "solved": true,
+          "expansions": 68,
+          "solution_length": 53
+        },
+        "hidden_013": {
+          "solved": true,
+          "expansions": 90,
+          "solution_length": 52
+        },
+        "hidden_014": {
+          "solved": true,
+          "expansions": 88,
+          "solution_length": 49
+        },
+        "hidden_015": {
+          "solved": true,
+          "expansions": 46,
+          "solution_length": 45
+        },
+        "hidden_016": {
+          "solved": true,
+          "expansions": 70,
+          "solution_length": 52
+        },
+        "hidden_017": {
+          "solved": true,
+          "expansions": 55,
+          "solution_length": 49
+        },
+        "hidden_018": {
+          "solved": true,
+          "expansions": 56,
+          "solution_length": 55
+        },
+        "hidden_019": {
+          "solved": true,
+          "expansions": 58,
+          "solution_length": 57
+        },
+        "hidden_020": {
+          "solved": true,
+          "expansions": 46,
+          "solution_length": 45
+        },
+        "hidden_021": {
+          "solved": true,
+          "expansions": 61,
+          "solution_length": 49
+        },
+        "hidden_022": {
+          "solved": true,
+          "expansions": 57,
+          "solution_length": 56
+        },
+        "hidden_023": {
+          "solved": true,
+          "expansions": 81,
+          "solution_length": 57
+        }
+      }
+    },
+    "greedy_goal_lts": {
+      "solved": 4,
+      "total": 24,
+      "mean_expansions": 85.375,
+      "per_level": {
+        "hidden_000": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_001": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_002": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_003": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_004": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_005": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_006": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_007": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_008": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_009": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_010": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_011": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_012": {
+          "solved": true,
+          "expansions": 44,
+          "solution_length": 15
+        },
+        "hidden_013": {
+          "solved": true,
+          "expansions": 8,
+          "solution_length": 4
+        },
+        "hidden_014": {
+          "solved": true,
+          "expansions": 32,
+          "solution_length": 13
+        },
+        "hidden_015": {
+          "solved": true,
+          "expansions": 65,
+          "solution_length": 11
+        },
+        "hidden_016": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_017": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_018": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_019": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_020": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_021": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_022": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        },
+        "hidden_023": {
+          "solved": false,
+          "expansions": 95,
+          "solution_length": null
+        }
+      }
+    }
+  }
+}

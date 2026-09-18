@@ -1,0 +1,12 @@
+{
+  "schema_version": 3,
+  "task_id": "task_2cb514e61b85",
+  "prompt_level": "b1",
+  "expected_outputs": [
+    {
+      "name": "analysis.py",
+      "type": "code"
+    }
+  ],
+  "timeout_seconds": 3600
+}

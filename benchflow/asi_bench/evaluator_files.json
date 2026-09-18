@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repo": "apexin-ai/ASI-Bench",
+    "revision": "5935b5f33549e348a8505bb355d3b6f4fe4a273c"
+  },
+  "files": [
+    {
+      "path": "ai4sci_bench/__init__.py",
+      "source": "ai4sci_bench/__init__.py",
+      "source_sha256": "b79252b4914c26e69049accefde24a5d7470734be7b9f2ef10b9b3fac28cbd83",
+      "kind": "copy"
+    },
+    {
+      "path": "ai4sci_bench/branding.py",
+      "source": "ai4sci_bench/branding.py",
+      "source_sha256": "963477d80bab15e1a781da5b03c8eb2ea2fd35354ce2d0970d0038f862e2f990",
+      "kind": "copy"
+    },
+    {
+      "path": "ai4sci_bench/core/__init__.py",
+      "kind": "initializer",
+      "reason": "Minimal evaluator initialization; no automatic harness, Judge or orchestrator imports"
+    },
+    {
+      "path": "ai4sci_bench/core/types.py",
+      "source": "ai4sci_bench/core/types.py",
+      "source_sha256": "91130a9bd04b7ae656e24b40b0038524dd6034b4470229b988a5531e32e80cc3",
+      "kind": "copy"
+    },
+    {
+      "path": "ai4sci_bench/core/scorer.py",
+      "source": "ai4sci_bench/core/scorer.py",
+      "source_sha256": "d7f3aed05e7ce26629827f2a15ddc81ed1cd7fd11cbe7dcfaf8ab7cb35505417",
+      "kind": "copy"
+    },
+    {
+      "path": "ai4sci_bench/core/logger.py",
+      "source": "ai4sci_bench/core/logger.py",
+      "source_sha256": "ed86ad13814d7401358b42a994b0744d44fa60bbf97630aa374b8b418d06d1a4",
+      "kind": "copy"
+    },
+    {
+      "path": "ai4sci_bench/scorers/__init__.py",
+      "kind": "initializer",
+      "reason": "Minimal evaluator initialization; no automatic harness, Judge or orchestrator imports"
+    },
+    {
+      "path": "ai4sci_bench/scorers/file_match.py",
+      "source": "ai4sci_bench/scorers/file_match.py",
+      "source_sha256": "26a530bb0d27a0e7cf05fba8e1e7520634ff8905e57f2db420e11daea30d5500",
+      "kind": "copy"
+    },
+    {
+      "path": "ai4sci_bench/scorers/custom.py",
+      "source": "ai4sci_bench/scorers/custom.py",
+      "source_sha256": "a62a740716f549449bf2305646aff952587f2e54a52bf5511c8395a8eb8eb742",
+      "kind": "copy"
+    },
+    {
+      "path": "ai4sci_bench/runner/__init__.py",
+      "kind": "initializer",
+      "reason": "Minimal evaluator initialization; no automatic harness, Judge or orchestrator imports"
+    },
+    {
+      "path": "ai4sci_bench/runner/task_env.py",
+      "kind": "runtime_adapter",
+      "reason": "Current-image compatibility API; no ASI installation, cache or environment creation",
+      "template": "templates/verifier/task_env.py"
+    }
+  ],
+  "bridge": {
+    "path": "templates/verifier/score_entry.py",
+    "adaptation_version": 7,
+    "extracted_sources": [
+      {
+        "path": "ai4sci_bench/core/task.py",
+        "sha256": "9418656108a7c9007f52f1255bbdbab68a4ad889c260086aa62eec340d62e62b",
+        "functions": [
+          "resolve_task_sources"
+        ]
+      }
+    ],
+    "adaptations": [
+      "YAML-only metadata projection",
+      "Explicit task scorer registration and origin checks",
+      "Image-provided Python and dependencies; no native task environment preflight"
+    ]
+  },
+  "excluded_modules": [
+    "ai4sci_bench.generators",
+    "ai4sci_bench.adapters",
+    "ai4sci_bench.runner.orchestrator",
+    "ai4sci_bench.scorers.llm_judge",
+    "ai4sci_bench.scorers.multimodal",
+    "ai4sci_bench.scorers.agent_judge"
+  ],
+  "launcher": {
+    "path": "templates/verifier/test.sh"
+  },
+  "scoring": {
+    "path": "templates/verifier/scoring.py"
+  }
+}

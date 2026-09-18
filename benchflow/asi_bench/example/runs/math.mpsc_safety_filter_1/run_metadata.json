@@ -1,0 +1,48 @@
+{
+  "adapter_schema_version": 1,
+  "mode": "produce-only",
+  "official": false,
+  "task_id": "math.mpsc_safety_filter",
+  "instance_id": "math.mpsc_safety_filter__seed31415",
+  "prompt_level": "b1",
+  "attempt": 1,
+  "agent": "claude-agent-acp",
+  "model": "vllm/gpt-6-astra",
+  "requested_effort": null,
+  "model_route": {
+    "endpoint": "https://api.apexin.ai/v1",
+    "api_key_env": "ASI_MODEL_API_KEY",
+    "routing": "explicit"
+  },
+  "sources": {
+    "hf": {
+      "repo": "Apexintelligence-AI/ASI-Bench-seed31415",
+      "requested_revision": "main",
+      "resolved_revision": "9622c6339298804883e189edd1bb36434e7555d5",
+      "path": "tasks/math.mpsc_safety_filter__seed31415"
+    },
+    "github": {
+      "repo": "apexin-ai/ASI-Bench",
+      "requested_revision": "main",
+      "resolved_revision": "a797bf69683400bed0f38c4add507bb3d404b833",
+      "path": "tasks/math/mpsc_safety_filter"
+    }
+  },
+  "prepared": {
+    "converter_version": "prepare-v5",
+    "manifest_sha256": "033120e907985739e39a5b930f609233672cc7d1e2e20a4f5c3e593826aa03ed"
+  },
+  "started_at": "2026-09-17T12:10:29.352586+00:00",
+  "evaluation_status": "pending",
+  "status": "completed",
+  "budgets": {
+    "lifecycle_seconds": 7200.0,
+    "export_seconds": 120,
+    "cleanup_seconds": 120,
+    "max_artifact_bytes": 67108864
+  },
+  "attempt_status": "completed",
+  "failure_reason": null,
+  "result_file": "math.mpsc_safety_filter/math.mpsc_safety_filter__seed31415__b1.json",
+  "finished_at": "2026-09-17T12:19:56.246639+00:00"
+}
