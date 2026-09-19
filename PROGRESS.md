@@ -714,3 +714,22 @@
   `__version__`, and exercise public task scorers against the built wheel before
   publishing.
 - Version bump commit: `80b0968`.
+
+## 2026-09: Preserve model-call lifecycle evidence
+
+- Problem: exported trajectories retained visible messages and tool events but
+  did not preserve completion lifecycle boundaries, transport/process evidence,
+  retry relationships, or empty-stream coverage gaps, so a non-empty-message
+  count could be misread as a zero-percent model-call empty-response rate.
+- Resolution: add versioned, adapter-aware model-call records and redacted raw
+  sidecars; link provider and benchmark retries; restore records through the
+  result loader; and add denominator-aware per-result and aggregate reporting.
+  Codex agent turns are retained as coverage evidence but are not treated as
+  provider completions unless an explicit provider boundary is emitted.
+- Verification: the focused observability suite passed `25` tests; the full
+  locked offline suite passed `2375` tests, with `2 skipped` and `24 deselected`.
+- Prevention: call metrics must remain separate from visible trajectory metrics,
+  unknown or malformed coverage must fail closed, and a numeric empty-response
+  rate is valid only when every attempted-call boundary and content state is
+  observable.
+- Implementation commit: `43cf4ce`.
