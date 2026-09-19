@@ -282,6 +282,47 @@ seed42 GT is not public. Local benchmark runs never calculate official scores.
 | Custom agents | `--agent-cmd` supports the `none` and `linux_ns` sandboxes for local runs; official seed42 submission requires an `os`-compatible built-in adapter |
 | Built-in agents | Use `--agent` with `--agent-config`; compatible adapters can use Docker-based `os` isolation |
 
+### Model-call observability
+
+Each result records model-call evidence separately from its visible trajectory.
+For a result base name such as `<instance>__b2`, the output directory can contain:
+
+- `<instance>__b2.model_calls.json`: versioned per-call lifecycle records;
+- `<instance>__b2.agent_stdout.<format>`: redacted native adapter evidence,
+  including a zero-byte file when an empty JSONL stream was observed;
+- `<instance>__b2.trajectory.json`: normalized visible reasoning, message, and
+  tool events, including an empty list when no visible event was retained.
+
+The result JSON links these files through `agent_output` and includes a
+`model_call_observability.summary`. A numeric `empty_response_rate`, including
+`0.0`, is emitted only when the attempted-call denominator and every call's
+content state are observable. `empty_response_rate_status: unknown` means the
+evidence is insufficient; it must not be read as zero empty responses.
+`content_state: omitted` identifies a complete tool-only or reasoning-only
+response and is distinct from `content_state: empty`.
+The text report and exported report JSON also expose an aggregate
+`model_call_summary`; one unknown result keeps the aggregate denominator and
+rate unknown.
+
+Transport fields are evidence-based. CLI output can prove a logical request or
+response boundary without proving that provider HTTP headers or an SSE stream
+were observed, so those transport fields remain `null` unless the source emits
+them explicitly.
+
+| Adapter | Completion boundary | IDs and usage | HTTP/SSE evidence | Coverage behavior |
+|---|---|---|---|---|
+| Codex CLI | Explicit provider response/message events when emitted; `turn` is retained only as an agent-level coverage record because one turn may contain multiple completions | Native when emitted; framework `run_id`/`call_id` | Unknown for ordinary CLI JSONL; explicit provider lifecycle events are retained | A turn-only, empty, unavailable, truncated, or malformed stream leaves the attempted-call denominator unknown |
+| Claude Code CLI | Native assistant events | Message/request IDs and usage when emitted | Not exposed by ordinary CLI JSONL | Missing or malformed boundaries make the denominator unknown |
+| direct LLM | Framework boundary around the single LiteLLM completion | Response/request IDs, finish reason, and usage when LiteLLM exposes them | HTTP status/headers are native metadata when available; non-streaming otherwise | The wrapper observes the attempted-call denominator directly |
+| pi CLI | Native `message_start`/`message_end` | Session/message IDs and usage when emitted | Not exposed by ordinary CLI JSONL | Missing, truncated, or malformed boundaries make the denominator unknown |
+| opencode CLI | Native `step_start`/`step_finish` | Session/step IDs, usage, and cost when emitted | Not exposed by ordinary CLI JSONL | Missing, truncated, or malformed boundaries make the denominator unknown |
+| HTTP agent | `/solve` may encapsulate an unknown number of model calls | Unavailable under the current `/solve` contract | Only the outer agent HTTP request is visible | Reported as `not_supported`; no call denominator is inferred |
+| Other/custom adapters | Adapter-specific and currently unregistered | Unavailable unless the adapter supplies versioned records | Unavailable | Reported as `not_supported`; no call denominator is inferred |
+
+Raw evidence is sanitized before persistence: credential fields, authorization
+headers, cookies, prompt/reference content, and host paths are redacted. Safe
+provider request IDs and HTTP(S) endpoint identity are retained when available.
+
 > **Platform note:** The examples use Linux Bash, and the `linux_ns` sandbox
 > requires Linux. Windows users should run it through WSL2. PowerShell and
 > Command Prompt use different line-continuation and JSON-escaping syntax.

@@ -75,6 +75,10 @@
 - 持久化元数据的路径脱敏必须保留完整 HTTP(S) API endpoint，只替换 URL
   之外的宿主机绝对路径；agent 执行失败必须报告为 `attempt_status:
   execution_failed`，不得与 scorer 完成或低分混淆。
+- 模型调用记录必须与可见 trajectory 分离，使用版本化 sidecar 保存每次可观测
+  completion 的边界、ID、生命周期、传输/进程结果、内容状态和重试关系；空、截断、
+  不可用或无法解析的事件流必须显式记录 coverage gap。只有 attempted-call 分母及
+  全部内容状态均可观测时才可报告数值 `empty_response_rate`，不得从非空消息推断为 0。
 - `score`、`run-score`、`benchflow-score` 的 LLM/VLM Judge runtime override
   使用 `--judge-api-base`、`--judge-api-key-env`、`--judge-api-protocol`；key
   参数只接受环境变量名，不得把 secret 写入 CLI、`task_eval.yaml`、日志或报告。

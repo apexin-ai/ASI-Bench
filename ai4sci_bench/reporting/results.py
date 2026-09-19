@@ -80,6 +80,9 @@ class RunReport:
     # Trajectory behavior statistics
     behavior_summary: BehaviorSummary | None = None
 
+    # Denominator-aware model-call statistics from versioned call records.
+    model_call_summary: dict[str, Any] | None = None
+
     # Raw results
     results: list[EvalResult] = field(default_factory=list)
 
@@ -278,6 +281,23 @@ class RunReport:
             )
             lines.append(f"    Avg tool calls: {bs.avg_tool_calls:.1f}" + (f" ({tool_parts})" if tool_parts else ""))
             lines.append(f"    Avg thinking length: {bs.avg_thinking_chars:.0f} chars")
+            lines.append("")
+
+        if self.model_call_summary:
+            calls = self.model_call_summary
+            lines.append("  Model Calls:")
+            attempted = calls.get("calls_attempted")
+            observed = calls.get("calls_attempted_observed", 0)
+            if attempted is None:
+                lines.append(f"    Attempted: unknown ({observed} observed)")
+            else:
+                lines.append(f"    Attempted: {attempted}")
+            lines.append(f"    Responses: {calls.get('calls_with_response', 0)}")
+            rate = calls.get("empty_response_rate")
+            if rate is None:
+                lines.append("    Empty response rate: unknown")
+            else:
+                lines.append(f"    Empty response rate: {rate * 100:.2f}%")
             lines.append("")
 
         lines.extend(self._format_low_score_section())

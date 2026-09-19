@@ -129,6 +129,7 @@ def aggregate_results(results: list[EvalResult], config: Any = None) -> RunRepor
     total_tokens = sum(r.cost.total_tokens for r in results if r.cost)
 
     behavior = _compute_behavior_summary(results)
+    model_calls = _compute_model_call_summary(results)
 
     return RunReport(
         agent_name=agent_name,
@@ -148,8 +149,86 @@ def aggregate_results(results: list[EvalResult], config: Any = None) -> RunRepor
         total_cost_usd=total_cost,
         total_tokens=total_tokens,
         behavior_summary=behavior,
+        model_call_summary=model_calls,
         results=results,
     )
+
+
+def _compute_model_call_summary(results: list[EvalResult]) -> dict[str, Any] | None:
+    """Aggregate call counts without converting missing coverage into zero."""
+    summaries: list[dict[str, Any]] = []
+    manifests_present = 0
+    manifests_missing = 0
+    for result in results:
+        manifest = (
+            result.agent_output.model_call_observability
+            if result.agent_output is not None
+            else None
+        )
+        summary = manifest.get("summary") if isinstance(manifest, dict) else None
+        if isinstance(summary, dict):
+            manifests_present += 1
+            summaries.append(summary)
+        else:
+            manifests_missing += 1
+            summaries.append({
+                "calls_attempted": None,
+                "empty_response_rate_status": "unknown",
+            })
+    if manifests_present == 0:
+        return None
+
+    count_fields = (
+        "call_records_emitted",
+        "calls_attempted_observed",
+        "calls_with_response",
+        "calls_with_nonempty_content",
+        "calls_with_empty_content",
+        "calls_with_omitted_content",
+        "calls_with_known_content_state",
+        "calls_with_unknown_content_state",
+        "calls_with_partial_content",
+        "calls_with_transport_error",
+        "calls_with_timeout",
+        "calls_retried",
+        "calls_without_observable_boundary",
+    )
+    aggregate: dict[str, Any] = {
+        field: sum(
+            int(summary.get(field) or 0)
+            for summary in summaries
+        )
+        for field in count_fields
+    }
+    aggregate["results_with_call_observability"] = manifests_present
+    aggregate["results_without_call_observability"] = manifests_missing
+    aggregate["results_with_unknown_denominator"] = sum(
+        summary.get("calls_attempted") is None for summary in summaries
+    )
+    denominator_known = all(
+        summary.get("calls_attempted") is not None
+        and summary.get("empty_response_rate_status") == "observed"
+        for summary in summaries
+    )
+    aggregate["calls_attempted"] = (
+        sum(int(summary["calls_attempted"]) for summary in summaries)
+        if denominator_known
+        else None
+    )
+    attempted = aggregate["calls_attempted"]
+    aggregate["empty_response_rate"] = (
+        aggregate["calls_with_empty_content"] / attempted
+        if denominator_known and attempted
+        else None
+    )
+    aggregate["empty_response_rate_status"] = (
+        "observed" if aggregate["empty_response_rate"] is not None else "unknown"
+    )
+    if not denominator_known:
+        aggregate["reason"] = "one_or_more_results_have_unknown_call_coverage"
+    elif not attempted:
+        aggregate["reason"] = "no_attempted_calls_were_observed"
+    return aggregate
 
 
 def _compute_behavior_summary(results: list[EvalResult]) -> BehaviorSummary | None:

@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,56 @@ from ai4sci_bench.runner.linux_ns_sandbox import LinuxNSSandbox
 from ai4sci_bench.runner.os_sandbox import OSSandbox
 from ai4sci_bench.runner.sandbox_support import validate_sandbox_mode
 from ai4sci_bench.runner.task_env import TaskEnvironmentManager
+from ai4sci_bench.trajectory.call_observability import ModelCallRecord
+
+
+def _plain_metadata(value: Any) -> dict[str, Any]:
+    """Return provider metadata only when LiteLLM exposes a real mapping."""
+    return value if isinstance(value, dict) else {}
+
+
+def _string_metadata(value: Any) -> str | None:
+    """Avoid persisting MagicMock/object reprs as provider identifiers."""
+    return str(value) if isinstance(value, (str, int)) and str(value) else None
+
+
+def _response_transport_metadata(response: Any) -> dict[str, Any]:
+    """Extract safe LiteLLM/provider response metadata without secrets."""
+    hidden = _plain_metadata(getattr(response, "_hidden_params", None))
+    headers: dict[str, Any] = {}
+    for candidate in (
+        hidden.get("additional_headers"),
+        hidden.get("headers"),
+        getattr(response, "additional_headers", None),
+    ):
+        if isinstance(candidate, dict):
+            headers.update(candidate)
+    lowered = {str(key).lower(): value for key, value in headers.items()}
+    request_id = next(
+        (
+            _string_metadata(lowered.get(key))
+            for key in ("x-request-id", "request-id", "x-amzn-requestid", "cf-ray")
+            if lowered.get(key) is not None
+        ),
+        None,
+    )
+    status = next(
+        (
+            value
+            for value in (
+                hidden.get("status_code"),
+                hidden.get("http_status"),
+                getattr(response, "status_code", None),
+            )
+            if isinstance(value, int)
+        ),
+        None,
+    )
+    return {
+        "request_id": request_id,
+        "http_status": status,
+        "headers_received": True if headers or status is not None else None,
+    }
 
 
 class DirectLLMAdapter(AgentAdapter):
@@ -84,6 +135,23 @@ class DirectLLMAdapter(AgentAdapter):
         ]
 
         structured_log: list[dict[str, Any]] = []
+        model_call_records: list[dict[str, Any]] = []
+        call_record = ModelCallRecord(
+            call_index=1,
+            adapter="direct_llm",
+            provider=self.model.split("/", 1)[0] if "/" in self.model else None,
+            model=self.model,
+            protocol=self.api_protocol,
+            endpoint=self.api_base,
+            transport_observability="provider_client_response_metadata",
+            instance_id=task_instance.instance_id,
+            attempted=False,
+            request_started=False,
+            request_sent=None,
+            boundary_observed=True,
+            boundary_kind="provider_client_call",
+            evidence_status="partial",
+        )
         t0 = time.time()
         try:
             structured_log.append({
@@ -101,9 +169,56 @@ class DirectLLMAdapter(AgentAdapter):
                 kwargs["api_base"] = self.api_base
 
             api_t0 = time.time()
+            call_record.attempted = True
+            call_record.request_started = True
+            call_record.started_at = datetime.now(timezone.utc).isoformat()
+            call_record.request_started_at = call_record.started_at
             response = litellm.completion(model=self.model, messages=messages, **kwargs)
             api_latency_ms = int((time.time() - api_t0) * 1000)
             content = response.choices[0].message.content
+            choice = response.choices[0]
+            transport = _response_transport_metadata(response)
+            call_record.request_sent = True
+            call_record.response_received = True
+            call_record.stream_opened = False
+            call_record.stream_ended = None
+            call_record.http_headers_received = transport["headers_received"]
+            call_record.http_status = transport["http_status"]
+            call_record.request_id = transport["request_id"]
+            call_record.call_finished = True
+            tool_calls = getattr(choice.message, "tool_calls", None)
+            if content:
+                call_record.first_token_received = True
+                call_record.content_state = "nonempty"
+                call_record.outcome = "complete_nonempty_response"
+            elif tool_calls:
+                call_record.content_state = "omitted"
+                call_record.outcome = "complete_tool_only_response"
+            else:
+                call_record.first_token_received = False
+                call_record.content_state = "empty"
+                call_record.outcome = "complete_empty_response"
+            call_record.response_id = _string_metadata(getattr(response, "id", None))
+            call_record.finish_reason = _string_metadata(
+                getattr(choice, "finish_reason", None)
+            )
+            call_record.provider_status = "completed"
+            if call_record.finish_reason in {
+                "incomplete", "length", "max_output", "max_output_tokens", "max_tokens",
+            }:
+                call_record.error_type = "incomplete_response"
+                call_record.outcome = "incomplete_response"
+                call_record.provider_status = "incomplete"
+            call_record.ended_at = datetime.now(timezone.utc).isoformat()
+            call_record.request_ended_at = call_record.ended_at
+            call_record.response_started_at = call_record.ended_at
+            call_record.response_ended_at = call_record.ended_at
+            call_record.duration_ms = api_latency_ms
+            call_record.evidence_status = "complete"
+            call_record.event_count = 1
+            call_record.first_event_sequence = 1
+            call_record.last_event_sequence = 1
+            call_record.event_sequences = [1]
 
             usage_dict = {}
             cost_info = None
@@ -117,6 +232,12 @@ class DirectLLMAdapter(AgentAdapter):
                     output_tokens=usage_dict["output_tokens"],
                     total_tokens=usage_dict["input_tokens"] + usage_dict["output_tokens"],
                 )
+                call_record.input_tokens = usage_dict["input_tokens"]
+                call_record.output_tokens = usage_dict["output_tokens"]
+                call_record.token_count = (
+                    usage_dict["input_tokens"] + usage_dict["output_tokens"]
+                )
+            model_call_records.append(call_record.to_dict())
 
             structured_log.append({
                 "step": "llm_response",
@@ -198,9 +319,44 @@ class DirectLLMAdapter(AgentAdapter):
                 raw_model_output=structured_log_json,
                 raw_model_output_format="json",
                 cost=cost_info,
+                model_call_records=model_call_records,
             )
         except Exception as e:
             elapsed = time.time() - t0
+            if not model_call_records:
+                call_record.call_finished = True
+                call_record.ended_at = datetime.now(timezone.utc).isoformat()
+                call_record.request_ended_at = call_record.ended_at
+                call_record.error_class = type(e).__name__
+                call_record.error_message = str(e)
+                status_code = getattr(e, "status_code", None)
+                call_record.http_status = status_code if isinstance(status_code, int) else None
+                call_record.request_id = _string_metadata(getattr(e, "request_id", None))
+                request_sent = getattr(e, "request_sent", None)
+                if isinstance(request_sent, bool):
+                    call_record.request_sent = request_sent
+                if call_record.http_status is not None or call_record.request_id is not None:
+                    call_record.request_sent = True
+                    call_record.http_headers_received = call_record.http_status is not None
+                error_name = type(e).__name__.lower()
+                if call_record.attempted is False:
+                    call_record.error_type = "client_error"
+                    call_record.outcome = "no_request_created"
+                elif isinstance(e, TimeoutError) or "timeout" in error_name:
+                    call_record.error_type = "timeout"
+                    call_record.timeout_phase = "response"
+                    call_record.outcome = "timeout"
+                elif call_record.http_status is not None:
+                    call_record.error_type = "provider_error"
+                    call_record.outcome = "provider_error"
+                elif call_record.request_sent is True:
+                    call_record.error_type = "transport_error"
+                    call_record.outcome = "transport_error"
+                else:
+                    call_record.error_type = "client_error"
+                    call_record.outcome = "request_send_state_unknown"
+                call_record.evidence_status = "complete"
+                model_call_records.append(call_record.to_dict())
             structured_log.append({
                 "step": "error",
                 "error": str(e),
@@ -219,6 +375,7 @@ class DirectLLMAdapter(AgentAdapter):
                 error_message=str(e),
                 raw_model_output=structured_log_json,
                 raw_model_output_format="json",
+                model_call_records=model_call_records,
             )
 
     def _extract_code(

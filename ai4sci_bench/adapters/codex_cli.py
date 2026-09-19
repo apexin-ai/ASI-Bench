@@ -21,6 +21,7 @@ from ai4sci_bench.adapters.subprocess_base import (
 from ai4sci_bench.core.types import AgentOutput, CostInfo, RunStatus, TaskInstance, ToolMode
 from ai4sci_bench.mcp_config import codex_mcp_toml, load_mcp_config
 from ai4sci_bench.runner.os_sandbox import OSSandbox
+from ai4sci_bench.trajectory.call_observability import parse_codex_call_records
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,16 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
                 output = super().solve(task_instance)
             if output.cost is None and output.raw_stdout:
                 output.cost = self._extract_usage_from_jsonl(output.raw_stdout)
+            output.model_call_records = parse_codex_call_records(
+                output.raw_stdout,
+                instance_id=task_instance.instance_id,
+                provider=self.provider,
+                model=self.model,
+                process_exit_code=output.process_exit_code,
+                termination_signal=output.termination_signal,
+                timeout_phase=output.timeout_phase,
+                process_error=output.error_message,
+            )
             return output
 
         eff_timeout = self._get_effective_timeout(task_instance)
@@ -284,8 +295,19 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
             error_message=None if success else log,
             raw_stdout=raw_stdout,
             raw_stderr=raw_stderr,
-            raw_stdout_format="jsonl" if raw_stdout else None,
+            raw_stdout_format="jsonl" if raw_stdout is not None else None,
             cost=self._extract_usage_from_jsonl(raw_stdout) if raw_stdout else None,
+            model_call_records=parse_codex_call_records(
+                raw_stdout,
+                instance_id=task_instance.instance_id,
+                provider=self.provider,
+                model=self.model,
+                process_exit_code=0 if success else None,
+                timeout_phase="process_execution" if status == RunStatus.TIMEOUT else None,
+                process_error=None if success else log,
+            ),
+            process_exit_code=0 if success else None,
+            timeout_phase="process_execution" if status == RunStatus.TIMEOUT else None,
         )
 
     def _should_use_windows_task_bridge(self) -> bool:

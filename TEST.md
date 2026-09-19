@@ -144,6 +144,25 @@ asibench score --repo seed31415 \
   --tasks-dir tasks
 ```
 
+## Model-call observability
+
+Run the call-boundary, transport-evidence, retry, persistence, denominator, and
+privacy regression suite with:
+
+```bash
+uv run --frozen pytest -q tests/test_call_observability.py
+```
+
+The fixtures cover non-empty, empty, tool-only, partial, timed-out, malformed,
+zero-token, empty-stream, and unavailable-stream outcomes; native and benchmark
+retry linkage; provider IDs and finish reasons; stable call ordering; redacted
+raw sidecars; and sidecar restoration by the result loader. A coverage gap or
+unknown content state must produce `empty_response_rate: null` with
+`empty_response_rate_status: unknown`. A numeric zero is valid only when all
+attempted call boundaries and content states are observable. Codex `turn`
+events are tested as agent-level coverage evidence rather than provider-call
+boundaries because a tool-using turn may contain multiple completions.
+
 The Docker regression suite also covers stdin forwarding, pinned CLI install
 commands, Node/base-schema cache invalidation, and root-only image build steps
 followed by a non-root runtime:

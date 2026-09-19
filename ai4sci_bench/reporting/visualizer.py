@@ -228,6 +228,7 @@ class ResultVisualizer:
             ],
             "by_prompt_level": self.report.by_prompt_level,
             "error_distribution": self.report.error_distribution,
+            "model_call_summary": self.report.model_call_summary,
             "total_execution_time": self.report.total_execution_time,
         }
         path.write_text(

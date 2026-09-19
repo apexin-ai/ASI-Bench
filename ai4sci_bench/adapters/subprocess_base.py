@@ -166,6 +166,9 @@ class SubprocessAgentAdapter(AgentAdapter):
         stdin_input = self._get_stdin_input(task_instance, task_env)
 
         t0 = time.time()
+        process_exit_code: int | None = None
+        termination_signal: int | None = None
+        timeout_phase: str | None = None
         try:
             if self.sandbox == "linux_ns":
                 assert self._linux_ns_sandbox is not None
@@ -208,6 +211,8 @@ class SubprocessAgentAdapter(AgentAdapter):
                     raw_stdout_format=(
                         self._raw_stdout_format() if raw_stdout is not None else None
                     ),
+                    process_exit_code=0 if success else None,
+                    timeout_phase=("process_execution" if status == RunStatus.TIMEOUT else None),
                 )
 
             result = run_subprocess_with_graceful_timeout(
@@ -224,6 +229,10 @@ class SubprocessAgentAdapter(AgentAdapter):
             log = self._build_full_log(result.stdout, result.stderr, result.returncode)
             produced_files = collect_output_files(workspace, task_instance)
             status = RunStatus.COMPLETED if result.returncode == 0 else RunStatus.FAILED
+            if result.returncode < 0:
+                termination_signal = -result.returncode
+            else:
+                process_exit_code = result.returncode
             error_message = (
                 None
                 if result.returncode == 0
@@ -247,6 +256,8 @@ class SubprocessAgentAdapter(AgentAdapter):
             produced_files = collect_output_files(workspace, task_instance)
             status = RunStatus.TIMEOUT
             error_message = timeout_line
+            timeout_phase = "process_execution"
+            termination_signal = 9 if getattr(e, "forced_kill", False) else 15
 
         except Exception as e:
             elapsed = time.time() - t0
@@ -271,6 +282,9 @@ class SubprocessAgentAdapter(AgentAdapter):
             raw_stdout_format=(
                 self._raw_stdout_format() if raw_stdout is not None else None
             ),
+            process_exit_code=process_exit_code,
+            termination_signal=termination_signal,
+            timeout_phase=timeout_phase,
         )
 
     # ── Subclass hooks ──────────────────────────────────────────

@@ -144,7 +144,11 @@ def is_eval_result_json(data: dict[str, Any]) -> bool:
     return looks_like_eval_result_json(data)
 
 
-def parse_eval_result(data: dict[str, Any]) -> EvalResult:
+def parse_eval_result(
+    data: dict[str, Any],
+    *,
+    result_path: Path | None = None,
+) -> EvalResult:
     """Parse an EvalResult from a JSON dict."""
     ensure_supported_result_schema(data)
 
@@ -203,7 +207,32 @@ def parse_eval_result(data: dict[str, Any]) -> EvalResult:
             raw_stderr_file=ao.get("raw_stderr_file"),
             raw_model_output_format=ao.get("raw_model_output_format"),
             raw_model_output_file=ao.get("raw_model_output_file"),
+            process_exit_code=ao.get("process_exit_code"),
+            termination_signal=ao.get("termination_signal"),
+            timeout_phase=ao.get("timeout_phase"),
+            model_call_observability=ao.get("model_call_observability"),
         )
+        observability = ao.get("model_call_observability")
+        records_file = (
+            observability.get("records_file")
+            if isinstance(observability, dict)
+            else None
+        )
+        if result_path is not None and isinstance(records_file, str):
+            result_parent = result_path.resolve().parent
+            records_path = (result_parent / records_file).resolve()
+            if records_path.parent == result_parent and records_path.is_file():
+                try:
+                    records = json.loads(records_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    logger.warning(
+                        "Could not load model-call records from %s", records_path
+                    )
+                else:
+                    if isinstance(records, list) and all(
+                        isinstance(record, dict) for record in records
+                    ):
+                        agent_output.model_call_records = records
         if ao.get("trajectory_summary"):
             agent_output._trajectory_summary = ao["trajectory_summary"]
 
@@ -366,7 +395,7 @@ def load_grouped_results(results_path: Path) -> list[ResultGroup]:
             if not is_eval_result_json(data):
                 continue
             ensure_supported_result_schema(data)
-            result = parse_eval_result(data)
+            result = parse_eval_result(data, result_path=json_file)
             group_key, display_label = report_group_for_result(
                 results_path=results_path,
                 json_file=json_file,

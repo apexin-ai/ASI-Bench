@@ -353,8 +353,10 @@ class OpenCodeCLIAdapter(SubprocessAgentAdapter):
             error_message=terminal_error if terminal_error is not None else (None if success else log),
             raw_stdout=raw_stdout,
             raw_stderr=raw_stderr,
-            raw_stdout_format="jsonl" if raw_stdout else None,
+            raw_stdout_format="jsonl" if raw_stdout is not None else None,
             cost=self._extract_usage_from_jsonl(raw_stdout) if raw_stdout else None,
+            process_exit_code=0 if success else None,
+            timeout_phase="process_execution" if status == RunStatus.TIMEOUT else None,
         )
 
     def _build_os_agent_cmd(self, workspace) -> list[str]:

@@ -137,6 +137,14 @@ class AgentOutput:
     raw_model_output: str | None = None
     raw_model_output_format: str | None = None
     raw_model_output_file: str | None = None
+    process_exit_code: int | None = None
+    termination_signal: int | None = None
+    timeout_phase: str | None = None
+    # Versioned model-call lifecycle records.  Adapters may leave this empty
+    # when the provider does not expose call boundaries; the result writer
+    # preserves that distinction instead of inferring zero calls.
+    model_call_records: list[dict[str, Any]] = field(default_factory=list)
+    model_call_observability: dict[str, Any] | None = None
 
 
 @dataclass
