@@ -763,3 +763,21 @@
   submission outputs and exercise task runtime metadata through the same
   loader used by the framework.
 - Implementation commit: `1dd3922`.
+
+## 2026-09: Preserve Judge temperature for compatible endpoints
+
+- Problem: LiteLLM treated an explicit OpenAI-compatible GPT-5.5 endpoint as
+  native OpenAI and rejected the task's `temperature: 0` locally before any
+  HTTP request, even though the configured gateway accepts that parameter.
+- Resolution: centralize Judge temperature handling and send it in the request
+  body for explicit `openai/` compatible endpoints, while retaining the normal
+  top-level parameter and LiteLLM validation for native provider calls. Apply
+  the same behavior to text, VLM, and both CMOS Judge paths.
+- Verification: the actual LLM Judge completed successfully against the
+  configured compatible endpoint with GPT-5.5, medium reasoning, and zero
+  temperature; focused tests passed `105` tests, and the full locked offline
+  suite passed `2390` tests, with `2 skipped` and `24 deselected`.
+- Prevention: endpoint-override tests must assert the final LiteLLM request
+  shape for every Judge implementation and separately preserve native-provider
+  validation coverage.
+- Implementation commit: `587b550`.
