@@ -4,6 +4,8 @@ import csv
 import json
 import os
 from pathlib import Path
+import threading
+import time
 from types import SimpleNamespace
 
 import numpy as np
@@ -119,6 +121,46 @@ class TestRunSandboxAvailability:
         assert len(run_calls) == 6
         assert all("--parallel" in c and c[c.index("--parallel") + 1] == "1" for c in run_calls)
         assert len({c[c.index("--output-dir") + 1] for c in run_calls}) == 6
+        score_calls = [c for c in calls if c[3] == "score"]
+        assert all("--parallel" in c and c[c.index("--parallel") + 1] == "4" for c in score_calls)
+
+    def test_run_score_does_not_overlap_run_and_parallel_score_workers(
+        self, monkeypatch, tmp_path
+    ):
+        calls = []
+        completed_runs = 0
+        lock = threading.Lock()
+        tasks_dir = tmp_path / "tasks"
+        instances_dir = tmp_path / "instances"
+        for task_id in ("math.demo_a", "math.demo_b"):
+            task_dir = tasks_dir / "math" / task_id.rsplit(".", 1)[1]
+            task_dir.mkdir(parents=True)
+            (task_dir / "task_meta.yaml").write_text(
+                f"id: {task_id}\nstatus: final\n", encoding="utf-8"
+            )
+            (instances_dir / f"{task_id}__seed31415").mkdir(parents=True)
+
+        def fake_run(cmd, **kwargs):
+            nonlocal completed_runs
+            calls.append(cmd)
+            if cmd[3] == "run":
+                time.sleep(0.03)
+                with lock:
+                    completed_runs += 1
+            else:
+                assert completed_runs == 6
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr("ai4sci_bench.cli.subprocess.run", fake_run)
+        result = CliRunner().invoke(cli, [
+            "run-score", "--instances-dir", str(instances_dir),
+            "--tasks-dir", str(tasks_dir), "--repetitions", "3",
+            "--parallel", "2", "--agent", "direct_llm",
+            "--output-dir", str(tmp_path / "out"),
+        ])
+
+        assert result.exit_code == 0, result.output
+        assert len(calls) == 9
 
     @pytest.mark.parametrize("command", ["score", "run-score", "benchflow-score"])
     def test_scoring_help_exposes_runtime_judge_configuration(self, command):
@@ -127,6 +169,77 @@ class TestRunSandboxAvailability:
         for option in ("--judge-api-base", "--judge-api-key-env", "--judge-api-protocol"):
             assert option in result.output
         assert "never the key itself" in result.output
+
+    def test_score_forwards_parallel_worker_limit(self, monkeypatch, tmp_path):
+        captured = {}
+
+        def fake_score(*_args, **kwargs):
+            captured.update(kwargs)
+            return (
+                {
+                    "results": [],
+                    "scored_instance_count": 0,
+                    "scorer_error_count": 0,
+                    "total_score": 0.0,
+                    "total_max_score": 0.0,
+                    "mean_percent": None,
+                },
+                tmp_path / "score.json",
+            )
+
+        monkeypatch.setattr(
+            "ai4sci_bench.local_scoring.score_seed31415_results", fake_score
+        )
+        result = CliRunner().invoke(cli, [
+            "score", "--repo", "seed31415",
+            "--results-dir", str(tmp_path / "results"),
+            "--instances-dir", str(tmp_path / "instances"),
+            "--parallel", "3",
+        ])
+
+        assert result.exit_code == 0, result.output
+        assert captured["parallel"] == 3
+        assert callable(captured["progress_callback"])
+
+    def test_score_defaults_to_one_scoring_worker(self, monkeypatch, tmp_path):
+        captured = {}
+
+        def fake_score(*_args, **kwargs):
+            captured.update(kwargs)
+            return (
+                {
+                    "results": [],
+                    "scored_instance_count": 0,
+                    "scorer_error_count": 0,
+                    "total_score": 0.0,
+                    "total_max_score": 0.0,
+                    "mean_percent": None,
+                },
+                tmp_path / "score.json",
+            )
+
+        monkeypatch.setattr(
+            "ai4sci_bench.local_scoring.score_seed31415_results", fake_score
+        )
+        result = CliRunner().invoke(cli, [
+            "score", "--repo", "seed31415",
+            "--results-dir", str(tmp_path / "results"),
+            "--instances-dir", str(tmp_path / "instances"),
+        ])
+
+        assert result.exit_code == 0, result.output
+        assert captured["parallel"] == 1
+
+    def test_score_rejects_nonpositive_parallel_before_scoring(self, tmp_path):
+        result = CliRunner().invoke(cli, [
+            "score", "--repo", "seed31415",
+            "--results-dir", str(tmp_path / "results"),
+            "--instances-dir", str(tmp_path / "instances"),
+            "--parallel", "0",
+        ])
+
+        assert result.exit_code == 2
+        assert "Invalid value for '--parallel'" in result.output
 
     def test_run_score_forwards_runtime_judge_configuration(self, monkeypatch, tmp_path):
         calls = []

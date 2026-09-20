@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
+import stat
 import subprocess
 import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from ai4sci_bench.runner.task_env import TaskEnvironmentManager
 
@@ -28,6 +32,50 @@ AGENT_INSTALL_COMMANDS: dict[str | None, list[str]] = {
     "openhands":   [],  # mounted from host venv, no install needed
     "agy":         [],  # standalone binary, must be pre-installed on host
 }
+
+
+@contextmanager
+def _image_build_lock(tag: str) -> Iterator[None]:
+    """Serialize inspect-then-build sections for one Docker image tag."""
+    suffix = f"-{os.geteuid()}" if hasattr(os, "geteuid") else ""
+    lock_root = Path(tempfile.gettempdir()) / f"ai4sci-bench-image-locks{suffix}"
+    lock_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if os.name != "nt":
+        root_stat = lock_root.lstat()
+        if not stat.S_ISDIR(root_stat.st_mode) or root_stat.st_uid != os.geteuid():
+            raise RuntimeError(f"Unsafe Docker image lock directory: {lock_root}")
+        if stat.S_IMODE(root_stat.st_mode) != 0o700:
+            lock_root.chmod(0o700)
+    lock_name = hashlib.sha256(tag.encode("utf-8")).hexdigest() + ".lock"
+    lock_path = lock_root / lock_name
+    with lock_path.open("a+b") as lock_file:
+        if os.name == "nt":
+            import msvcrt
+
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b"\0")
+                lock_file.flush()
+            lock_file.seek(0)
+            while True:
+                try:
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.05)
+            try:
+                yield
+            finally:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 class TaskImageBuilder:
@@ -132,7 +180,9 @@ class TaskImageBuilder:
             "WORKDIR /workspace\n"
             'LABEL ai4sci.base_image="true"\n'
         )
-        self._build_image(tag, dockerfile)
+        with _image_build_lock(tag):
+            if not self._image_exists(tag):
+                self._build_image(tag, dockerfile)
         return tag
 
     def ensure_image(
@@ -175,7 +225,11 @@ class TaskImageBuilder:
                 raise RuntimeError(f"runtime.dockerfile '{custom_dockerfile}' not found at {dockerfile_path}")
             task_base_tag = self._custom_dockerfile_tag(dockerfile_path)
             if not self._image_exists(task_base_tag):
-                self._build_image_from_file(task_base_tag, dockerfile_path, Path(task_dir))
+                with _image_build_lock(task_base_tag):
+                    if not self._image_exists(task_base_tag):
+                        self._build_image_from_file(
+                            task_base_tag, dockerfile_path, Path(task_dir)
+                        )
             return self._ensure_overlay(
                 task_base_tag,
                 task_metadata,
@@ -227,7 +281,9 @@ class TaskImageBuilder:
             f'LABEL ai4sci.task.cache_key="{self.env_manager.compute_cache_key(task_metadata)}"\n'
             f'LABEL ai4sci.agent_type="{agent_type or "none"}"\n'
         )
-        self._build_image(tag, "".join(lines))
+        with _image_build_lock(tag):
+            if not self._image_exists(tag):
+                self._build_image(tag, "".join(lines))
         return tag
 
     def get_image_identity(self, image: str) -> str:

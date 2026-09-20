@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
+import time
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 
 import numpy as np
+import pytest
 from click.testing import CliRunner
 
 from ai4sci_bench.cli import cli
@@ -15,7 +19,7 @@ from ai4sci_bench.core.judge_api import (
     use_judge_api_override,
 )
 from ai4sci_bench.core.types import ScoreDetail
-from ai4sci_bench.local_scoring import score_seed31415_results
+from ai4sci_bench.local_scoring import LocalScoringError, score_seed31415_results
 
 
 def _write_fixture(root: Path) -> tuple[Path, Path, Path]:
@@ -106,6 +110,156 @@ evaluation:
     return tasks_dir, instances_dir, results_dir
 
 
+def _add_result_level(results_dir: Path, level: str) -> None:
+    task_dir = results_dir / "physics.example"
+    instance_id = "physics.example__seed31415"
+    outputs_dir = task_dir / f"{instance_id}__{level}.outputs"
+    outputs_dir.mkdir(parents=True)
+    np.save(outputs_dir / "output.npy", np.array([1.0, 2.0], dtype=np.float64))
+    result_json = {
+        "instance_id": instance_id,
+        "task_id": "physics.example",
+        "prompt_level": level,
+        "parameters": {},
+        "status": "completed",
+        "final_score": 0.0,
+    }
+    (task_dir / f"{instance_id}__{level}.json").write_text(
+        json.dumps(result_json), encoding="utf-8"
+    )
+
+
+def _write_parallel_test_scorer(
+    tasks_dir: Path,
+    state_dir: Path,
+    *,
+    crash_level: str | None = None,
+) -> None:
+    task_dir = tasks_dir / "physics" / "example"
+    scorer_source = f'''
+import os
+from pathlib import Path
+import sys
+import time
+
+from ai4sci_bench.core.scorer import Scorer, register_scorer
+from ai4sci_bench.core.types import ScoreDetail
+
+
+@register_scorer("parallel_test_scorer")
+class ParallelTestScorer(Scorer):
+    def score(self, pred_dir, ref_dir, config):
+        level = config.get("prompt_level", "")
+        state_dir = Path(config["state_dir"])
+        state_dir.mkdir(parents=True, exist_ok=True)
+        marker = state_dir / f"{{level}}.started"
+        marker.write_text(str(os.getpid()))
+        active_count = 1
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            active_count = max(active_count, len(list(state_dir.glob("*.started"))))
+            if active_count >= 2:
+                break
+            time.sleep(0.01)
+        (state_dir / f"{{level}}.ready").write_text(str(os.getpid()))
+        deadline = time.monotonic() + 3.0
+        while len(list(state_dir.glob("*.ready"))) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if level == {crash_level!r}:
+            os._exit(23)
+        if level == "b1":
+            deadline = time.monotonic() + 3.0
+            while not (state_dir / "b3.started").exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+
+        leak_path = str(state_dir / "sys-path-leak")
+        leak_module = "asibench_parallel_scorer_leak"
+        isolation_clean = (
+            "ASIBENCH_SCORER_LEAK" not in os.environ
+            and leak_path not in sys.path
+            and leak_module not in sys.modules
+        )
+        os.environ["ASIBENCH_SCORER_LEAK"] = level
+        sys.path.append(leak_path)
+        sys.modules[leak_module] = object()
+        os.chdir(pred_dir)
+
+        marker.unlink(missing_ok=True)
+        concurrent = active_count >= 2
+        weight = float(config.get("weight", 1.0))
+        return ScoreDetail(
+            scorer_name="parallel_test_scorer",
+            score=weight if concurrent else 0.0,
+            max_score=weight,
+            passed=concurrent,
+            details={{
+                "active_count": active_count,
+                "concurrent": concurrent,
+                "isolation_clean": isolation_clean,
+                "pid": os.getpid(),
+            }},
+        )
+'''.lstrip()
+    (task_dir / "custom_scorer.py").write_text(scorer_source, encoding="utf-8")
+    state_json = json.dumps(str(state_dir))
+    (task_dir / "task_eval.yaml").write_text(
+        f"""
+task_id: physics.example
+evaluation:
+  gates: []
+  scoring:
+    - scorer: parallel_test_scorer
+      weight: 100
+      config:
+        state_dir: {state_json}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_judge_test_scorer(tasks_dir: Path, *, raise_with_secret: bool) -> None:
+    task_dir = tasks_dir / "physics" / "example"
+    scorer_source = f'''
+from ai4sci_bench.core.judge_api import get_judge_api_override
+from ai4sci_bench.core.scorer import Scorer, register_scorer
+from ai4sci_bench.core.types import ScoreDetail
+
+
+@register_scorer("judge_override_test_scorer")
+class JudgeOverrideTestScorer(Scorer):
+    def score(self, pred_dir, ref_dir, config):
+        override = get_judge_api_override()
+        secret = override.resolve_api_key() if override is not None else None
+        if {raise_with_secret!r}:
+            raise RuntimeError(f"provider rejected credential {{secret}}")
+        weight = float(config.get("weight", 1.0))
+        return ScoreDetail(
+            scorer_name="judge_override_test_scorer",
+            score=weight,
+            max_score=weight,
+            passed=True,
+            details={{
+                "override": override.public_metadata() if override else None,
+                "secret_resolved": bool(secret),
+            }},
+        )
+'''.lstrip()
+    (task_dir / "custom_scorer.py").write_text(scorer_source, encoding="utf-8")
+    (task_dir / "task_eval.yaml").write_text(
+        """
+task_id: physics.example
+evaluation:
+  gates: []
+  scoring:
+    - scorer: judge_override_test_scorer
+      weight: 100
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_seed31415_local_score_uses_public_reference(tmp_path):
     tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
     report_path = tmp_path / "score.json"
@@ -128,6 +282,7 @@ def test_seed31415_local_score_uses_public_reference(tmp_path):
     )
 
     assert result.exit_code == 0, result.output
+    assert "Scoring [1/1] physics.example b1" in result.output
     assert "100.00 / 100.00" in result.output
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["repo"] == "seed31415"
@@ -307,6 +462,7 @@ def test_score_cli_displays_internal_error_as_not_scored(monkeypatch, tmp_path):
 
 def test_local_scoring_scopes_runtime_judge_override(monkeypatch, tmp_path):
     tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    monkeypatch.setenv("TOKENROUTER_API_KEY", "test-secret")
     override = JudgeAPIOverride(
         api_base="https://api.tokenrouter.com/v1",
         api_key_env="TOKENROUTER_API_KEY",
@@ -354,3 +510,233 @@ def test_local_scoring_without_argument_preserves_outer_judge_scope(monkeypatch,
         score_seed31415_results(results_dir, instances_dir, tasks_dir)
 
     assert seen == [outer_override]
+
+
+def test_parallel_local_scoring_is_bounded_isolated_and_ordered(tmp_path):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _add_result_level(results_dir, "b2")
+    _add_result_level(results_dir, "b3")
+    _write_parallel_test_scorer(tasks_dir, tmp_path / "parallel-state")
+    progress: list[tuple[int, int, str]] = []
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+        parallel=2,
+        progress_callback=lambda completed, total, item: progress.append(
+            (completed, total, item["prompt_level"])
+        ),
+    )
+
+    assert [item["prompt_level"] for item in report["results"]] == ["b1", "b2", "b3"]
+    assert [item["final_score"] for item in report["results"]] == [100.0] * 3
+    worker_pids = {
+        item["score_results"][0]["details"]["pid"] for item in report["results"]
+    }
+    assert len(worker_pids) == 3
+    assert os.getpid() not in worker_pids
+    details = [item["score_results"][0]["details"] for item in report["results"]]
+    assert all(item["isolation_clean"] for item in details)
+    assert max(item["active_count"] for item in details) == 2
+    assert "ASIBENCH_SCORER_LEAK" not in os.environ
+    assert [item[0] for item in progress] == [1, 2, 3]
+    assert all(item[1] == 3 for item in progress)
+    assert {item[2] for item in progress} == {"b1", "b2", "b3"}
+
+
+def test_parallel_worker_crash_is_an_invalid_evaluation(tmp_path):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _add_result_level(results_dir, "b2")
+    _write_parallel_test_scorer(
+        tasks_dir,
+        tmp_path / "parallel-state",
+        crash_level="b1",
+    )
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+        parallel=2,
+    )
+
+    assert report["instance_count"] == 2
+    assert report["scored_instance_count"] == 1
+    assert report["scorer_error_count"] == 1
+    scored = report["results"][0]
+    assert scored["evaluation_status"] == "evaluation_invalid"
+    assert scored["final_score"] is None
+    assert scored["scorer_internal_error"] is True
+    assert scored["score_results"][0]["details"]["scorer_internal_error"] is True
+    assert report["results"][1]["evaluation_status"] == "completed"
+
+
+@pytest.mark.parametrize("parallel", [0, -1, 1.5, True, "2"])
+def test_local_scoring_rejects_invalid_library_parallel_values(tmp_path, parallel):
+    with pytest.raises(LocalScoringError, match="parallel"):
+        score_seed31415_results(
+            tmp_path / "missing-results",
+            tmp_path / "missing-instances",
+            parallel=parallel,
+        )
+
+
+def test_preflight_validates_later_jobs_before_loading_or_running_scorer(
+    monkeypatch, tmp_path
+):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _add_result_level(results_dir, "b2")
+    late_outputs = (
+        results_dir
+        / "physics.example"
+        / "physics.example__seed31415__b2.outputs"
+    )
+    (late_outputs / "output.npy").unlink()
+    late_outputs.rmdir()
+    import_marker = tmp_path / "custom-scorer-imported"
+    (tasks_dir / "physics" / "example" / "custom_scorer.py").write_text(
+        f"from pathlib import Path\nPath({str(import_marker)!r}).write_text('loaded')\n",
+        encoding="utf-8",
+    )
+    evaluate_calls = []
+    monkeypatch.setattr(
+        "ai4sci_bench.runner.orchestrator._evaluate_gates_and_scores",
+        lambda *_args, **_kwargs: evaluate_calls.append(True),
+    )
+
+    with pytest.raises(LocalScoringError, match="Persisted output directory"):
+        score_seed31415_results(results_dir, instances_dir, tasks_dir)
+
+    assert evaluate_calls == []
+    assert not import_marker.exists()
+
+
+def test_parallel_worker_start_failure_does_not_drop_other_results(
+    monkeypatch, tmp_path
+):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _add_result_level(results_dir, "b2")
+    original_start = BaseProcess.start
+
+    def fail_first_worker(process):
+        if process.name == "asibench-score-0":
+            raise OSError("worker capacity unavailable")
+        return original_start(process)
+
+    monkeypatch.setattr(BaseProcess, "start", fail_first_worker)
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+        parallel=2,
+    )
+
+    assert report["instance_count"] == 2
+    assert report["scorer_error_count"] == 1
+    assert report["results"][0]["evaluation_status"] == "evaluation_invalid"
+    assert report["results"][0]["final_score"] is None
+    assert report["results"][1]["evaluation_status"] == "completed"
+    assert "WorkerStartError" in report["results"][0]["score_results"][0]["message"]
+
+
+@pytest.mark.parametrize("parallel", [1, 2])
+def test_local_scoring_receives_judge_override_without_persisting_secret(
+    monkeypatch, tmp_path, parallel
+):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _write_judge_test_scorer(tasks_dir, raise_with_secret=False)
+    secret = "parallel-judge-secret"
+    monkeypatch.setenv("TEST_JUDGE_KEY", secret)
+    override = JudgeAPIOverride(
+        api_base="https://api.example.test/v1",
+        api_key_env="TEST_JUDGE_KEY",
+        api_protocol="openai",
+    )
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+        judge_api_override=override,
+        parallel=parallel,
+    )
+
+    details = report["results"][0]["score_results"][0]["details"]
+    assert details["override"] == override.public_metadata()
+    assert details["secret_resolved"] is True
+    assert secret not in json.dumps(report)
+
+
+@pytest.mark.parametrize("parallel", [1, 2])
+def test_local_scoring_redacts_judge_secret_from_scorer_failure(
+    monkeypatch, tmp_path, parallel
+):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _write_judge_test_scorer(tasks_dir, raise_with_secret=True)
+    secret = "parallel-secret-in-error"
+    monkeypatch.setenv("TEST_JUDGE_KEY", secret)
+    override = JudgeAPIOverride(
+        api_base="https://api.example.test/v1",
+        api_key_env="TEST_JUDGE_KEY",
+        api_protocol="openai",
+    )
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+        judge_api_override=override,
+        parallel=parallel,
+    )
+
+    serialized = json.dumps(report)
+    assert report["results"][0]["evaluation_status"] == "evaluation_invalid"
+    assert secret not in serialized
+    assert "<redacted>" in serialized
+
+
+def test_serial_and_parallel_local_scoring_have_equivalent_score_content(tmp_path):
+    serial_paths = _write_fixture(tmp_path / "serial")
+    parallel_paths = _write_fixture(tmp_path / "parallel")
+    _add_result_level(serial_paths[2], "b2")
+    _add_result_level(parallel_paths[2], "b2")
+
+    serial_report, _ = score_seed31415_results(
+        serial_paths[2], serial_paths[1], serial_paths[0], parallel=1
+    )
+    parallel_report, _ = score_seed31415_results(
+        parallel_paths[2], parallel_paths[1], parallel_paths[0], parallel=2
+    )
+
+    assert serial_report["results"] == parallel_report["results"]
+    for field in (
+        "instance_count",
+        "scored_instance_count",
+        "scorer_error_count",
+        "total_score",
+        "total_max_score",
+        "mean_percent",
+    ):
+        assert serial_report[field] == parallel_report[field]
+
+
+def test_atomic_report_replace_failure_preserves_existing_report(monkeypatch, tmp_path):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    report_path = tmp_path / "score.json"
+    report_path.write_text("previous-report\n", encoding="utf-8")
+
+    def fail_replace(_source, _destination):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+    with pytest.raises(OSError, match="replace failed"):
+        score_seed31415_results(
+            results_dir,
+            instances_dir,
+            tasks_dir,
+            output_path=report_path,
+        )
+
+    assert report_path.read_text(encoding="utf-8") == "previous-report\n"
+    assert list(tmp_path.glob(".score.json.tmp-*")) == []

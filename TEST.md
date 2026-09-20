@@ -322,6 +322,15 @@ from the aggregate denominator. MPSC setup failures must classify missing
 trusted inputs/runtime as scorer errors and submitted controller failures as
 ordinary scored-zero submission errors. Keep these boundaries covered with:
 
+`score --parallel N` performs full-batch preflight before evaluator work and
+runs complete result evaluations in fresh spawned processes. The worker count
+is bounded by `N`; gate/scorer/Judge loops inside one result stay sequential.
+Coverage must preserve source ordering and serial score parity, prove isolation
+from worker `cwd`/environment/import mutations, propagate credential-safe Judge
+metadata, redact secrets, classify worker failures as invalid evaluations, and
+preserve an existing report if atomic replacement fails. Docker image cache
+creation remains protected by a tag-keyed cross-process lock.
+
 ```bash
 uv run pytest -q \
   tests/test_retired_features.py \
@@ -329,7 +338,8 @@ uv run pytest -q \
   tests/test_mpsc_error_classification.py \
   tests/test_no_local_scoring.py \
   tests/test_review.py \
-  tests/test_hf_pull.py::TestUnscoredSubmissionReporting
+  tests/test_hf_pull.py::TestUnscoredSubmissionReporting \
+  tests/test_os_sandbox.py::TestTaskImageBuilder
 ```
 
 Produce-only numeric zeros are serialization placeholders, not scores.
@@ -498,10 +508,13 @@ any dependency change.
 ### Independent three-run difficulty check
 
 `asibench run-score` composes `run` and `score` for seed31415. It forwards
-`--parallel` to the runner and can repeat the complete workflow with
-`--repetitions`; each repetition has separate run and score output. Repeated
-task jobs share one bounded queue, so later repetitions fill slots released by
-the tail of an earlier repetition without multiplying the concurrency limit.
+`--parallel` as one workflow-wide limit and can repeat the complete workflow
+with `--repetitions`; each repetition has separate run and score output. Agent
+task jobs from every repetition first share one bounded queue. A phase barrier
+then prevents agent jobs from overlapping scoring, and repetitions are scored
+one at a time with up to the same number of isolated result workers. This
+prevents nested \(N \times N\) worker fan-out while allowing later repetition
+task jobs to fill slots released during the agent phase.
 Runtime Judge endpoint, key-variable name, and protocol settings are forwarded
 to every score subprocess without placing the secret on its command line.
 The ASI-Bench agent-run child disables project `.env` reload during framework

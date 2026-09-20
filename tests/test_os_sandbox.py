@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -826,6 +830,71 @@ class TestTaskImageBuilder:
             dockerfile_arg = mock_build.call_args[0][1]
             assert "uv" in dockerfile_arg
             assert "git" in dockerfile_arg
+
+    def test_ensure_base_image_serializes_concurrent_builds(
+        self, builder: TaskImageBuilder
+    ):
+        state_lock = threading.Lock()
+        image_exists = False
+        build_count = 0
+
+        def fake_exists(_tag):
+            with state_lock:
+                return image_exists
+
+        def fake_build(_tag, _dockerfile):
+            nonlocal image_exists, build_count
+            with state_lock:
+                build_count += 1
+            time.sleep(0.1)
+            with state_lock:
+                image_exists = True
+
+        with patch.object(builder, "ensure_docker_available"), \
+             patch.object(builder, "_image_exists", side_effect=fake_exists), \
+             patch.object(builder, "_build_image", side_effect=fake_build):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                images = list(pool.map(lambda _: builder.ensure_base_image(), range(2)))
+
+        assert images[0] == images[1]
+        assert build_count == 1
+
+    def test_image_build_lock_serializes_separate_processes(self, tmp_path: Path):
+        worker_code = """
+import sys
+import time
+from pathlib import Path
+from ai4sci_bench.runner.task_image import _image_build_lock
+
+state_dir = Path(sys.argv[1])
+label = sys.argv[2]
+(state_dir / f"{label}.ready").write_text("ready")
+deadline = time.monotonic() + 5
+while len(list(state_dir.glob("*.ready"))) < 2 and time.monotonic() < deadline:
+    time.sleep(0.01)
+with _image_build_lock("shared-test-image:latest"):
+    with (state_dir / "events").open("a", encoding="utf-8") as stream:
+        stream.write(f"{label}:enter\\n")
+        stream.flush()
+    time.sleep(0.2)
+    with (state_dir / "events").open("a", encoding="utf-8") as stream:
+        stream.write(f"{label}:exit\\n")
+        stream.flush()
+"""
+        processes = [
+            subprocess.Popen(
+                [sys.executable, "-c", worker_code, str(tmp_path), label]
+            )
+            for label in ("one", "two")
+        ]
+
+        return_codes = [process.wait(timeout=10) for process in processes]
+        assert return_codes == [0, 0]
+        events = (tmp_path / "events").read_text(encoding="utf-8").splitlines()
+        assert events in (
+            ["one:enter", "one:exit", "two:enter", "two:exit"],
+            ["two:enter", "two:exit", "one:enter", "one:exit"],
+        )
 
     def test_base_image_preserves_task_venv_for_login_shells(self, builder: TaskImageBuilder):
         with patch.object(builder, "ensure_docker_available"), \

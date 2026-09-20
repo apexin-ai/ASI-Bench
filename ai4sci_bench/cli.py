@@ -709,6 +709,8 @@ def _format_file_size(size_bytes: int) -> str:
               help="GitHub task catalog containing task_eval.yaml and scorers")
 @click.option("--output", "output_path", default=None,
               help="Local score report JSON (default: <results-dir>/local_score_seed31415.json)")
+@click.option("--parallel", default=1, type=click.IntRange(min=1), show_default=True,
+              help="Independent result-scoring worker processes.")
 @click.option(
     "--judge-api-base",
     default=None,
@@ -730,7 +732,7 @@ def _format_file_size(size_bytes: int) -> str:
     help="Protocol spoken by --judge-api-base (native or OpenAI-compatible).",
 )
 def score_cmd(repo: str, results_dir: str, instances_dir: str,
-              tasks_dir: str, output_path: str | None,
+              tasks_dir: str, output_path: str | None, parallel: int,
               judge_api_base: str | None, judge_api_key_env: str | None,
               judge_api_protocol: str | None):
     """Score seed31415 locally with its public references and GitHub scorers.
@@ -767,6 +769,12 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
             tasks_dir,
             output_path=output_path,
             judge_api_override=judge_api_override,
+            parallel=parallel,
+            progress_callback=lambda completed, total, item: click.echo(
+                "Scoring "
+                f"[{completed}/{total}] {item['task_id']} "
+                f"{item['prompt_level']} {item['instance_id']}"
+            ),
         )
     except (JudgeAPIConfigurationError, LocalScoringError) as exc:
         raise click.ClickException(str(exc)) from exc
@@ -947,7 +955,8 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config, m
         score_args = [sys.executable, "-m", "ai4sci_bench.cli", "score",
                       "--repo", "seed31415", "--results-dir", str(run_dir),
                       "--instances-dir", instances_dir, "--tasks-dir", tasks_dir,
-                      "--output", str(score_path)]
+                      "--output", str(score_path),
+                      "--parallel", str(effective_parallel)]
         if judge_api_base:
             score_args += ["--judge-api-base", judge_api_base]
         if judge_api_key_env:
@@ -963,7 +972,6 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config, m
     # its tail, jobs from the next repetition immediately occupy freed slots.
     import concurrent.futures
     task_statuses: list[tuple[int, str, int]] = []
-    remaining = {number: len(task_ids) for number in range(1, repetitions + 1)}
     score_statuses: dict[int, int] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=effective_parallel) as pool:
         futures = [
@@ -974,12 +982,13 @@ def run_score(instances_dir, tasks_dir, tasks, agent, agent_cmd, agent_config, m
         for future in concurrent.futures.as_completed(futures):
             number, task_id, status = future.result()
             task_statuses.append((number, task_id, status))
-            remaining[number] -= 1
-            if remaining[number] == 0:
-                if any(s != 0 for n, _, s in task_statuses if n == number):
-                    score_statuses[number] = 1
-                else:
-                    score_statuses[number] = _score_repetition(number)
+    # Keep one global concurrency budget. All agent jobs finish before a score
+    # subprocess is allowed to create up to ``effective_parallel`` workers.
+    for number in range(1, repetitions + 1):
+        if any(s != 0 for n, _, s in task_statuses if n == number):
+            score_statuses[number] = 1
+        else:
+            score_statuses[number] = _score_repetition(number)
     failed = [(number, task_id, status) for number, task_id, status in task_statuses if status]
     failed.extend((number, "score", status) for number, status in score_statuses.items() if status)
     click.echo(f"Completed {repetitions} independent run+score repetition(s).")

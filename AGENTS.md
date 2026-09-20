@@ -90,6 +90,10 @@
 - `run-score` 串联 seed31415 的 `run` 与 `score`；支持 `--parallel` 和
   `--repetitions`，重复流程使用独立输出目录和进程；所有 repetition 的 task
   共用一个有界队列，前一轮尾部释放的槽位须立即由后一轮 task 补位。
+  `score --parallel N` 先完整预检，再以至多 N 个 fresh spawn 进程并行独立 result，单个
+  result 内的 gate/scorer/retry/num_judges 保持串行；协调进程按源顺序原子写报告。
+  `run-score` 在全部 agent task 完成后才逐 repetition 启动上述评分，整个流程不得
+  出现 \(N \times N\) 嵌套并发。
 - host-side Claude/Kimi harness home 必须同时按 benchmark execution 与
   instance run 隔离；execution 结束必须 teardown 清理。目录键须包含原始
   run key 哈希，Kimi 临时根初始化须支持并发。

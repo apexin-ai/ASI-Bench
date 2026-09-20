@@ -162,7 +162,8 @@ asibench score \
   --repo seed31415 \
   --results-dir out_seed31415/ \
   --instances-dir hf_instances_seed31415/ \
-  --tasks-dir /path/to/ASI-Bench/tasks/
+  --tasks-dir /path/to/ASI-Bench/tasks/ \
+  --parallel 4
 ```
 
 The command writes a separate `local_score_seed31415.json` and never overwrites
@@ -172,6 +173,14 @@ failure as `evaluation_status: evaluation_invalid` with `final_score: null`.
 Invalid evaluations are shown as `NOT SCORED`, excluded from aggregate score
 denominators, counted in `scorer_error_count`, and make the command exit
 non-zero after the report is written.
+
+`--parallel N` runs at most `N` independent result evaluations at once and
+defaults to `1`. Each result gets a fresh worker process because custom scorers
+may modify process-global imports, environment, or working directory. Gates,
+weighted scorers, retries, and `num_judges` samples within one result remain
+sequential and keep their declared order, so Judge request concurrency is also
+bounded by `N`. The coordinator validates the complete batch before starting
+scorers, preserves source order in the report, and writes the report atomically.
 
 #### BenchFlow integration
 
@@ -630,10 +639,12 @@ for the complete authoring guide.
 For a one-step run followed by local scoring on seed31415, use
 `asibench run-score --instances-dir <instances> --tasks-dir tasks/`. It accepts
 the same task/agent settings plus `--parallel` and `--repetitions`; repeated
-runs are written below `run_N/` and scored independently. `--parallel` is a
-single global task-worker limit: when one repetition reaches its final tasks,
-tasks from the next repetition immediately fill released worker slots. Judge
-API options are validated once and forwarded to every scoring subprocess.
+runs are written below `run_N/` and scored independently. `--parallel` is one
+global concurrency budget: all task-sized agent jobs share one queue, then a
+phase barrier waits for every agent job before scoring begins. Repetitions are
+scored one at a time, while up to `N` independent results within that repetition
+use isolated scoring workers. This avoids nested \(N \times N\) fan-out. Judge API
+options are validated once and forwarded to every scoring subprocess.
 `benchflow-score` accepts the same three Judge API options for a materialized
 BenchFlow attempt.
 
