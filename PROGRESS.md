@@ -733,3 +733,16 @@
   rate is valid only when every attempted-call boundary and content state is
   observable.
 - Implementation commit: `43cf4ce`.
+
+## 2026-09: Require trusted sandbox timeout markers
+
+- Problem: OS and Linux namespace adapters classified any log containing the
+  words `timed out` as a benchmark timeout, so successful agent output or an
+  ordinary failed command could be mislabeled as `RunStatus.TIMEOUT`.
+- Resolution: require a failed sandbox result plus the complete framework-owned
+  timeout marker, and apply the shared check to every OS-capable CLI adapter.
+- Verification: focused adapter regressions passed `474` tests; the full locked
+  offline suite passed `2385` tests, with `2 skipped` and `24 deselected`.
+- Prevention: timeout tests must cover genuine runner markers, successful logs
+  containing timeout language, and malformed or unrelated failure messages.
+- Implementation commit: `cc01f47`.
