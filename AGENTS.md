@@ -109,6 +109,10 @@
 
 ## 任务生命周期
 
+- Responses 翻译分支必须保留工具类型、原始 ID 和终止状态；未知字段须明确报错，
+  不得修改全局 `litellm.drop_params`。旧 LiteLLM 不支持 custom-tool round trip 时
+  明确拒绝并引导 native passthrough。该分支仍是 buffered SSE，不代表原生流式。
+
 你收到任务后，按以下 9 步流程自主完成：
 
 1. **领取任务** — 你已被分配任务，阅读本文件和项目代码理解上下文

@@ -451,6 +451,18 @@ Without this flag, image attachments are replaced with a short notice before
 the next model request. Direct endpoints outside the framework proxy remain the
 responsibility of the connected agent.
 
+For framework proxies, prefer native Responses passthrough when the endpoint
+supports it. Opt-in Responses translation is buffered, not live token streaming.
+It preserves returned reasoning items/IDs and distinguishes custom-tool input
+events from function arguments, including failed and incomplete terminal states.
+Unknown translation parameters fail explicitly instead of being silently omitted.
+`additional_tools` declarations are merged into `tools` for LiteLLM conversion;
+tool invocation policy is not overridden. Custom-tool translation requires
+LiteLLM's custom-tool round-trip support (tested with 1.97.0); the currently
+locked 1.82.6 release is rejected for those requests. Native passthrough does
+not have this translation restriction. This does not establish lossless
+Anthropic reasoning replay across all providers.
+
 Harness session state (transcripts, history, auto-memory) never carries over
 between instances or repeated executions of the same instance: the OS sandbox
 gives each run a one-shot container with a fresh `HOME`, and host-side runs
