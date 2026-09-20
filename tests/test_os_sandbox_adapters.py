@@ -130,12 +130,29 @@ class TestMiMoOsSandbox:
         adapter.repo_root = tmp_path
         mock_sb = MagicMock()
         mock_sb.run_agent.return_value = _mock_os_sandbox_result(
-            success=False, log="Agent timed out after 60s",
+            success=False, log="OS sandbox agent execution timed out (60s)",
         )
         adapter._os_sandbox = mock_sb
 
         result = adapter.solve(_make_task_instance(tmp_path))
         assert result.status == RunStatus.TIMEOUT
+
+    def test_solve_os_success_with_timeout_phrase_is_completed(self, tmp_path):
+        """Agent content mentioning a timeout must not change run status."""
+        from ai4sci_bench.adapters.mimo_code_cli import MiMoCodeCLIAdapter
+        adapter = MiMoCodeCLIAdapter()
+        adapter.sandbox = "os"
+        adapter.repo_root = tmp_path
+        mock_sb = MagicMock()
+        mock_sb.run_agent.return_value = _mock_os_sandbox_result(
+            success=True,
+            log="The previous command timed out, but the solution completed.",
+            stdout='{"type":"result","subtype":"success","is_error":false}',
+        )
+        adapter._os_sandbox = mock_sb
+
+        result = adapter.solve(_make_task_instance(tmp_path))
+        assert result.status == RunStatus.COMPLETED
 
     def test_solve_os_stores_image_identity(self, tmp_path):
         from ai4sci_bench.adapters.mimo_code_cli import MiMoCodeCLIAdapter
@@ -375,7 +392,7 @@ class TestOpenHandsOsSandbox:
         adapter.repo_root = tmp_path
         mock_sb = MagicMock()
         mock_sb.run_agent.return_value = _mock_os_sandbox_result(
-            success=False, log="Agent timed out",
+            success=False, log="OS sandbox agent execution timed out (60s)",
         )
         adapter._os_sandbox = mock_sb
         venv = self._make_fake_venv(tmp_path)

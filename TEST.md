@@ -218,7 +218,10 @@ homes per instance + prompt level and across repeated executions of the same
 run key, collision-resistant run-key paths, `CLAUDE_CONFIG_DIR` override semantics,
 unrestricted-mode opt-out, per-instance kimi homes for both host env and
 `--sandbox os` rw mounts, concurrent Kimi root initialization, explicit
-`kimi_home` passthrough, and teardown cleanup of the whole home root.
+`kimi_home` passthrough, teardown cleanup of the whole home root, and exact
+OS/Linux namespace timeout-marker classification. Timeout regressions must
+cover genuine runner timeouts as well as successful and failed agent logs that
+merely contain the words `timed out`.
 
 ## CLI Task Draft upload and browser confirmation
 

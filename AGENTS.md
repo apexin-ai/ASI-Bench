@@ -74,7 +74,8 @@
   agent 类型与精确安装命令，produce-only result 也必须持久化原生 token cost。
 - 持久化元数据的路径脱敏必须保留完整 HTTP(S) API endpoint，只替换 URL
   之外的宿主机绝对路径；agent 执行失败必须报告为 `attempt_status:
-  execution_failed`，不得与 scorer 完成或低分混淆。
+  execution_failed`，不得与 scorer 完成或低分混淆。sandbox 运行只在执行失败且
+  返回完整的框架 timeout 标记时报告 `TIMEOUT`，不得解析 agent 日志中的自然语言。
 - 模型调用记录必须与可见 trajectory 分离，使用版本化 sidecar 保存每次可观测
   completion 的边界、ID、生命周期、传输/进程结果、内容状态和重试关系；空、截断、
   不可用或无法解析的事件流必须显式记录 coverage gap。只有 attempted-call 分母及

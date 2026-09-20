@@ -12,6 +12,7 @@ from pathlib import Path
 from ai4sci_bench.adapters.subprocess_base import (
     SubprocessAgentAdapter,
     collect_output_files,
+    is_os_sandbox_timeout,
 )
 from ai4sci_bench.core.types import AgentOutput, CostInfo, RunStatus, TaskInstance, ToolMode
 
@@ -207,7 +208,7 @@ class MiMoCodeCLIAdapter(SubprocessAgentAdapter):
         produced_files = collect_output_files(workspace, task_instance)
         parsed_log = self._parse_log(raw_stdout or "") if raw_stdout else log
 
-        if "timed out" in log:
+        if is_os_sandbox_timeout(success, log):
             status = RunStatus.TIMEOUT
         elif success:
             status = RunStatus.COMPLETED

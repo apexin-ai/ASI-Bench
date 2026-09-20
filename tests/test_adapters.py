@@ -16,7 +16,11 @@ from ai4sci_bench.adapters.cli_agent import CLIAgentAdapter
 from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
 from ai4sci_bench.adapters.direct_llm import DirectLLMAdapter
 from ai4sci_bench.adapters.codex_cli import CodexCLIAdapter
-from ai4sci_bench.adapters.subprocess_base import safe_run_key
+from ai4sci_bench.adapters.subprocess_base import (
+    is_linux_ns_timeout,
+    is_os_sandbox_timeout,
+    safe_run_key,
+)
 from ai4sci_bench.runner.task_env import TaskEnvironment
 
 
@@ -44,6 +48,52 @@ def test_safe_run_key_keeps_colliding_prefixes_distinct():
 
 def test_safe_run_key_distinguishes_replaced_characters():
     assert safe_run_key("task/a") != safe_run_key("task?a")
+
+
+@pytest.mark.parametrize(
+    ("detector", "success", "log", "expected"),
+    [
+        (
+            is_os_sandbox_timeout,
+            False,
+            "OS sandbox agent execution timed out (60s)",
+            True,
+        ),
+        (
+            is_os_sandbox_timeout,
+            True,
+            "OS sandbox agent execution timed out (60s)",
+            False,
+        ),
+        (
+            is_os_sandbox_timeout,
+            False,
+            "OS sandbox agent execution timed out (unknown)",
+            False,
+        ),
+        (
+            is_os_sandbox_timeout,
+            False,
+            "OS sandbox agent execution timed out (60s) extra",
+            False,
+        ),
+        (
+            is_linux_ns_timeout,
+            False,
+            "linux_ns execution timed out (30s)",
+            True,
+        ),
+        (
+            is_linux_ns_timeout,
+            False,
+            "agent discussed a command that timed out",
+            False,
+        ),
+        (is_linux_ns_timeout, False, None, False),
+    ],
+)
+def test_sandbox_timeout_marker_detection(detector, success, log, expected):
+    assert detector(success, log) is expected
 
 
 class TestAgentAdapterInterface:
@@ -144,6 +194,35 @@ class TestCLIAgentAdapter:
         mock_run.assert_not_called()
         mock_linux_ns.run_agent.assert_called_once()
         assert mock_linux_ns.run_agent.call_args.kwargs["shell"] is True
+
+    @pytest.mark.parametrize(
+        ("sandbox_log", "expected_status"),
+        [
+            ("linux_ns execution timed out (30s)", RunStatus.TIMEOUT),
+            ("agent discussed a command that timed out", RunStatus.FAILED),
+        ],
+    )
+    @patch("ai4sci_bench.adapters.subprocess_base.validate_sandbox_mode")
+    @patch("ai4sci_bench.adapters.subprocess_base.get_task_environment", return_value=None)
+    @patch("ai4sci_bench.adapters.subprocess_base.LinuxNSSandbox")
+    def test_linux_ns_timeout_marker_is_exact(
+        self,
+        mock_linux_ns_cls,
+        mock_get_task_env,
+        mock_validate,
+        sample_task_instance,
+        sandbox_log,
+        expected_status,
+    ):
+        adapter = CLIAgentAdapter(cmd_template="echo 'test output'", timeout=30)
+        adapter.setup({"sandbox": "linux_ns"})
+        mock_linux_ns_cls.return_value.run_agent.return_value = (
+            False, sandbox_log, "", ""
+        )
+
+        result = adapter.solve(sample_task_instance)
+
+        assert result.status == expected_status
 
     def test_template_values_are_shell_quoted(self, tmp_dir, sample_task_dir):
         """Bug P3: substituted values must be shlex-quoted so that

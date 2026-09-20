@@ -31,6 +31,29 @@ from ai4sci_bench.runner.task_env import TaskEnvironmentManager
 # ── Shared helpers (used by both SubprocessAgentAdapter and DirectLLMAdapter) ──
 
 
+OS_SANDBOX_TIMEOUT_PREFIX = "OS sandbox agent execution timed out ("
+LINUX_NS_TIMEOUT_PREFIX = "linux_ns execution timed out ("
+
+
+def _is_timeout_marker(success: bool, log: str | None, prefix: str) -> bool:
+    if success or not isinstance(log, str):
+        return False
+    if not log.startswith(prefix) or not log.endswith("s)"):
+        return False
+    timeout_seconds = log[len(prefix):-2]
+    return timeout_seconds.isdigit()
+
+
+def is_os_sandbox_timeout(success: bool, log: str | None) -> bool:
+    """Return whether the OS sandbox emitted its exact timeout marker."""
+    return _is_timeout_marker(success, log, OS_SANDBOX_TIMEOUT_PREFIX)
+
+
+def is_linux_ns_timeout(success: bool, log: str | None) -> bool:
+    """Return whether the Linux namespace runner emitted its timeout marker."""
+    return _is_timeout_marker(success, log, LINUX_NS_TIMEOUT_PREFIX)
+
+
 def get_task_environment(
     task_env_manager: TaskEnvironmentManager | None,
     task_instance: TaskInstance,
@@ -182,7 +205,7 @@ class SubprocessAgentAdapter(AgentAdapter):
                 )
                 elapsed = time.time() - t0
                 produced_files = collect_output_files(workspace, task_instance)
-                if "timed out" in sandbox_log:
+                if is_linux_ns_timeout(success, sandbox_log):
                     status = RunStatus.TIMEOUT
                 elif success:
                     status = RunStatus.COMPLETED
