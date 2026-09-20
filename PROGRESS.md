@@ -781,3 +781,25 @@
   shape for every Judge implementation and separately preserve native-provider
   validation coverage.
 - Implementation commit: `587b550`.
+
+## 2026-09: Add bounded process-isolated local scoring
+
+- Problem: public seed31415 scoring remained serial even when `run-score` used
+  multiple agent workers, while custom scorers mutate process-global state and
+  therefore cannot safely share concurrent threads.
+- Resolution: add `score --parallel N` with full-batch preflight, fresh spawned
+  processes per result, stable result ordering, atomic coordinator-owned report
+  writes, fail-closed worker errors, Judge-secret redaction, cancellation
+  cleanup, and cross-process Docker image build locking. Keep each result's
+  gate/scorer/retry/Judge sequence serial, and place a phase barrier between all
+  `run-score` agent jobs and per-repetition scoring to prevent nested fan-out.
+- Verification: concurrency, process isolation, source ordering, serial parity,
+  Judge override/redaction, crash/start failure, atomic report, CLI forwarding,
+  and Docker lock regressions passed; the broader focused suite passed `427`
+  tests with `1 skipped` and `2 deselected`; the full locked offline suite
+  passed `2411` tests with `2 skipped` and `24 deselected`.
+- Prevention: result-level concurrency must use isolated processes, preserve a
+  single workflow-wide budget, never parallelize work inside a result
+  implicitly, and classify all lost worker results as evaluator failures rather
+  than valid zero scores.
+- Implementation commit: `c908aed`.
