@@ -284,6 +284,7 @@ class LLMJudgeScorer(Scorer):
             api_base=api_base,
             api_key=api_key,
             reasoning_effort=reasoning_effort,
+            temperature=temperature,
         )
         effective_api_key = extra_kwargs.get("api_key")
         for attempt in range(MAX_RETRIES):
@@ -294,7 +295,6 @@ class LLMJudgeScorer(Scorer):
                         {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=temperature,
                     max_tokens=max_tokens,
                     **extra_kwargs,
                 )

@@ -83,7 +83,8 @@
 - `score`、`run-score`、`benchflow-score` 的 LLM/VLM Judge runtime override
   使用 `--judge-api-base`、`--judge-api-key-env`、`--judge-api-protocol`；key
   参数只接受环境变量名，不得把 secret 写入 CLI、`task_eval.yaml`、日志或报告。
-  OpenAI-compatible endpoint 必须统一改写模型路由，文本/VLM 行为一致；
+  OpenAI-compatible endpoint 必须统一改写模型路由，文本/VLM 行为一致；显式兼容端点
+  必须在请求体中保留任务配置的 temperature，不得套用 LiteLLM 原生 provider 的参数过滤；
   `run-score` 必须将 override 转发给每个评分子进程，并从 agent 子进程移除
   Judge selector 及专用的非标准 key 环境变量。
 - `run-score` 串联 seed31415 的 `run` 与 `score`；支持 `--parallel` 和

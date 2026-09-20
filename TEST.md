@@ -69,7 +69,8 @@ uv run pytest -q -m e2e
 overrides for text and image Judges. Offline coverage verifies CLI help and
 forwarding, fail-fast validation, native-provider key selection,
 OpenAI-compatible model routing, text/VLM parity, scoped BenchFlow/local-score
-overrides, agent-subprocess credential isolation, and secret redaction:
+overrides, configured-temperature forwarding, agent-subprocess credential
+isolation, and secret redaction:
 
 ```bash
 uv run pytest -q \
@@ -86,8 +87,12 @@ endpoint must include all three settings: `--judge-api-base`,
 mock all model calls, and assert that neither exceptions nor persisted score
 details contain the secret. Native Gemini coverage uses a key-only override;
 TokenRouter coverage expects the OpenAI-compatible
-`openai/google/gemini-*` LiteLLM route. Real-provider smoke tests belong under
-the opt-in `integration` or `e2e` markers.
+`openai/google/gemini-*` LiteLLM route. For an explicit OpenAI-compatible
+endpoint, text, VLM, and CMOS Judges pass the configured temperature in the
+request body so LiteLLM does not apply native-provider filtering; native
+provider calls keep the top-level parameter and its normal validation.
+Real-provider smoke tests belong under the opt-in `integration` or `e2e`
+markers.
 
 ## pi / opencode native adapters
 

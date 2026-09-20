@@ -225,6 +225,8 @@ class TestLLMJudgeScorer:
         assert kwargs["model"] == "openai/google/gemini-3.5-flash"
         assert kwargs["api_base"] == "https://api.tokenrouter.com/v1"
         assert kwargs["api_key"] == "tokenrouter-secret"
+        assert "temperature" not in kwargs
+        assert kwargs["extra_body"] == {"temperature": 0.0}
         assert result.details["judge_api"] == {
             "api_base": "https://api.tokenrouter.com/v1",
             "api_protocol": "openai",
@@ -498,6 +500,8 @@ class TestMultimodalScorer:
         assert kwargs["model"] == "openai/google/gemini-3.5-flash"
         assert kwargs["api_base"] == "https://api.tokenrouter.com/v1"
         assert kwargs["api_key"] == "tokenrouter-secret"
+        assert "temperature" not in kwargs
+        assert kwargs["extra_body"] == {"temperature": 0.0}
         assert result.details["judge_api"]["api_protocol"] == "openai"
 
     @patch("ai4sci_bench.scorers.multimodal.litellm")

@@ -575,6 +575,7 @@ def _call_vector_judges(
         api_base=api_base,
         api_key=api_key,
         reasoning_effort=reasoning_effort,
+        temperature=temperature,
     )
     # Keep the legacy OpenRouter fallback compatible for direct callers, but
     # include the effective credential in the redaction set if it was used.
@@ -586,7 +587,6 @@ def _call_vector_judges(
                 {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            temperature=temperature,
             max_tokens=max_tokens,
             **request_kwargs,
         )
@@ -1441,6 +1441,7 @@ def _netlist_strict_gate_report(
             api_base=resolved_api.api_base,
             api_key=resolved_api.api_key,
             reasoning_effort=reasoning_effort,
+            temperature=temperature,
         )
         for _ in range(max(1, num_judges)):
             response = litellm.completion(
@@ -1449,7 +1450,6 @@ def _netlist_strict_gate_report(
                     {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=temperature,
                 max_tokens=max_tokens,
                 **request_kwargs,
             )

@@ -186,6 +186,33 @@ class TestJudgeAPIOverride:
             "reasoning_effort": "medium",
         }
 
+    def test_custom_openai_endpoint_forwards_temperature_in_extra_body(self):
+        assert judge_completion_api_kwargs(
+            model="openai/gpt-5.5",
+            api_base="https://api.example.test/v1",
+            api_key="judge-key",
+            reasoning_effort="medium",
+            temperature=0.0,
+        ) == {
+            "api_key": "judge-key",
+            "api_base": "https://api.example.test/v1",
+            "reasoning_effort": "medium",
+            "extra_body": {"temperature": 0.0},
+        }
+
+    def test_native_provider_keeps_top_level_temperature(self):
+        assert judge_completion_api_kwargs(
+            model="openai/gpt-5.5",
+            api_base=None,
+            api_key="judge-key",
+            reasoning_effort="medium",
+            temperature=0.0,
+        ) == {
+            "api_key": "judge-key",
+            "reasoning_effort": "medium",
+            "temperature": 0.0,
+        }
+
     def test_openrouter_route_keeps_legacy_environment_fallback(self):
         with patch.dict("os.environ", {"OPENROUTER_API_KEY": "provider-key"}, clear=False):
             assert judge_completion_api_kwargs(

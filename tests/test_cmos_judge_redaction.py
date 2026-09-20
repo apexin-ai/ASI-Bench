@@ -49,9 +49,14 @@ def test_vector_judge_redacts_key_from_raw_and_parsed_reasoning(tmp_path):
             max_tokens=100,
             max_chars=1000,
             api_key=secret,
+            api_base="https://judge.example.test/v1",
+            api_protocol="openai",
         )
 
     serialized = json.dumps(result)
+    kwargs = completion.call_args.kwargs
+    assert "temperature" not in kwargs
+    assert kwargs["extra_body"] == {"temperature": 0.0}
     assert secret not in serialized
     assert "<redacted>" in result["raw_responses"][0]
     assert "<redacted>" in result["parsed_responses"][0]["reasoning"]
@@ -95,6 +100,9 @@ def test_strict_gate_redacts_key_from_raw_and_parsed_reasoning(tmp_path):
         )
 
     serialized = json.dumps(result)
+    kwargs = completion.call_args.kwargs
+    assert "temperature" not in kwargs
+    assert kwargs["extra_body"] == {"temperature": 0.0}
     assert secret not in serialized
     assert "<redacted>" in result["raw_responses"][0]
     assert "<redacted>" in result["parsed_responses"][0]["reasoning"]

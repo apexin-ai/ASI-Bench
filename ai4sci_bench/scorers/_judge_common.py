@@ -241,9 +241,10 @@ def judge_completion_api_kwargs(
     api_base: str | None,
     api_key: str | None,
     reasoning_effort: str | None = None,
-) -> dict[str, str]:
+    temperature: float | None = None,
+) -> dict[str, Any]:
     """Build identical credential/endpoint kwargs for text and VLM judges."""
-    kwargs: dict[str, str] = {}
+    kwargs: dict[str, Any] = {}
     if api_key:
         kwargs["api_key"] = api_key
     elif api_base is None and model.startswith("openrouter/"):
@@ -258,6 +259,13 @@ def judge_completion_api_kwargs(
         kwargs["api_base"] = api_base
     if reasoning_effort:
         kwargs["reasoning_effort"] = reasoning_effort
+    if temperature is not None:
+        if api_base and model.startswith("openai/"):
+            # A compatible gateway can support parameters that LiteLLM's
+            # native OpenAI model policy rejects before making the request.
+            kwargs["extra_body"] = {"temperature": temperature}
+        else:
+            kwargs["temperature"] = temperature
     return kwargs
 
 
