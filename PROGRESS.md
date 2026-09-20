@@ -746,3 +746,20 @@
 - Prevention: timeout tests must cover genuine runner markers, successful logs
   containing timeout language, and malformed or unrelated failure messages.
 - Implementation commit: `cc01f47`.
+
+## 2026-09: Repair formal task scorer runtime inputs
+
+- Problem: the Levin scorer looked for trusted training data in agent outputs,
+  its search result type lacked the decorator required by its positional
+  constructors, and the CMOS scorer still loaded the removed monolithic
+  `task.yaml` before building its ngspice image.
+- Resolution: read Levin training data from the reference bundle, make
+  `SearchResult` a dataclass, and load CMOS metadata through the framework's
+  split-aware `TaskLoader`.
+- Verification: three regression tests failed before the fixes and passed
+  afterward; public-policy and CMOS Judge tests passed, and the full locked
+  offline suite passed `2388` tests, with `2 skipped` and `24 deselected`.
+- Prevention: task scorer regressions must keep trusted inputs separate from
+  submission outputs and exercise task runtime metadata through the same
+  loader used by the framework.
+- Implementation commit: `1dd3922`.
