@@ -152,7 +152,7 @@ class LevinContextGridSearchScorer(Scorer):
             )
 
         try:
-            training_data = read_json(pred_dir / "data" / "training_levels.json")
+            training_data = read_json(ref_dir / "data" / "training_levels.json")
             hidden = read_json(ref_dir / "hidden_eval.json")
             budget = int(config.get("budget", hidden.get("budget", 2500)))
             expansion_ratio_exponent = float(config.get("expansion_ratio_exponent", 3.0))

@@ -30,11 +30,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import litellm
-import yaml
 from dotenv import load_dotenv
 
 from ai4sci_bench.core.logger import get_logger
 from ai4sci_bench.core.scorer import Scorer, register_scorer
+from ai4sci_bench.core.task import TaskLoader
 from ai4sci_bench.core.types import ScoreDetail
 from ai4sci_bench.runner.task_image import TaskImageBuilder
 from ai4sci_bench.scorers.llm_judge import JUDGE_SYSTEM_PROMPT
@@ -60,9 +60,9 @@ def _repo_root() -> Path:
 
 def _load_task_metadata_for_scoring() -> Dict[str, Any]:
     task_dir = _task_dir()
-    metadata = yaml.safe_load((task_dir / "task.yaml").read_text(encoding="utf-8")) or {}
-    metadata["_task_dir"] = str(task_dir)
-    return metadata
+    return TaskLoader(_repo_root() / "tasks").load_task_metadata(
+        task_dir / "task_meta.yaml"
+    )
 
 
 def _run_ngspice_in_task_image(work_dir: Path, netlist_name: str, timeout_s: int) -> subprocess.CompletedProcess[str]:

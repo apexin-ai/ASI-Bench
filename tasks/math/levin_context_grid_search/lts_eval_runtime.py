@@ -62,6 +62,7 @@ def legal_mask_code(legal: list[str] | tuple[str, ...] | None) -> str:
     legal_set = set(legal or [])
     return "".join(action if action in legal_set else "-" for action in ACTION_ORDER)
 
+@dataclass
 class SearchResult:
     solved: bool
     solution: list[str]

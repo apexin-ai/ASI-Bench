@@ -401,6 +401,15 @@ for generator/reference-builder symbols and forbids scorers from importing
 `generate_gt`, so seed31415 remains locally scoreable without exposing seed42
 GT through the public scorer API.
 
+Formal-task scorer runtime regressions verify that the Levin scorer reads
+training data from the reference bundle rather than agent outputs, its search
+result type is constructible, and the CMOS scorer loads split task metadata
+before building the ngspice image:
+
+```bash
+uv run --frozen pytest -q tests/test_task_scorer_runtime_regressions.py
+```
+
 BenchFlow seed31415 adapter regression coverage validates the manifest seed and
 instance boundary, required run-result binding, independent agent execution
 status checks, deterministic artifact hashing, public reference usage, and
