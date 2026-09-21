@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "tested_python": "3.12.14",
+  "tested_platform": "macOS arm64",
+  "mcp_sdk": "1.30.0",
+  "servers": [
+    {
+      "id": "sketchup",
+      "repository": "https://github.com/BearNetwork-BRNKC/SketchUp-MCP.git",
+      "revision": "61e7035d50ac1e68bfa557b4162c3e50857ccfd3",
+      "patch": "sketchup.patch",
+      "patch_sha256": "79e5c74d3bdf332bb7594dc8e4695ac506f83d73bfc280eca10af40ca5390c5b",
+      "constraints": "sketchup-tested.txt"
+    },
+    {
+      "id": "fusion360",
+      "repository": "https://github.com/ArchimedesCrypto/fusion360-mcp-server.git",
+      "revision": "4d79909ad236de90b3f525468ef466c6cd2a205b",
+      "patch": "fusion360.patch",
+      "patch_sha256": "6e8280313a046983b8a757b824e4358a7f95b5153724cbc003e31bd1c3def742",
+      "constraints": "fusion360-tested.txt"
+    },
+    {
+      "id": "cadquery",
+      "repository": "https://github.com/bertvanbrakel/mcp-cadquery.git",
+      "revision": "eae44ca8f95a6f48cf450c147feaed404b1a8a79",
+      "patch": "cadquery.patch",
+      "patch_sha256": "a2d917549a7171257f46fcfdd93187281800f7da2adb3f2fc49ea55c56c483e6",
+      "constraints": "cadquery-tested.txt"
+    }
+  ]
+}

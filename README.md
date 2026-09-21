@@ -341,6 +341,12 @@ sandbox selection, and platform-specific commands.
 
 ### Scientific MCP tools
 
+For opt-in, revision-pinned repairs of the SketchUp, Fusion 360 and CadQuery
+stdio servers, see [CAD MCP repair instructions](scripts/mcp/cad-repairs/README.md)
+and the [local smoke results](docs/mcp/cad-mcp-repair-smoke.md). These patches do
+not modify your MCP configuration or certify real CAD backends.
+
+
 ASI-Bench ships an operator-configured catalog for COMSOL, OpenFOAM, MATLAB,
 Simulink, MWORKS, PyNite, EnergyPlus, Text2Sim, NetLogo, AFSIM, Blender,
 FreeCAD, AutoCAD, Fusion 360, SketchUp, PubChem, and GNS3. The catalog records

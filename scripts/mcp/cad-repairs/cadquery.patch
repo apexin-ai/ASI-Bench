@@ -1,0 +1,221 @@
+diff --git a/pyproject.toml b/pyproject.toml
+index 3bc6d87..07c04ab 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -19,6 +19,8 @@ classifiers = [
+ # Dependencies moved from requirements.txt
+ dependencies = [
+     "cadquery==2.5.2",
++    "mcp==1.30.0",
++    "pydantic>=2,<3",
+     "fastapi",
+     "uvicorn[standard]",
+     "sse-starlette",
+diff --git a/src/mcp_cadquery_server/handlers.py b/src/mcp_cadquery_server/handlers.py
+index 7921ec6..41167ba 100644
+--- a/src/mcp_cadquery_server/handlers.py
++++ b/src/mcp_cadquery_server/handlers.py
+@@ -13,8 +13,8 @@ from typing import List, Dict, Any, Optional
+ import cadquery as cq
+ from cadquery import cqgi
+ 
+-from src.mcp_cadquery_server.env_setup import prepare_workspace_env, _run_command_helper
+-from src.mcp_cadquery_server.core import (
++from .env_setup import prepare_workspace_env, _run_command_helper
++from .core import (
+     export_shape_to_file,
+     export_shape_to_svg_file,
+     parse_docstring_metadata,
+@@ -22,7 +22,7 @@ from src.mcp_cadquery_server.core import (
+     get_shape_description as core_get_shape_description,
+ )
+ 
+-from src.mcp_cadquery_server.models import ExecuteCadqueryScriptArgs
++from .models import ExecuteCadqueryScriptArgs
+ 
+ # Import shared state and config
+ from .state import (
+diff --git a/src/mcp_cadquery_server/mcp_api.py b/src/mcp_cadquery_server/mcp_api.py
+index 64e8539..ce1849c 100644
+--- a/src/mcp_cadquery_server/mcp_api.py
++++ b/src/mcp_cadquery_server/mcp_api.py
+@@ -9,7 +9,7 @@ def get_tool_schemas() -> Dict[str, Dict[str, Any]]:
+     """
+     Generates input schemas for each tool based on Pydantic models.
+     """
+-    from src.mcp_cadquery_server.models import (
++    from .models import (
+         ExecuteCadqueryScriptArgs,
+         ExportShapeArgs,
+         ExportShapeToSvgArgs,
+@@ -22,15 +22,15 @@ def get_tool_schemas() -> Dict[str, Dict[str, Any]]:
+     )
+ 
+     schemas = {
+-        "execute_cadquery_script": ExecuteCadqueryScriptArgs.schema(),
+-        "export_shape": ExportShapeArgs.schema(),
+-        "export_shape_to_svg": ExportShapeToSvgArgs.schema(),
+-        "scan_part_library": ScanPartLibraryArgs.schema(),
+-        "save_workspace_module": SaveWorkspaceModuleArgs.schema(),
+-        "install_workspace_package": InstallWorkspacePackageArgs.schema(),
+-        "search_parts": SearchPartsArgs.schema(),
+-        "get_shape_properties": GetShapePropertiesArgs.schema(),
+-        "get_shape_description": GetShapeDescriptionArgs.schema(),
++        "execute_cadquery_script": ExecuteCadqueryScriptArgs.model_json_schema(),
++        "export_shape": ExportShapeArgs.model_json_schema(),
++        "export_shape_to_svg": ExportShapeToSvgArgs.model_json_schema(),
++        "scan_part_library": ScanPartLibraryArgs.model_json_schema(),
++        "save_workspace_module": SaveWorkspaceModuleArgs.model_json_schema(),
++        "install_workspace_package": InstallWorkspacePackageArgs.model_json_schema(),
++        "search_parts": SearchPartsArgs.model_json_schema(),
++        "get_shape_properties": GetShapePropertiesArgs.model_json_schema(),
++        "get_shape_description": GetShapeDescriptionArgs.model_json_schema(),
+         "launch_cq_editor": {"type": "object", "properties": {}, "required": []},
+     }
+ 
+diff --git a/src/mcp_cadquery_server/models.py b/src/mcp_cadquery_server/models.py
+index 3982a43..0245a21 100644
+--- a/src/mcp_cadquery_server/models.py
++++ b/src/mcp_cadquery_server/models.py
+@@ -1,5 +1,5 @@
+ from typing import List, Dict, Any, Optional, Union
+-from pydantic import BaseModel, Field, root_validator
++from pydantic import BaseModel, Field
+ 
+ 
+ class ExecuteCadqueryScriptArgs(BaseModel):
+@@ -12,17 +12,8 @@ class ExecuteCadqueryScriptArgs(BaseModel):
+         None, description="Single parameter dictionary (converted to parameter_sets internally)"
+     )
+ 
+-    @root_validator
+-    def check_params(cls, values):
+-        param_sets, params = values.get('parameter_sets'), values.get('parameters')
+-        if param_sets is not None:
+-            if not isinstance(param_sets, list):
+-                raise ValueError("'parameter_sets' must be a list of dictionaries")
+-            if not all(isinstance(p, dict) for p in param_sets):
+-                raise ValueError("Each item in 'parameter_sets' must be a dictionary")
+-        if params is not None and not isinstance(params, dict):
+-            raise ValueError("'parameters' must be a dictionary")
+-        return values
++    # Pydantic v2 validates the typed list/dict fields above directly.
++    # No deprecated post root_validator is needed.
+ 
+ 
+ class ExportShapeArgs(BaseModel):
+diff --git a/src/mcp_cadquery_server/stdio_server.py b/src/mcp_cadquery_server/stdio_server.py
+index eb6102e..5b6b2f2 100644
+--- a/src/mcp_cadquery_server/stdio_server.py
++++ b/src/mcp_cadquery_server/stdio_server.py
+@@ -1,62 +1,48 @@
+-import asyncio
+-import sys
++"""Standard MCP stdio transport; legacy HTTP/SSE transport is unchanged."""
+ import json
+-from typing import Dict, Any, Optional
+-
+-# Import necessary components from other modules
+-from .state import log
+-from .mcp_api import get_server_info, process_tool_request # Import process_tool_request
+-
+-async def run_stdio_mode() -> None:
+-    """Runs the server in MCP stdio mode, reading JSON requests from stdin."""
+-    log.info("Starting server in Stdio mode. Reading from stdin...")
+-
+-    # Send server_info once at the start for stdio mode
+-    try:
+-        server_info_message = get_server_info()
+-        print(json.dumps(server_info_message), flush=True)
+-        log.info("Sent server_info via stdout for stdio mode.")
+-    except Exception as e:
+-        log.error(f"Failed to generate or send initial server_info in stdio mode: {e}")
+-        # Send an error message if possible
+-        error_resp = {"type": "tool_error", "request_id": "server-init-fail", "error": f"Failed to send server_info: {e}"}
+-        try: print(json.dumps(error_resp), flush=True)
+-        except: pass # Ignore if print fails
+-
+-    reader = asyncio.StreamReader()
+-    protocol = asyncio.StreamReaderProtocol(reader)
+-    loop = asyncio.get_event_loop()
+-    try:
+-        await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+-    except Exception as e:
+-         log.error(f"Error connecting read pipe for stdin: {e}. Stdio mode may not work.", exc_info=True)
+-         print(json.dumps({"type": "tool_error", "request_id": "stdio-init-fail", "error": f"Failed to connect stdin: {e}"}), flush=True)
+-         return # Cannot proceed without stdin
+-
+-    request_data: Optional[Dict[str, Any]] = None # Define request_data outside loop for error handling scope
+-    while True:
+-        try:
+-            line_bytes = await reader.readline()
+-            if not line_bytes: break # EOF
+-            line = line_bytes.decode('utf-8').strip()
+-            if not line: continue
+-            log.debug(f"Received stdio line: {line}")
+-            request_data = json.loads(line) # Assign here
+-            # Validate basic structure
+-            if not isinstance(request_data, dict) or "tool_name" not in request_data or "request_id" not in request_data:
+-                raise ValueError("Invalid MCP request format (missing tool_name or request_id)")
+-
+-            response = process_tool_request(request_data) # Use imported function
+-            if response: print(json.dumps(response), flush=True)
+-        except json.JSONDecodeError as e:
+-            log.error(f"Failed to decode JSON from stdin: {e}"); error_resp = {"type": "tool_error", "request_id": "unknown", "error": f"Invalid JSON received: {e}"}; print(json.dumps(error_resp), flush=True)
+-        except ValueError as e: # Catch validation errors
+-             log.error(f"Invalid request format: {e}")
+-             req_id = request_data.get("request_id", "unknown") if isinstance(request_data, dict) else "unknown"
+-             error_resp = {"type": "tool_error", "request_id": req_id, "error": f"Invalid request format: {e}"}; print(json.dumps(error_resp), flush=True)
+-        except Exception as e:
+-             log.error(f"Error processing stdio request: {e}", exc_info=True)
+-             req_id = request_data.get("request_id", "unknown") if isinstance(request_data, dict) else "unknown"
+-             error_resp = {"type": "tool_error", "request_id": req_id, "error": f"Internal server error: {e}"}; print(json.dumps(error_resp), flush=True)
+-        except KeyboardInterrupt: log.info("KeyboardInterrupt received, exiting stdio mode."); break
+-        except Exception as e: log.error(f"Unexpected error in stdio loop: {e}", exc_info=True); await asyncio.sleep(1)
+\ No newline at end of file
++from contextlib import redirect_stdout
++import sys
++
++from mcp import types
++from mcp.server.lowlevel import Server
++from mcp.server.stdio import stdio_server
++
++from .mcp_api import get_server_info, process_tool_request
++
++
++def create_server():
++    server = Server("mcp-cadquery-server")
++
++    @server.list_tools()
++    async def list_tools():
++        return [types.Tool(name=tool["name"], description=tool["description"],
++                           inputSchema=tool["input_schema"])
++                for tool in get_server_info()["tools"]]
++
++    @server.call_tool()
++    async def call_tool(name, arguments):
++        # Existing handlers are synchronous; capture Python prints so business
++        # output cannot corrupt the stdio JSON-RPC stream. Not a security sandbox.
++        with redirect_stdout(sys.stderr):
++            response = process_tool_request({
++                "tool_name": name,
++                "arguments": arguments,
++                "request_id": str(server.request_context.request_id),
++            })
++        if response is None:
++            raise RuntimeError("Tool handler returned no result")
++        if response["type"] == "tool_error":
++            raise ValueError(response["error"])
++        result = response["result"]
++        return types.CallToolResult(
++            content=[types.TextContent(type="text", text=json.dumps(result))],
++            isError=isinstance(result, dict) and result.get("success") is False,
++        )
++
++    return server
++
++
++async def run_stdio_mode():
++    server = create_server()
++    async with stdio_server() as (read_stream, write_stream):
++        await server.run(read_stream, write_stream, server.create_initialization_options())

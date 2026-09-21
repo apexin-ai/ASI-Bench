@@ -101,6 +101,9 @@
   restricted 运行不得继承 ambient MCP。配置必须严格校验，启用时固定为
   search mode；当前 `--sandbox os` 因宿主 GUI/许可证/二进制映射不明确而须
   fail-fast。catalog 只保存上游来源、前置条件和可编辑模板，不捆绑第三方软件。
+- CAD MCP 上游兼容补丁仅存于 `scripts/mcp/cad-repairs/`，绑定源 revision 和
+  SHA-256；只对显式指定的干净副本应用，不捆绑 CAD 软件、不自动更改本机凭据配置。
+  patched stdio 冒烟通过不得升级为真实 CAD 业务认证；复测需临时 HOME 与端口保护。
 - 外部仿真 benchmark 接入通过 `ai4sci_bench.integrations`：ScienceAgentBench
   转换器只把源记录放入本地 `private/`，CFDLLMBench 使用本地固定 OpenFOAM
   镜像，SciAgentGym 工具逐实例 allowlist，COSMO-Agent 使用

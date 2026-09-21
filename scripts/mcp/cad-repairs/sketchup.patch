@@ -1,0 +1,26 @@
+diff --git a/pyproject.toml b/pyproject.toml
+index c39a9bb..3bcb01a 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -14,7 +14,7 @@ classifiers = [
+     "Operating System :: OS Independent",
+ ]
+ dependencies = [
+-    "mcp[cli]>=1.3.0"
++    "mcp[cli]==1.30.0"
+ ]
+ 
+ [project.urls]
+diff --git a/src/sketchup_mcp/server.py b/src/sketchup_mcp/server.py
+index 3e92cea..49af3e0 100644
+--- a/src/sketchup_mcp/server.py
++++ b/src/sketchup_mcp/server.py
+@@ -248,7 +248,7 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
+ # Create MCP server with lifespan support
+ mcp = FastMCP(
+     "SketchupMCP",
+-    description="Sketchup integration through the Model Context Protocol",
++    instructions="Sketchup integration through the Model Context Protocol",
+     lifespan=server_lifespan
+ )
+ 

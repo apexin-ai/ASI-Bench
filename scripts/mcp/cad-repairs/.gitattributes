@@ -1,0 +1,3 @@
+# Patch context whitespace and upstream CRLF are significant; preserve exact
+# bytes so manifest SHA-256 and git apply remain reproducible on all platforms.
+*.patch -text -whitespace

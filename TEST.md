@@ -535,3 +535,19 @@ instrumentation, laboratory, and scientific-computing entries. Runtime
 availability is machine-specific; use
 `.claude-manager/artifacts/task-78/download_and_test.py` for best-effort local
 package installation and executable probes.
+
+
+## CAD MCP compatibility repair tests
+
+Offline bundle validation (no CAD, network or extra MCP dependencies):
+
+```bash
+uv run --frozen pytest tests/test_cad_mcp_repairs.py tests/test_mcp_config.py -q
+```
+
+Checks patch hashes, pinned SDK snapshots, clean revision enforcement,
+preflight-before-modification, checksum rejection and repeat-apply rejection.
+For opt-in installed-server stdio tests, follow
+`scripts/mcp/cad-repairs/README.md`. The live suite uses a temporary HOME/cwd,
+port protection, and 60-second per-server timeouts; validates initialization,
+all tools pages, repeated lists, errors and recovery; never calls real CAD.

@@ -1,0 +1,73 @@
+diff --git a/requirements.txt b/requirements.txt
+index 0d3b63b..c3cf91c 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,3 +1,5 @@
+ fastapi>=0.95.0
+ uvicorn>=0.21.0
+ pydantic>=2.0.0
++
++mcp==1.30.0
+diff --git a/src/main.py b/src/main.py
+index 519c6b0..7188456 100644
+--- a/src/main.py
++++ b/src/main.py
+@@ -244,22 +244,42 @@ class McpServer:
+ 
+ 
+ def run_mcp_server():
+-    """Run the MCP server."""
+-    server = McpServer()
+-    
+-    # Read from stdin, write to stdout
+-    for line in sys.stdin:
+-        try:
+-            request = json.loads(line)
+-            response = server.handle_request(request)
+-            sys.stdout.write(json.dumps(response) + "\n")
+-            sys.stdout.flush()
+-        except json.JSONDecodeError:
+-            sys.stderr.write(f"Error: Invalid JSON: {line}\n")
+-            sys.stderr.flush()
+-        except Exception as e:
+-            sys.stderr.write(f"Error: {str(e)}\n")
+-            sys.stderr.flush()
++    """Serve standard MCP over stdio; tools generate scripts, never execute CAD."""
++    import asyncio
++    from mcp import types
++    from mcp.server.lowlevel import Server
++    from mcp.server.stdio import stdio_server
++
++    server = Server("fusion360-script-generator")
++
++    @server.list_tools()
++    async def mcp_list_tools():
++        return [
++            types.Tool(
++                name=tool["name"],
++                description=tool["description"] + " Returns Python source only; does not execute Fusion 360.",
++                inputSchema={
++                    "type": "object",
++                    "properties": tool["parameters"],
++                    "required": [name for name, spec in tool["parameters"].items() if "default" not in spec],
++                    "additionalProperties": False,
++                },
++            )
++            for tool in TOOL_REGISTRY
++        ]
++
++    @server.call_tool()
++    async def mcp_call_tool(name, arguments):
++        # The SDK validates the advertised input schema and maps exceptions to
++        # isError tool results. Preserve the upstream script generator.
++        script = generate_script(name, arguments)
++        return [types.TextContent(type="text", text=script)]
++
++    async def serve():
++        async with stdio_server() as (read_stream, write_stream):
++            await server.run(read_stream, write_stream, server.create_initialization_options())
++
++    asyncio.run(serve())
+ 
+ 
+ def run_http_server():
