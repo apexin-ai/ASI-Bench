@@ -803,3 +803,16 @@
   implicitly, and classify all lost worker results as evaluator failures rather
   than valid zero scores.
 - Implementation commit: `c908aed`.
+
+## 2026-09-21 — CAD MCP 三项离线兼容修复
+
+- Commit: `d697881` (`fix: add reproducible CAD MCP compatibility repairs`).
+- 问题：SketchUp 的 FastMCP 构造参数不兼容；Fusion stdio 并非标准 MCP；
+  CadQuery 同时存在 src 布局导入、Pydantic v2 和自定义 stdio 协议问题。
+- 解决：独立上游副本修复，revision/SHA-256 固定补丁与依赖快照；提供先预检所有
+  checkout 再应用的 helper；不改凭据配置，不捆绑软件。4 个 live 回归由红转绿，
+  各发现 10 个工具；离线项目相关测试 16 passed。完整回归 2415 passed、2 failed，
+  两失败在未修改 origin/main 同样复现（macOS linux_ns、临时路径假定），不是全绿。
+- 避免复发：从安装包而非源码 cwd 验证导入；测试完整握手/列表/错误后存活；
+  区分源代码生成与真实 CAD 执行；原始 CRLF patch 通过局部 attributes 保留字节。
+  原始 smoke 安装和历史失败报告保留，不以 patched 本地通过冒称上游已修复。

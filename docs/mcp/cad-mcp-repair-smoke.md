@@ -41,3 +41,14 @@
   非监听 socket 占用保护。如果端口已有服务，测试直接失败，不连接真实插件。
 - 未执行 CAD 建模、任意脚本、文件导出、包安装工具、Ruby、GUI 或设备控制。
   修复并不提供执行沙箱；实际业务工具仍须单独审计、授权和隔离。
+
+## 全项目回归
+
+`uv run --frozen pytest -q`：**2415 passed、2 failed、1 skipped、24 deselected**。
+两个失败已在未修改的 `origin/main` 归档中使用同一环境单独复现：
+
+- `test_mimo_accepts_all_four_modes`：测试在 macOS 请求 Linux-only `linux_ns`。
+- `test_kimi_host_env_uses_host_path`：假定临时路径以 `/tmp` 开头，而 macOS 使用
+  `/var/folders/...`。
+
+因此不能声称全项目全绿；这两项是独立复现的现有平台测试问题，本次不扩大修改范围。
