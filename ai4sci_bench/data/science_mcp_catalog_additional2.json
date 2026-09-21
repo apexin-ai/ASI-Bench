@@ -859,15 +859,26 @@
   },
   "ptc_windchill": {
     "category": "mes-plm",
-    "source": "https://github.com/search?q=ptc_windchill+MCP&type=repositories",
+    "source": "https://github.com/Cars-10/windchill-mcp-server",
     "prerequisites": [
-      "Install or configure ptc_windchill",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/Cars-10/windchill-mcp-server (smoke-tested revision 579b5793f5c30a1f113294f52de45318cf63808e)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install Node dependencies and run npm run build; supply an authorized Windchill instance and private test credentials for business calls.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "ptc_windchill-mcp",
-      "args": []
+      "command": "node",
+      "args": [
+        "/path/to/windchill-mcp-server/dist/index.js"
+      ],
+      "cwd": "/path/to/windchill-mcp-server",
+      "env": {
+        "WINDCHILL_URL": "https://windchill.example.invalid/Windchill",
+        "WINDCHILL_USER": "REPLACE_WITH_TEST_USER",
+        "WINDCHILL_PASSWORD": "REPLACE_WITH_TEST_PASSWORD",
+        "MCP_STDIO_ONLY": "true",
+        "LOG_LEVEL": "error"
+      }
     }
   },
   "enovia_3dexperience": {
@@ -885,15 +896,29 @@
   },
   "aras_innovator": {
     "category": "mes-plm",
-    "source": "https://github.com/search?q=aras_innovator+MCP&type=repositories",
+    "source": "https://github.com/DaanTheoden/aras-claude-agent",
     "prerequisites": [
-      "Install or configure aras_innovator",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/DaanTheoden/aras-claude-agent (smoke-tested revision c642c073272bd1306289d25c6c2c291ff02a4078)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install upstream Python dependencies with mcp==1.30.0; supply an Aras instance, database and private test credentials for business calls.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "aras_innovator-mcp",
-      "args": []
+      "command": "/path/to/aras-claude-agent/.venv/bin/python",
+      "args": [
+        "/path/to/aras-claude-agent/main.py"
+      ],
+      "cwd": "/path/to/aras-claude-agent",
+      "env": {
+        "API_URL": "https://aras.example.invalid/REPLACE_WITH_APPLICATION",
+        "API_USERNAME": "REPLACE_WITH_TEST_USER",
+        "API_PASSWORD": "REPLACE_WITH_TEST_PASSWORD",
+        "ARAS_DATABASE": "REPLACE_WITH_DATABASE",
+        "API_TIMEOUT": "30",
+        "API_RETRY_COUNT": "3",
+        "API_RETRY_DELAY": "1",
+        "LOG_LEVEL": "INFO"
+      }
     }
   },
   "fusion_manage": {
@@ -950,41 +975,54 @@
   },
   "onshape": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=onshape+MCP&type=repositories",
+    "source": "https://www.onshape.com/en/blog/featurescript-mcp-server-enables-text-code-cad",
     "prerequisites": [
-      "Install or configure onshape",
-      "Install or implement an MCP bridge"
+      "Sign in to Onshape and subscribe to the Onshape Labs FeatureScript MCP app; account eligibility and app pricing must be checked separately",
+      "Use an MCP client that supports the hosted HTTP endpoint and complete its OAuth authorization flow",
+      "Unauthenticated smoke testing reached the endpoint but initialize returned HTTP 401; authenticated tools and CAD operations are not verified",
+      "Scope: official FeatureScript assistance, not a general-purpose Onshape REST or PLM bridge"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "onshape-mcp",
-      "args": []
+      "type": "http",
+      "url": "https://fs-mcp.labs.onshape.app/mcp"
     }
   },
   "solidworks": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=solidworks+MCP&type=repositories",
+    "source": "https://github.com/eyfel/mcp-server-solidworks",
     "prerequisites": [
-      "Install or configure solidworks",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/eyfel/mcp-server-solidworks (smoke-tested revision fc3c743228d717393c639ec7fcc5b562ab97662e)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install upstream adapter dependencies; a licensed Windows SolidWorks execution backend is still required for CAD operations.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "solidworks-mcp",
-      "args": []
+      "command": "/path/to/mcp-server-solidworks/.venv/bin/python",
+      "args": [
+        "/path/to/mcp-server-solidworks/adapters/claude/server.py"
+      ],
+      "cwd": "/path/to/mcp-server-solidworks/adapters/claude",
+      "env": {
+        "EXECUTION_BASE_URL": "http://127.0.0.1:5000"
+      }
     }
   },
   "siemens_nx": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=siemens_nx+MCP&type=repositories",
+    "source": "https://github.com/DreamEnding/NX_MCP",
     "prerequisites": [
-      "Install or configure siemens_nx",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/DreamEnding/NX_MCP (smoke-tested revision c5d12eff373839a5a5e7c7f99cc3f6ac928155da)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install nx-mcp and configure the workspace; NX/NXOpen and a licensed host are still required for CAD operations.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "siemens_nx-mcp",
-      "args": []
+      "command": "/path/to/NX_MCP/.venv/bin/nx-mcp",
+      "args": [],
+      "cwd": "/path/to/NX_MCP",
+      "env": {
+        "NX_MCP_WORKSPACE": "/path/to/nx-workspace"
+      }
     }
   },
   "catia": {
@@ -1028,80 +1066,122 @@
   },
   "rhino3d": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=rhino3d+MCP&type=repositories",
+    "source": "https://github.com/jingcheng-chen/rhinomcp",
     "prerequisites": [
-      "Install or configure rhino3d",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/jingcheng-chen/rhinomcp (smoke-tested revision 70b63a2b86e4f92f3250f9a5e4a5813c2a38c163)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install the Python package from the server subdirectory; configure the Rhino plugin and licensed host for operations.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "rhino3d-mcp",
-      "args": []
+      "command": "/path/to/rhinomcp/.venv/bin/rhinomcp",
+      "args": [],
+      "cwd": "/path/to/rhinomcp",
+      "env": {
+        "RHINO_MCP_HOST": "127.0.0.1",
+        "RHINO_MCP_PORT": "1999"
+      }
     }
   },
   "grasshopper": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=grasshopper+MCP&type=repositories",
+    "source": "https://github.com/veoery/GH_mcp_server",
     "prerequisites": [
-      "Install or configure grasshopper",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/veoery/GH_mcp_server (smoke-tested revision bd50b1a316d7ddfe05bc7e9e384e34b2ae91ee39)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install the upstream Python package with mcp==1.30.0; rhino3dm fallback only was tested, not full Grasshopper/Compute.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "grasshopper-mcp",
-      "args": []
+      "command": "/path/to/GH_mcp_server/.venv/bin/grasshopper-mcp",
+      "args": [],
+      "cwd": "/path/to/GH_mcp_server",
+      "env": {
+        "USE_RHINO3DM": "true",
+        "USE_COMPUTE_API": "false"
+      }
     }
   },
   "open_cascade": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=open_cascade+MCP&type=repositories",
+    "source": "https://github.com/Casys-AI/mcp-build123d",
     "prerequisites": [
-      "Install or configure open_cascade",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/Casys-AI/mcp-build123d (smoke-tested revision 3fefb7a86a96745b5f848fe3556025a20a99adea)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install Deno (tested 2.5.6) and the upstream requirements/runtime.txt with requirements/constraints.txt into the configured Python environment (tested build123d 0.11.1, cadquery-ocp-novtk 7.9.3.1.1). Review Deno -A permissions before running.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "open_cascade-mcp",
-      "args": []
+      "command": "deno",
+      "args": [
+        "run",
+        "-A",
+        "/path/to/mcp-build123d/server.ts",
+        "--stdio"
+      ],
+      "cwd": "/path/to/mcp-build123d",
+      "env": {
+        "BUILD123D_PYTHON_BIN": "/path/to/mcp-build123d/.venv/bin/python"
+      }
     }
   },
   "occt": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=occt+MCP&type=repositories",
+    "source": "https://github.com/Casys-AI/mcp-build123d",
     "prerequisites": [
-      "Install or configure occt",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/Casys-AI/mcp-build123d (smoke-tested revision 3fefb7a86a96745b5f848fe3556025a20a99adea)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Same implementation and environment as open_cascade; install Deno 2.5.6 and pinned upstream Python runtime requirements/constraints (build123d 0.11.1, cadquery-ocp-novtk 7.9.3.1.1). Review Deno -A permissions.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "occt-mcp",
-      "args": []
+      "command": "deno",
+      "args": [
+        "run",
+        "-A",
+        "/path/to/mcp-build123d/server.ts",
+        "--stdio"
+      ],
+      "cwd": "/path/to/mcp-build123d",
+      "env": {
+        "BUILD123D_PYTHON_BIN": "/path/to/mcp-build123d/.venv/bin/python"
+      }
     }
   },
   "salome_geometry": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=salome_geometry+MCP&type=repositories",
+    "source": "https://github.com/gnshb/salome-mcp",
     "prerequisites": [
-      "Install or configure salome_geometry",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/gnshb/salome-mcp (smoke-tested revision f9ff4944b8f2e433e300ed9eb1540d16d41e4e07)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install the Python package with mcp==1.30.0; SALOME and its bridge on the configured host/port are required for operations.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "salome_geometry-mcp",
-      "args": []
+      "command": "/path/to/salome-mcp/.venv/bin/salome-mcp",
+      "args": [],
+      "cwd": "/path/to/salome-mcp",
+      "env": {
+        "SALOME_HOST": "127.0.0.1",
+        "SALOME_PORT": "1234"
+      }
     }
   },
   "brlcad": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=brlcad+MCP&type=repositories",
+    "source": "https://github.com/rs0125/BRLCAD_MCP",
     "prerequisites": [
-      "Install or configure brlcad",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/rs0125/BRLCAD_MCP (smoke-tested revision 6daa8aae304baa34b85594bfc2cc5c2fc392268a)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install the Python package with mcp==1.30.0; use the serve subcommand. BRL-CAD executables are required for modeling.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "brlcad-mcp",
-      "args": []
+      "command": "/path/to/BRLCAD_MCP/.venv/bin/brlcad-mcp",
+      "args": [
+        "serve"
+      ],
+      "cwd": "/path/to/BRLCAD_MCP"
     }
   },
   "cadquery": {
@@ -1119,28 +1199,37 @@
   },
   "build123d": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=build123d+MCP&type=repositories",
+    "source": "https://github.com/pzfreo/build123d-mcp",
     "prerequisites": [
-      "Install or configure build123d",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/pzfreo/build123d-mcp (smoke-tested revision ed7602e1c94e03d4ea6bf921a6d0d81074858b88)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install the upstream Python package and geometry dependencies; no modeling/export tool was called.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "build123d-mcp",
-      "args": []
+      "command": "/path/to/build123d-mcp/.venv/bin/build123d-mcp",
+      "args": [],
+      "cwd": "/path/to/build123d-mcp"
     }
   },
   "solvespace": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=solvespace+MCP&type=repositories",
+    "source": "https://github.com/snoble/slvsx-cli",
     "prerequisites": [
-      "Install or configure solvespace",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/snoble/slvsx-cli (smoke-tested revision e92a44ed49787f7edba2a3fc3b3b577b83447ec7)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Run npm ci --ignore-scripts and separately install the matching slvsx binary (tested macOS arm64 v0.2.9); set SLVSX_BINARY. No solve operation tested.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "solvespace-mcp",
-      "args": []
+      "command": "node",
+      "args": [
+        "/path/to/slvsx-cli/mcp-server.js"
+      ],
+      "cwd": "/path/to/slvsx-cli",
+      "env": {
+        "SLVSX_BINARY": "/path/to/slvsx-cli/bin/slvsx"
+      }
     }
   },
   "librecad": {
@@ -1223,15 +1312,29 @@
   },
   "linuxcnc": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=linuxcnc+MCP&type=repositories",
+    "source": "https://github.com/loobric/loobric-cli",
     "prerequisites": [
-      "Install or configure linuxcnc",
-      "Install or implement an MCP bridge"
+      "Install uv and Git on PATH; uv tool run downloads/builds the pinned Loobric MCP implementation in an isolated tool environment",
+      "Replace LOOBRIC_API_KEY in a private configuration with a valid scoped key for the configured Loobric server; use read-only access for MCP read smoke tests",
+      "The public sandbox is shared and may reset; use synthetic test data only and never commit credentials",
+      "This is a third-party indirect LinuxCNC tool-table integration, not LinuxCNC runtime or motion control",
+      "For tool-table sync, separately configure loobric/loobric-clients clients/linuxcnc/loobric_linuxcnc.py and suitable sync credentials; file upload and MCP readback were tested, cloud-to-file and LinuxCNC runtime were not",
+      "First smoke summary: tested implementation, not full device/runtime certification; replace placeholders privately and never commit credentials"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "linuxcnc-mcp",
-      "args": []
+      "command": "uv",
+      "args": [
+        "tool",
+        "run",
+        "--from",
+        "loobric-cli[mcp] @ git+https://github.com/loobric/loobric-cli.git@e6e7f3839dc66382d08cf8b6ba9561101ef812f9",
+        "loobric-mcp"
+      ],
+      "env": {
+        "LOOBRIC_BASE_URL": "https://api.loobric.com",
+        "LOOBRIC_API_KEY": "REPLACE_WITH_SCOPED_TEST_API_KEY",
+        "LOOBRIC_MCP_AGENT": "asibench-cad-test"
+      }
     }
   },
   "machinekit": {
@@ -1249,93 +1352,152 @@
   },
   "grbl": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=grbl+MCP&type=repositories",
+    "source": "https://github.com/georgesFoundation/grbl-mcp",
     "prerequisites": [
-      "Install or configure grbl",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/georgesFoundation/grbl-mcp (smoke-tested revision 5ea1169e98207dab64c9d2b34779f0e8cd9ce595)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Build with cargo build --release --locked (tested Rust 1.88.0); no serial port was opened. Review upstream serial-device configuration before connecting hardware.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "grbl-mcp",
-      "args": []
+      "command": "/path/to/grbl-mcp/target/release/grbl-mcp",
+      "args": [],
+      "cwd": "/path/to/grbl-mcp"
     }
   },
   "fluidnc": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=fluidnc+MCP&type=repositories",
+    "source": "https://github.com/WhitneyDesignLabs/cnc-fluidnc-mcp",
     "prerequisites": [
-      "Install or configure fluidnc",
-      "Install or implement an MCP bridge"
+      "Install Node.js (local smoke tested with v24.21.0)",
+      "Clone WhitneyDesignLabs/cnc-fluidnc-mcp and install dependencies, then run npm run build",
+      "Replace the server entrypoint and cwd with the actual installation paths",
+      "Set FLUIDNC_HOST to your controller URL for device operations; local smoke testing does not verify real hardware",
+      "First smoke summary: tested implementation, not full device/runtime certification; replace placeholders privately and never commit credentials"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "fluidnc-mcp",
-      "args": []
+      "command": "node",
+      "args": [
+        "/path/to/cnc-fluidnc-mcp/build/index.js"
+      ],
+      "cwd": "/path/to/cnc-fluidnc-mcp",
+      "env": {
+        "FLUIDNC_HOST": "http://fluidnc.example.invalid"
+      }
     }
   },
   "marlin": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=marlin+MCP&type=repositories",
+    "source": "https://github.com/dmontgomery40/mcp-3D-printer-server",
     "prerequisites": [
-      "Install or configure marlin",
-      "Install or implement an MCP bridge"
+      "Clone dmontgomery40/mcp-3D-printer-server at smoke-tested revision 5443d9237dad5d7b29d17809a477441f7ab1a040",
+      "Install Node dependencies and build dist/index.js. Tested build required separately installing typescript@5.8.3 (missing upstream compiler dependency); do not claim an unmodified lockfile-only build. Configure the actual printer or slicer separately; real printer/slicing operations were not tested.",
+      "Replace entrypoint/cwd placeholders and configure the actual OctoPrint host, port and private API key (80 is an example, not a verified deployment port)",
+      "Third-party indirect Marlin integration through OctoPrint; protocol and expected offline errors passed, not OctoPrint connectivity or Marlin hardware"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "marlin-mcp",
-      "args": []
+      "command": "node",
+      "args": [
+        "/path/to/mcp-3D-printer-server/dist/index.js"
+      ],
+      "cwd": "/path/to/mcp-3D-printer-server",
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "PRINTER_TYPE": "octoprint",
+        "PRINTER_HOST": "octoprint.example.invalid",
+        "PRINTER_PORT": "80",
+        "API_KEY": "REPLACE_WITH_TEST_API_KEY"
+      }
     }
   },
   "klipper": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=klipper+MCP&type=repositories",
+    "source": "https://github.com/dmontgomery40/mcp-3D-printer-server",
     "prerequisites": [
-      "Install or configure klipper",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/dmontgomery40/mcp-3D-printer-server (smoke-tested revision 5443d9237dad5d7b29d17809a477441f7ab1a040)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install Node dependencies and build dist/index.js. Tested build required separately installing typescript@5.8.3 (missing upstream compiler dependency); do not claim an unmodified lockfile-only build. Configure the actual printer or slicer separately; real printer/slicing operations were not tested.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "klipper-mcp",
-      "args": []
+      "command": "node",
+      "args": [
+        "/path/to/mcp-3D-printer-server/dist/index.js"
+      ],
+      "cwd": "/path/to/mcp-3D-printer-server",
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "PRINTER_HOST": "klipper.example.invalid",
+        "PRINTER_PORT": "7125",
+        "PRINTER_TYPE": "klipper",
+        "API_KEY": "REPLACE_WITH_TEST_API_KEY"
+      }
     }
   },
   "prusaslicer": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=prusaslicer+MCP&type=repositories",
+    "source": "https://github.com/dmontgomery40/mcp-3D-printer-server",
     "prerequisites": [
-      "Install or configure prusaslicer",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/dmontgomery40/mcp-3D-printer-server (smoke-tested revision 5443d9237dad5d7b29d17809a477441f7ab1a040)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install Node dependencies and build dist/index.js. Tested build required separately installing typescript@5.8.3 (missing upstream compiler dependency); do not claim an unmodified lockfile-only build. Configure the actual printer or slicer separately; real printer/slicing operations were not tested.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "prusaslicer-mcp",
-      "args": []
+      "command": "node",
+      "args": [
+        "/path/to/mcp-3D-printer-server/dist/index.js"
+      ],
+      "cwd": "/path/to/mcp-3D-printer-server",
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "SLICER_TYPE": "prusaslicer",
+        "SLICER_PATH": "/path/to/PrusaSlicer"
+      }
     }
   },
   "curaengine": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=curaengine+MCP&type=repositories",
+    "source": "https://github.com/dmontgomery40/mcp-3D-printer-server",
     "prerequisites": [
-      "Install or configure curaengine",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/dmontgomery40/mcp-3D-printer-server (smoke-tested revision 5443d9237dad5d7b29d17809a477441f7ab1a040)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install Node dependencies and build dist/index.js. Tested build required separately installing typescript@5.8.3 (missing upstream compiler dependency); do not claim an unmodified lockfile-only build. Configure the actual printer or slicer separately; real printer/slicing operations were not tested.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "curaengine-mcp",
-      "args": []
+      "command": "node",
+      "args": [
+        "/path/to/mcp-3D-printer-server/dist/index.js"
+      ],
+      "cwd": "/path/to/mcp-3D-printer-server",
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "SLICER_TYPE": "cura",
+        "SLICER_PATH": "/path/to/CuraEngine"
+      }
     }
   },
   "orcaslicer": {
     "category": "cad-cam",
-    "source": "https://github.com/search?q=orcaslicer+MCP&type=repositories",
+    "source": "https://github.com/dmontgomery40/mcp-3D-printer-server",
     "prerequisites": [
-      "Install or configure orcaslicer",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/dmontgomery40/mcp-3D-printer-server (smoke-tested revision 5443d9237dad5d7b29d17809a477441f7ab1a040)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install Node dependencies and build dist/index.js. Tested build required separately installing typescript@5.8.3 (missing upstream compiler dependency); do not claim an unmodified lockfile-only build. Configure the actual printer or slicer separately; real printer/slicing operations were not tested.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "orcaslicer-mcp",
-      "args": []
+      "command": "node",
+      "args": [
+        "/path/to/mcp-3D-printer-server/dist/index.js"
+      ],
+      "cwd": "/path/to/mcp-3D-printer-server",
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "SLICER_TYPE": "orcaslicer",
+        "SLICER_PATH": "/path/to/OrcaSlicer"
+      }
     }
   },
   "camotics": {
@@ -2588,28 +2750,36 @@
   },
   "usd": {
     "category": "digital-twin-monitoring",
-    "source": "https://github.com/search?q=usd+MCP&type=repositories",
+    "source": "https://github.com/griptape-ai/usd-mcp-server",
     "prerequisites": [
-      "Install or configure usd",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/griptape-ai/usd-mcp-server (smoke-tested revision 4a8c4d94ec081beab1f6d1160adee9d73b34931b)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Install the upstream Python package with mcp==1.30.0; use mcp-serve, not the non-MCP serve command.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "usd-mcp",
-      "args": []
+      "command": "/path/to/usd-mcp-server/.venv/bin/usd-mcp",
+      "args": [
+        "mcp-serve"
+      ],
+      "cwd": "/path/to/usd-mcp-server"
     }
   },
   "openusd": {
     "category": "digital-twin-monitoring",
-    "source": "https://github.com/search?q=openusd+MCP&type=repositories",
+    "source": "https://github.com/griptape-ai/usd-mcp-server",
     "prerequisites": [
-      "Install or configure openusd",
-      "Install or implement an MCP bridge"
+      "Clone https://github.com/griptape-ai/usd-mcp-server (smoke-tested revision 4a8c4d94ec081beab1f6d1160adee9d73b34931b)",
+      "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+      "Same implementation as usd; install the upstream Python package with mcp==1.30.0 and use mcp-serve.",
+      "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
     ],
-    "availability": "candidate_wrapper",
     "server": {
-      "command": "openusd-mcp",
-      "args": []
+      "command": "/path/to/usd-mcp-server/.venv/bin/usd-mcp",
+      "args": [
+        "mcp-serve"
+      ],
+      "cwd": "/path/to/usd-mcp-server"
     }
   },
   "azure_digital_twins": {

@@ -64,20 +64,59 @@
     "blender": {
       "category": "3d-modeling",
       "source": "https://github.com/ahujasid/blender-mcp",
-      "prerequisites": ["Install Blender 3.0+", "Install uv", "Install and enable the Blender MCP addon"],
-      "server": {"command": "uvx", "args": ["blender-mcp"]}
+      "prerequisites": [
+        "Clone https://github.com/ahujasid/blender-mcp (smoke-tested revision 6f992ffbca3cb715d111fc640b737b808632273c)",
+        "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+        "Install the upstream Python package; executable is mcp-for-blender. Install the Blender addon for operations; telemetry disabled in the template.",
+        "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
+      ],
+      "server": {
+        "command": "/path/to/blender-mcp/.venv/bin/mcp-for-blender",
+        "args": [],
+        "cwd": "/path/to/blender-mcp",
+        "env": {
+          "BLENDER_MCP_DISABLE_TELEMETRY": "true",
+          "BLENDER_HOST": "127.0.0.1",
+          "BLENDER_PORT": "9876"
+        }
+      }
     },
     "freecad": {
       "category": "cad",
       "source": "https://github.com/bonninr/freecad_mcp",
-      "prerequisites": ["Install FreeCAD", "Install the freecad_mcp addon", "Replace the Python and bridge paths"],
-      "server": {"command": "/path/to/python", "args": ["/path/to/freecad_mcp/src/freecad_bridge.py"]}
+      "prerequisites": [
+        "Clone https://github.com/bonninr/freecad_mcp (smoke-tested revision 54f150377097426864d418169fa431db40e0c157)",
+        "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+        "Install bridge dependencies mcp==1.30.0 and httpx in the selected Python environment; run src/freecad_bridge.py. Full upstream package installation was not tested.",
+        "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
+      ],
+      "server": {
+        "command": "/path/to/freecad_mcp/.venv/bin/python",
+        "args": [
+          "/path/to/freecad_mcp/src/freecad_bridge.py"
+        ],
+        "cwd": "/path/to/freecad_mcp"
+      }
     },
     "autocad": {
       "category": "cad",
       "source": "https://github.com/U-C4N/Autocad-MCP",
-      "prerequisites": ["Install autocad-mcp-pro", "Set ALLOWED_PATHS", "Use ezdxf headless or install AutoCAD for COM mode"],
-      "server": {"command": "autocad-mcp", "args": [], "env": {"AUTOCAD_MCP_BACKEND": "auto", "ALLOWED_PATHS": "/path/to/allowed/cad/files", "DISCOVERY_MODE": "search"}}
+      "prerequisites": [
+        "Clone https://github.com/U-C4N/Autocad-MCP (smoke-tested revision abc2a82e7128358b9e228a7d9442b37019aa3fe5)",
+        "Replace all /path/to paths with your installation and workspace paths; these are editable templates, not bundled software",
+        "Install the upstream Python package; ezdxf backend with search discovery only was tested, not AutoCAD COM.",
+        "Only initialize and tools/list smoke tests passed; backend authentication, full business operations and hardware were not verified"
+      ],
+      "server": {
+        "command": "/path/to/Autocad-MCP/.venv/bin/autocad-mcp",
+        "args": [],
+        "cwd": "/path/to/Autocad-MCP",
+        "env": {
+          "AUTOCAD_MCP_BACKEND": "ezdxf",
+          "ALLOWED_PATHS": "/path/to/autocad-workspace",
+          "DISCOVERY_MODE": "search"
+        }
+      }
     },
     "fusion360": {
       "category": "cad",
@@ -88,8 +127,8 @@
     "sketchup": {
       "category": "cad",
       "source": "https://github.com/BearNetwork-BRNKC/SketchUp-MCP",
-      "prerequisites": ["Install SketchUp", "Install and enable its MCP extension", "Install uv"],
-      "server": {"command": "uvx", "args": ["sketchup-mcp"]}
+      "prerequisites": ["Install uv and make Python 3.12 available", "Use unmodified sketchup-mcp 0.1.17 with MCP SDK 1.12.0; no source patch required", "Verified on macOS arm64 with Python 3.12.14: L0 initialization and 10 tools only, not CAD business operations", "Install SketchUp and enable its MCP extension for real CAD operations", "SDK 1.12.0 ignores the legacy description setting; this older SDK has not been security-audited here"],
+      "server": {"command": "uvx", "args": ["--python", "3.12", "--with", "mcp==1.12.0", "sketchup-mcp==0.1.17"]}
     },
     "pubchem": {
       "category": "chemistry-data",
