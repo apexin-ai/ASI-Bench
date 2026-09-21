@@ -351,6 +351,10 @@ to reveal the first failure. Do not use score-selected reruns to hide transport
 failures. Host and Docker OpenAI-compatible runs now use the same agent prompt
 prefix; historical Docker runs without it have a different prompt protocol.
 
+See [Streaming and response integrity](docs/streaming-evaluation-integrity.md)
+for the complete protocol, empty-response, timeout, cancellation, and evidence
+recording rules.
+
 ### Package and CLI compatibility
 
 - `asibench` is the only published Python distribution and the canonical CLI.

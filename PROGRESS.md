@@ -1,5 +1,28 @@
 # Progress
 
+## OpenAI empty-response recovery and publishing the full repair
+
+- Actual public-task diagnostics reproduced the thinking/text converter error
+  twice with GLM: each complete upstream response was followed by 11 CC
+  nonstream requests that failed locally. Same-byte replay isolated the converter.
+- Complete empty replies exposed a separate hidden CC recovery branch. Strict
+  OpenAI sessions now preserve the first reply and block the observed replacement
+  prompt before a second upstream call (`67030f5`). Tool turns and normal followups
+  remain valid; max-token continuation is separate and is not claimed disabled.
+- The repaired real-task groups made 140 streamed API calls, including 14
+  thinking-to-text transitions without block corruption. These are ten runs of
+  one public task at B3/B4, unscored, not a whole-benchmark reliability estimate.
+  Token limits, filtered replies, service errors and diagnostic budgets still
+  caused failures. Final real-CC fixture acceptance: 9 cases / 56 assertions.
+- Publication verification covers 191 offline integrity/capture/runtime tests.
+  Full Linux suite: 2518 passed, 2 failed, 2 skipped, 22 deselected. The two Codex
+  failures also reproduce on unchanged `483f6a3` (missing uv and an outdated
+  sandbox-argument assertion); the full suite is not claimed green.
+  The [operational guide](docs/streaming-evaluation-integrity.md) explains converter
+  changes, opt-in configurations, timeout layers and implemented versus proposed
+  diagnostics. No task inputs, scorer changes, credentials or raw API captures
+  are included in this repair.
+
 ## Native Anthropic stream integrity
 
 - Problem: direct native endpoints bypass the LiteLLM guard. Actual CC 2.1.268

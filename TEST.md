@@ -14,13 +14,20 @@ localhost HTTP only (no provider credentials or model calls):
 ```bash
 uv run pytest -q tests/test_claude_proxy_integrity.py \
   tests/test_claude_litellm_wire.py tests/test_claude_runtime_integrity.py \
-  tests/test_capture_integrity.py
+  tests/test_capture_integrity.py tests/test_cc_review_edges.py \
+  tests/test_claude_strict_attempts.py tests/test_claude_empty_recovery.py \
+  tests/test_native_anthropic_guard.py
 ```
 
 `tests/test_claude_strict_attempts.py` verifies that a failed CC session cannot
 call the model again, even with a new HTTP request, changed recovery prompt or
 nonstreaming fallback. It covers independent sessions, valid tool followups,
 missing session IDs and concurrent requests queued behind a failure.
+
+`tests/test_claude_empty_recovery.py` checks complete empty/whitespace/thinking-only
+responses followed by CC's observed hidden recovery prompt. Strict mode blocks
+that replacement before a second model call, while normal followups, tool turns,
+independent sessions and historical markers remain valid.
 
 `tests/test_native_anthropic_guard.py` uses real localhost HTTP to cover native
 Anthropic bodies/headers/signatures, gzip, incremental SSE, malformed blocks,
