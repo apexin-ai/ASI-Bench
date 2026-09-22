@@ -270,12 +270,11 @@ def mcp_group():
 
 @mcp_group.command("catalog")
 def mcp_catalog():
-    """List bundled scientific MCP server templates and prerequisites."""
+    """List bundled scientific MCP server templates and upstream sources."""
     from ai4sci_bench.mcp_config import load_science_mcp_catalog
 
     for name, entry in load_science_mcp_catalog().items():
         click.echo(f"{name:<12} {entry['category']:<28} {entry['source']}")
-        click.echo(f"  Requires: {'; '.join(entry['prerequisites'])}")
 
 
 @mcp_group.command("init")

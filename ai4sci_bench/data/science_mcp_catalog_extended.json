@@ -1,31 +1,413 @@
 {
-  "isaac_sim": {"category":"robotics-simulation","source":"https://developer.nvidia.com/isaac/sim","prerequisites":["Install NVIDIA Isaac Sim and a supported GPU/driver","Install or configure an Isaac Sim MCP bridge"],"server":{"command":"/path/to/isaac-sim/python.sh","args":["/path/to/isaac-sim-mcp/server.py"]}},
-  "mujoco": {"category":"robotics-simulation","source":"https://github.com/google-deepmind/mujoco","prerequisites":["Install MuJoCo and Python bindings","Install a MuJoCo MCP server or local bridge"],"server":{"command":"uv","args":["run","mujoco-mcp"]}},
-  "gazebo": {"category":"robotics-simulation","source":"https://gazebosim.org/","prerequisites":["Install Gazebo Sim and ROS integration if required","Install a Gazebo MCP bridge"],"server":{"command":"ros2","args":["run","gazebo_mcp","server"]}},
-  "pybullet": {"category":"robotics-simulation","source":"https://github.com/bulletphysics/bullet3","prerequisites":["Install pybullet","Install a PyBullet MCP server"],"server":{"command":"uvx","args":["pybullet-mcp"]}},
-  "webots": {"category":"robotics-simulation","source":"https://github.com/cyberbotics/webots","prerequisites":["Install Webots","Install a Webots MCP controller bridge"],"server":{"command":"python3","args":["/path/to/webots-mcp/server.py"]}},
-  "openscad": {"category": "cad", "source": "https://github.com/RobertCoop/openscad-mcp", "prerequisites": ["Third-party RobertCoop adapter; not an official OpenSCAD MCP", "Install uv and native OpenSCAD separately; replace OPENSCAD_PATH with its executable (macOS app: /Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD)", "Replace MCP_ALLOWED_PATHS with a dedicated existing workspace; keep input and output there (multiple paths use the platform path separator)", "Verified package openscad-mcp==0.6.1 on Python 3.12; runtime dependencies are not fully locked; no CAD software is bundled"], "server": {"command": "uvx", "args": ["--python", "3.12", "openscad-mcp==0.6.1"], "env": {"OPENSCAD_PATH": "/path/to/openscad", "MCP_TRANSPORT": "stdio", "MCP_ALLOWED_PATHS": "/path/to/openscad-workspace"}}},
-  "calculix": {"category":"finite-element-analysis","source":"https://github.com/calculix/CalculiX","prerequisites":["Install CalculiX ccx and cgx","Install a CalculiX MCP bridge"],"server":{"command":"calculix-mcp","args":[]}},
-  "opensees": {"category":"finite-element-analysis","source":"https://opensees.berkeley.edu/","prerequisites":["Install OpenSees or OpenSeesPy","Install an OpenSees MCP server"],"server":{"command":"uvx","args":["opensees-mcp"]}},
-  "openmodelica": {"category":"system-simulation","source":"https://github.com/OpenModelica/OpenModelica","prerequisites":["Install OpenModelica","Install an OpenModelica MCP bridge"],"server":{"command":"omc-mcp","args":[]}},
-  "paraview": {"category":"visualization","source":"https://www.paraview.org/","prerequisites":["Install ParaView or pvpython","Enable a ParaView MCP/Trame bridge"],"server":{"command":"pvpython","args":["/path/to/paraview-mcp/server.py"]}},
-  "jupyter_server": {"category":"scientific-computing","source":"https://github.com/jupyter-server/jupyter_server","prerequisites":["Install Jupyter Server","Configure a Jupyter MCP kernel or gateway"],"server":{"command":"uvx","args":["jupyter-mcp-server"]}},
-  "julia": {"category":"scientific-computing","source":"https://github.com/JuliaLang/julia","prerequisites":["Install Julia 1.9+","Install a Julia MCP server package"],"server":{"command":"julia","args":["/path/to/julia-mcp/server.jl"]}},
-  "openroad": {"category":"electronic-design-automation","source":"https://github.com/The-OpenROAD-Project/OpenROAD","prerequisites":["Install OpenROAD and PDK files","Install an OpenROAD MCP bridge"],"server":{"command":"openroad-mcp","args":[]}},
-  "verilator": {"category":"hardware-verification","source":"https://github.com/verilator/verilator","prerequisites":["Install Verilator","Install a Verilator MCP server"],"server":{"command":"verilator-mcp","args":[]}},
-  "yosys": {"category":"hardware-synthesis","source":"https://github.com/YosysHQ/yosys","prerequisites":["Install Yosys","Install a Yosys MCP bridge"],"server":{"command":"yosys-mcp","args":[]}},
-  "ngspice": {"category":"electronic-simulation","source":"https://github.com/ngspice/ngspice","prerequisites":["Install ngspice","Install an ngspice MCP server"],"server":{"command":"ngspice-mcp","args":[]}},
-  "klayout": {"category":"electronic-design-automation","source":"https://github.com/KLayout/klayout","prerequisites":["Install KLayout","Install a KLayout Python/Ruby MCP bridge"],"server":{"command":"klayout-mcp","args":[]}},
-  "sumo": {"category":"traffic-simulation","source":"https://github.com/eclipse-sumo/sumo","prerequisites":["Install SUMO and set SUMO_HOME","Install a SUMO MCP server"],"server":{"command":"sumo-mcp","args":[]}},
-  "jsbsim": {"category":"flight-dynamics","source":"https://github.com/JSBSim-Team/jsbsim","prerequisites":["Install JSBSim","Install a JSBSim MCP bridge"],"server":{"command":"jsbsim-mcp","args":[]}},
-  "px4_sitl": {"category":"flight-simulation","source":"https://github.com/PX4/PX4-Autopilot","prerequisites":["Clone PX4 and install its toolchain","Build PX4 SITL and install a PX4 MCP bridge"],"server":{"command":"python3","args":["/path/to/px4-mcp/server.py"]}},
-  "ardupilot_sitl": {"category":"flight-simulation","source":"https://github.com/ArduPilot/ardupilot","prerequisites":["Clone ArduPilot and install its toolchain","Build SITL and install an ArduPilot MCP bridge"],"server":{"command":"python3","args":["/path/to/ardupilot-mcp/server.py"]}},
-  "carla": {"category":"autonomous-driving","source":"https://github.com/carla-simulator/carla","prerequisites":["Install CARLA server and Python client","Install a CARLA MCP server"],"server":{"command":"uvx","args":["carla-mcp"]}},
-  "zotero": {"category":"research-tools","source":"https://www.zotero.org/","prerequisites":["Install Zotero and its local API/connector","Install a Zotero MCP server and configure credentials"],"server":{"command":"uvx","args":["zotero-mcp"]}},
-  "opentrons": {"category":"laboratory-automation","source":"https://github.com/Opentrons/opentrons","prerequisites":["Install Opentrons Python API or connect to a robot","Install an Opentrons MCP server"],"server":{"command":"uvx","args":["opentrons-mcp"]}},
-  "scpi_pyvisa": {"category":"instrumentation","source":"https://github.com/pyvisa/pyvisa","prerequisites":["Install PyVISA and a VISA backend","Connect an instrument or simulator and install an SCPI MCP server"],"server":{"command":"uvx","args":["scpi-pyvisa-mcp"]}},
-  "arduino": {"category":"embedded-systems","source":"https://github.com/arduino/arduino-cli","prerequisites":["Install Arduino CLI and board cores","Connect a board or simulator and install an Arduino MCP server"],"server":{"command":"arduino-mcp","args":[]}},
-  "abaqus": {"category":"finite-element-analysis","source":"https://www.3ds.com/products/simulia/abaqus","prerequisites":["Commercial Abaqus installation and license","Install a local Abaqus MCP bridge"],"server":{"command":"/path/to/abaqus","args":["python","/path/to/abaqus-mcp/server.py"]}},
-  "fenicsx": {"category":"finite-element-analysis","source":"https://github.com/FEniCS/dolfinx","prerequisites":["Install FEniCSx/DOLFINx and MPI dependencies","Install a FEniCSx MCP server"],"server":{"command":"uvx","args":["fenicsx-mcp"]}},
-  "su2": {"category":"cfd","source":"https://github.com/su2code/SU2","prerequisites":["Install SU2 and its solver dependencies","Install an SU2 MCP bridge"],"server":{"command":"su2-mcp","args":[]}}
+  "isaac_sim": {
+    "category": "robotics-simulation",
+    "source": "https://github.com/omni-mcp/isaac-sim-mcp",
+    "server": {
+      "command": "/path/to/isaac-sim-mcp/.venv/bin/python",
+      "args": [
+        "/path/to/isaac-sim-mcp/isaac_mcp/server.py"
+      ],
+      "cwd": "/path/to/isaac-sim-mcp"
+    }
+  },
+  "mujoco": {
+    "category": "robotics-simulation",
+    "source": "https://github.com/Rongxuan-Zhou/mujoco-mcp-server",
+    "server": {
+      "command": "/path/to/mujoco-mcp-server/.venv/bin/mujoco-mcp",
+      "args": [],
+      "cwd": "/path/to/mujoco-mcp-server"
+    }
+  },
+  "gazebo": {
+    "category": "robotics-simulation",
+    "source": "https://github.com/kvgork/gazebo-mcp",
+    "server": {
+      "command": "/path/to/gazebo-mcp/.venv/bin/python",
+      "args": [
+        "-m",
+        "gazebo_mcp.fastmcp_server",
+        "--stdio"
+      ],
+      "cwd": "/path/to/gazebo-mcp",
+      "env": {
+        "GAZEBO_BACKEND": "modern",
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  },
+  "pybullet": {
+    "category": "robotics-simulation",
+    "source": "https://github.com/M1ndSmith/pybullet-mcp-server",
+    "server": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  },
+  "webots": {
+    "category": "robotics-simulation",
+    "source": "https://github.com/premananda108/webots-mcp",
+    "server": {
+      "command": "/path/to/webots-mcp/.venv/bin/python",
+      "args": [
+        "webots_mcp_server.py"
+      ],
+      "cwd": "/path/to/webots-mcp"
+    }
+  },
+  "openscad": {
+    "category": "cad",
+    "source": "https://github.com/RobertCoop/openscad-mcp",
+    "server": {
+      "command": "uvx",
+      "args": [
+        "--python",
+        "3.12",
+        "openscad-mcp==0.6.1"
+      ],
+      "env": {
+        "OPENSCAD_PATH": "/path/to/openscad",
+        "MCP_TRANSPORT": "stdio",
+        "MCP_ALLOWED_PATHS": "/path/to/openscad-workspace"
+      }
+    }
+  },
+  "calculix": {
+    "category": "finite-element-analysis",
+    "source": "https://github.com/StructuralWizard/beam-analysis-mcp",
+    "server": {
+      "command": "node",
+      "args": [
+        "/path/to/beam-analysis-mcp/src/server.js"
+      ],
+      "cwd": "/path/to/beam-analysis-mcp",
+      "env": {
+        "CCX_PATH": "/path/to/ccx",
+        "FREECAD_CMD": "/path/to/freecadcmd",
+        "BEAM_MCP_OUTPUT": "/path/to/beam-output"
+      }
+    }
+  },
+  "opensees": {
+    "category": "finite-element-analysis",
+    "source": "https://github.com/pellegrino-research-group/opensees-mcp",
+    "server": {
+      "command": "/path/to/opensees-mcp/.venv/bin/python",
+      "args": [
+        "-m",
+        "opensees_mcp.server"
+      ],
+      "cwd": "/path/to/opensees-mcp"
+    }
+  },
+  "openmodelica": {
+    "category": "system-simulation",
+    "source": "https://github.com/Casys-AI/mcp-modelica",
+    "server": {
+      "command": "/path/to/deno",
+      "args": [
+        "run",
+        "--cached-only",
+        "--allow-read=models,scenarios,src,runs,mcp-server.yaml",
+        "--allow-write=runs",
+        "--allow-run=omc,perl",
+        "--allow-env=MODELICA_RUN_DIR,OPENMODELICALIBRARY",
+        "server.ts",
+        "--stdio"
+      ],
+      "cwd": "/path/to/mcp-modelica",
+      "env": {
+        "DENO_DIR": "/path/to/deno-cache"
+      }
+    }
+  },
+  "paraview": {
+    "category": "visualization",
+    "source": "https://github.com/llnl/paraview_mcp",
+    "server": {
+      "command": "/path/to/paraview-conda-env/bin/python",
+      "args": [
+        "/path/to/paraview_mcp/paraview_mcp_server.py",
+        "--server",
+        "127.0.0.1",
+        "--port",
+        "11111"
+      ],
+      "cwd": "/path/to/paraview_mcp"
+    }
+  },
+  "jupyter_server": {
+    "category": "scientific-computing",
+    "source": "https://github.com/datalayer/jupyter-mcp-server",
+    "server": {
+      "command": "/path/to/jupyter-mcp-server/.venv/bin/jupyter-mcp-server",
+      "args": [
+        "--transport",
+        "stdio",
+        "--start-new-code-sandbox",
+        "false"
+      ],
+      "cwd": "/path/to/jupyter-mcp-server",
+      "env": {
+        "JUPYTER_URL": "http://jupyter.example.invalid:8888",
+        "JUPYTER_TOKEN": "placeholder-token",
+        "ALLOW_IMG_OUTPUT": "true"
+      }
+    }
+  },
+  "julia": {
+    "category": "scientific-computing",
+    "source": "https://github.com/aplavin/julia-mcp",
+    "server": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/julia-mcp",
+        "python",
+        "server.py"
+      ]
+    }
+  },
+  "openroad": {
+    "category": "electronic-design-automation",
+    "source": "https://github.com/The-OpenROAD-Project/OpenROAD-MCP",
+    "server": {
+      "command": "node",
+      "args": [
+        "/path/to/OpenROAD-MCP/typescript/dist/main.js",
+        "--transport",
+        "stdio"
+      ],
+      "cwd": "/path/to/OpenROAD-MCP/typescript",
+      "env": {
+        "ORFS_FLOW_PATH": "/path/to/OpenROAD-flow-scripts/flow"
+      }
+    }
+  },
+  "verilator": {
+    "category": "hardware-verification",
+    "source": "https://github.com/ssql2014/verilator-mcp",
+    "server": {
+      "command": "node",
+      "args": [
+        "/path/to/verilator-mcp/dist/index.js"
+      ],
+      "cwd": "/path/to/verilator-mcp",
+      "env": {
+        "LOG_LEVEL": "info"
+      }
+    }
+  },
+  "yosys": {
+    "category": "hardware-synthesis",
+    "source": "https://github.com/zesun33/mcp-yosys",
+    "server": {
+      "command": "node",
+      "args": [
+        "dist/index.js"
+      ],
+      "cwd": "/path/to/mcp-yosys",
+      "env": {
+        "MCP_YOSYS_RUNTIME": "host"
+      }
+    }
+  },
+  "ngspice": {
+    "category": "electronic-simulation",
+    "source": "https://github.com/gtnoble/ngspice-mcp",
+    "server": {
+      "command": "/path/to/ngspice-mcp/ngspice-mcp",
+      "args": [],
+      "cwd": "/path/to/ngspice-mcp"
+    }
+  },
+  "klayout": {
+    "category": "electronic-design-automation",
+    "source": "https://github.com/aycandv/klayout-mcp",
+    "server": {
+      "command": "/path/to/klayout-mcp/.venv/bin/klayout-mcp",
+      "args": [],
+      "cwd": "/path/to/klayout-mcp",
+      "env": {
+        "KLAYOUT_BIN": "/path/to/klayout",
+        "KLAYOUT_MCP_ARTIFACT_ROOT": "/path/to/klayout-artifacts",
+        "KLAYOUT_MCP_SESSION_TTL_SECONDS": "3600"
+      }
+    }
+  },
+  "sumo": {
+    "category": "traffic-simulation",
+    "source": "https://github.com/XRDS76354/SUMO-MCP-Server",
+    "server": {
+      "command": "/path/to/SUMO-MCP-Server/.venv/bin/python",
+      "args": [
+        "/path/to/SUMO-MCP-Server/src/server.py"
+      ],
+      "cwd": "/path/to/SUMO-MCP-Server",
+      "env": {
+        "PYTHONPATH": "/path/to/SUMO-MCP-Server/src",
+        "SUMO_HOME": "/path/to/sumo"
+      }
+    }
+  },
+  "jsbsim": {
+    "category": "flight-dynamics",
+    "source": "https://github.com/flyintothesky/jsbsim-mcp",
+    "server": {
+      "command": "/path/to/jsbsim-mcp/.venv/bin/python",
+      "args": [
+        "run_stdio.py"
+      ],
+      "cwd": "/path/to/jsbsim-mcp"
+    }
+  },
+  "px4_sitl": {
+    "category": "flight-simulation",
+    "source": "https://github.com/alireza787b/dronesphere",
+    "server": {
+      "command": "/path/to/dronesphere/mcp-server/.venv/bin/python",
+      "args": [
+        "/path/to/dronesphere/mcp-server/server.py",
+        "stdio"
+      ],
+      "cwd": "/path/to/dronesphere/mcp-server",
+      "env": {
+        "DRONESPHERE_SERVER_URL": "http://dronesphere.example.invalid:8002",
+        "MCP_PORT": "0",
+        "SITL_MODE": "true",
+        "PYTHON_DOTENV_DISABLED": "1"
+      }
+    }
+  },
+  "ardupilot_sitl": {
+    "category": "flight-simulation",
+    "source": "https://github.com/hfujikawa77/ardupilot-mcp-server",
+    "server": {
+      "command": "/path/to/ardupilot-mcp-server/.venv/bin/python",
+      "args": [
+        "ardupilot_mcp_server.py"
+      ],
+      "cwd": "/path/to/ardupilot-mcp-server",
+      "env": {}
+    }
+  },
+  "carla": {
+    "category": "autonomous-driving",
+    "source": "https://github.com/Croquembouche/CARLA_MCP",
+    "server": {
+      "command": "/path/to/CARLA_MCP/.mcp-venv/bin/python",
+      "args": [
+        "-m",
+        "mcp_bridge.server",
+        "--transport",
+        "stdio"
+      ],
+      "cwd": "/path/to/CARLA_MCP",
+      "env": {
+        "CARLA_WEBUI_URL": "http://127.0.0.1:8095",
+        "CARLA_WEBUI_PUBLIC_URL": "http://127.0.0.1:8095",
+        "CARLA_MCP_TIMEOUT": "1800",
+        "PYTHONNOUSERSITE": "1"
+      }
+    }
+  },
+  "zotero": {
+    "category": "research-tools",
+    "source": "https://github.com/kaliaboi/mcp-zotero",
+    "server": {
+      "command": "node",
+      "args": [
+        "build/server.js"
+      ],
+      "cwd": "/path/to/mcp-zotero",
+      "env": {
+        "ZOTERO_API_KEY": "YOUR_ZOTERO_API_KEY",
+        "ZOTERO_USER_ID": "YOUR_ZOTERO_USER_ID"
+      }
+    }
+  },
+  "opentrons": {
+    "category": "laboratory-automation",
+    "source": "https://github.com/yerbymatey/opentrons-mcp",
+    "server": {
+      "command": "node",
+      "args": [
+        "index.js"
+      ],
+      "cwd": "/path/to/opentrons-mcp",
+      "env": {}
+    }
+  },
+  "scpi_pyvisa": {
+    "category": "instrumentation",
+    "source": "https://github.com/Netlist-Studio/scope-mcp",
+    "server": {
+      "command": "/path/to/scope-mcp/.venv/bin/python",
+      "args": [
+        "scope_server.py",
+        "--host",
+        "scope.example.invalid"
+      ],
+      "cwd": "/path/to/scope-mcp"
+    }
+  },
+  "arduino": {
+    "category": "embedded-systems",
+    "source": "https://github.com/Volt23/mcp-arduino-server",
+    "server": {
+      "command": "/path/to/mcp-arduino-server/.venv/bin/mcp-arduino-server",
+      "args": [],
+      "cwd": "/path/to/mcp-arduino-server",
+      "env": {
+        "ARDUINO_CLI_PATH": "/path/to/arduino-cli",
+        "WIREVIZ_PATH": "/path/to/mcp-arduino-server/.venv/bin/wireviz",
+        "LOG_LEVEL": "INFO"
+      }
+    }
+  },
+  "abaqus": {
+    "category": "finite-element-analysis",
+    "source": "https://github.com/Whfkl/Abaqus-Control-MCP",
+    "server": {
+      "command": "/path/to/Abaqus-Control-MCP/.venv/bin/abaqus-control-mcp-server",
+      "args": [],
+      "cwd": "/path/to/Abaqus-Control-MCP",
+      "env": {
+        "ABAQUS_MCP_HOST": "127.0.0.1",
+        "ABAQUS_MCP_PORT": "48152",
+        "ABAQUS_MCP_TIMEOUT": "120"
+      }
+    }
+  },
+  "fenicsx": {
+    "category": "finite-element-analysis",
+    "source": "https://github.com/ekstanley/ccFenics-plugin",
+    "server": {
+      "command": "/path/to/ccFenics-plugin/.venv/bin/python",
+      "args": [
+        "-m",
+        "dolfinx_mcp"
+      ],
+      "cwd": "/path/to/ccFenics-plugin",
+      "env": {
+        "DOLFINX_MCP_TRANSPORT": "stdio"
+      }
+    }
+  },
+  "su2": {
+    "category": "cfd",
+    "source": "https://github.com/cmudrc/su2-mcp",
+    "server": {
+      "command": "/path/to/su2-mcp/.venv/bin/su2-mcp",
+      "args": [
+        "--transport",
+        "stdio"
+      ],
+      "cwd": "/path/to/su2-mcp",
+      "env": {
+        "PATH": "/path/to/SU2/bin:/path/to/gmsh/bin:/usr/local/bin:/usr/bin:/bin"
+      }
+    }
+  }
 }

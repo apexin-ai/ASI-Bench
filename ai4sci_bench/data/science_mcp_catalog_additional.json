@@ -1,51 +1,540 @@
 {
-"mfem":{"category":"finite-element-analysis","source":"https://github.com/mfem/mfem","prerequisites":["Install MFEM and MPI","Install an MFEM MCP bridge"],"server":{"command":"mfem-mcp","args":[]}},
-"deal_ii":{"category":"finite-element-analysis","source":"https://github.com/dealii/dealii","prerequisites":["Install deal.II and compiler toolchain","Install a deal.II MCP bridge"],"server":{"command":"deal-ii-mcp","args":[]}},
-"elmer_fem":{"category":"finite-element-analysis","source":"https://github.com/ElmerCSC/elmerfem","prerequisites":["Install Elmer FEM","Install an Elmer MCP bridge"],"server":{"command":"elmer-mcp","args":[]}},
-"code_aster":{"category":"finite-element-analysis","source":"https://github.com/bananadroid/Code_Aster","prerequisites":["Install Code_Aster","Install a Code_Aster MCP bridge"],"server":{"command":"code-aster-mcp","args":[]}},
-"moose":{"category":"multiphysics","source":"https://github.com/idaholab/moose","prerequisites":["Install MOOSE and PETSc","Install a MOOSE MCP bridge"],"server":{"command":"moose-mcp","args":[]}},
-"kratos":{"category":"multiphysics","source":"https://github.com/KratosMultiphysics/Kratos","prerequisites":["Install Kratos Multiphysics","Install a Kratos MCP bridge"],"server":{"command":"kratos-mcp","args":[]}},
-"drake":{"category":"robotics","source":"https://github.com/RobotLocomotion/drake","prerequisites":["Install Drake","Install a Drake MCP bridge"],"server":{"command":"drake-mcp","args":[]}},
-"pinocchio":{"category":"robotics","source":"https://github.com/stack-of-tasks/pinocchio","prerequisites":["Install Pinocchio","Install a Pinocchio MCP bridge"],"server":{"command":"pinocchio-mcp","args":[]}},
-"dart":{"category":"robotics","source":"https://github.com/dartsim/dart","prerequisites":["Install DART","Install a DART MCP bridge"],"server":{"command":"dart-mcp","args":[]}},
-"brax":{"category":"robotics","source":"https://github.com/google/brax","prerequisites":["Install Brax and JAX","Install a Brax MCP bridge"],"server":{"command":"brax-mcp","args":[]}},
-"genesis":{"category":"robotics","source":"https://github.com/Genesis-Embodied-AI/Genesis","prerequisites":["Install Genesis and GPU dependencies","Install a Genesis MCP bridge"],"server":{"command":"genesis-mcp","args":[]}},
-"nvidia_warp":{"category":"gpu-scientific-computing","source":"https://github.com/NVIDIA/warp","prerequisites":["Install NVIDIA Warp and CUDA","Install a Warp MCP bridge"],"server":{"command":"warp-mcp","args":[]}},
-"taichi":{"category":"gpu-scientific-computing","source":"https://github.com/taichi-dev/taichi","prerequisites":["Install Taichi","Install a Taichi MCP bridge"],"server":{"command":"taichi-mcp","args":[]}},
-"sofa":{"category":"robotics","source":"https://github.com/sofa-framework/sofa","prerequisites":["Install SOFA","Install a SOFA MCP bridge"],"server":{"command":"sofa-mcp","args":[]}},
-"cantera":{"category":"chemical-engineering","source":"https://github.com/Cantera/cantera","prerequisites":["Install Cantera","Install a Cantera MCP bridge"],"server":{"command":"cantera-mcp","args":[]}},
-"coolprop":{"category":"thermophysical-properties","source":"https://github.com/CoolProp/CoolProp","prerequisites":["Install CoolProp","Install a CoolProp MCP bridge"],"server":{"command":"coolprop-mcp","args":[]}},
-"openmc":{"category":"nuclear-engineering","source":"https://github.com/openmc-dev/openmc","prerequisites":["Install OpenMC and nuclear data","Install an OpenMC MCP bridge"],"server":{"command":"openmc-mcp","args":[]}},
-"geant4":{"category":"particle-physics","source":"https://github.com/Geant4/geant4","prerequisites":["Install Geant4 and data libraries","Install a Geant4 MCP bridge"],"server":{"command":"geant4-mcp","args":[]}},
-"quantum_espresso":{"category":"computational-materials","source":"https://github.com/QEF/q-e","prerequisites":["Install Quantum ESPRESSO and MPI","Install a Quantum ESPRESSO MCP bridge"],"server":{"command":"qe-mcp","args":[]}},
-"cp2k":{"category":"computational-materials","source":"https://github.com/cp2k/cp2k","prerequisites":["Install CP2K and toolchain","Install a CP2K MCP bridge"],"server":{"command":"cp2k-mcp","args":[]}},
-"gromacs":{"category":"molecular-dynamics","source":"https://github.com/gromacs/gromacs","prerequisites":["Install GROMACS","Install a GROMACS MCP bridge"],"server":{"command":"gromacs-mcp","args":[]}},
-"namd":{"category":"molecular-dynamics","source":"https://www.ks.uiuc.edu/Research/namd/","prerequisites":["Install NAMD and license-allowed binaries","Install a NAMD MCP bridge"],"server":{"command":"namd-mcp","args":[]}},
-"hoomd_blue":{"category":"molecular-dynamics","source":"https://github.com/glotzerlab/hoomd-blue","prerequisites":["Install HOOMD-blue","Install a HOOMD MCP bridge"],"server":{"command":"hoomd-mcp","args":[]}},
-"ambertools":{"category":"molecular-dynamics","source":"https://ambermd.org/AmberTools.php","prerequisites":["Install AmberTools","Install an AmberTools MCP bridge"],"server":{"command":"ambertools-mcp","args":[]}},
-"rdkit":{"category":"cheminformatics","source":"https://github.com/rdkit/rdkit","prerequisites":["Install RDKit","Install an RDKit MCP bridge"],"server":{"command":"rdkit-mcp","args":[]}},
-"openbabel":{"category":"cheminformatics","source":"https://github.com/openbabel/openbabel","prerequisites":["Install Open Babel","Install an Open Babel MCP bridge"],"server":{"command":"openbabel-mcp","args":[]}},
-"psi4":{"category":"quantum-chemistry","source":"https://github.com/psi4/psi4","prerequisites":["Install Psi4","Install a Psi4 MCP bridge"],"server":{"command":"psi4-mcp","args":[]}},
-"pyscf":{"category":"quantum-chemistry","source":"https://github.com/pyscf/pyscf","prerequisites":["Install PySCF","Install a PySCF MCP bridge"],"server":{"command":"pyscf-mcp","args":[]}},
-"icarus_verilog":{"category":"hardware-verification","source":"https://github.com/steveicarus/iverilog","prerequisites":["Install Icarus Verilog","Install an Icarus MCP bridge"],"server":{"command":"iverilog-mcp","args":[]}},
-"ghdl":{"category":"hardware-verification","source":"https://github.com/ghdl/ghdl","prerequisites":["Install GHDL","Install a GHDL MCP bridge"],"server":{"command":"ghdl-mcp","args":[]}},
-"cocotb":{"category":"hardware-verification","source":"https://github.com/cocotb/cocotb","prerequisites":["Install cocotb and a simulator","Install a cocotb MCP bridge"],"server":{"command":"cocotb-mcp","args":[]}},
-"symbiyosys":{"category":"formal-verification","source":"https://github.com/YosysHQ/sby","prerequisites":["Install SymbiYosys and solvers","Install a SymbiYosys MCP bridge"],"server":{"command":"sby-mcp","args":[]}},
-"nextpnr":{"category":"fpga-eda","source":"https://github.com/YosysHQ/nextpnr","prerequisites":["Install nextpnr and FPGA database","Install a nextpnr MCP bridge"],"server":{"command":"nextpnr-mcp","args":[]}},
-"opensta":{"category":"eda-timing","source":"https://github.com/The-OpenROAD-Project/OpenSTA","prerequisites":["Install OpenSTA","Install an OpenSTA MCP bridge"],"server":{"command":"opensta-mcp","args":[]}},
-"magic_vlsi":{"category":"eda-layout","source":"https://opencircuitdesign.com/magic/","prerequisites":["Install Magic VLSI","Install a Magic MCP bridge"],"server":{"command":"magic-mcp","args":[]}},
-"netgen":{"category":"eda-verification","source":"https://opencircuitdesign.com/netgen/","prerequisites":["Install Netgen","Install a Netgen MCP bridge"],"server":{"command":"netgen-mcp","args":[]}},
-"xyce":{"category":"electronic-simulation","source":"https://github.com/Xyce/Xyce","prerequisites":["Install Xyce","Install a Xyce MCP bridge"],"server":{"command":"xyce-mcp","args":[]}},
-"airsim":{"category":"robotics-simulation","source":"https://github.com/microsoft/AirSim","prerequisites":["Install AirSim and Unreal dependencies","Install an AirSim MCP bridge"],"server":{"command":"airsim-mcp","args":[]}},
-"flightgear":{"category":"flight-simulation","source":"https://github.com/FlightGear/flightgear","prerequisites":["Install FlightGear","Install a FlightGear MCP bridge"],"server":{"command":"flightgear-mcp","args":[]}},
-"mavsdk":{"category":"flight-control","source":"https://github.com/mavlink/MAVSDK","prerequisites":["Install MAVSDK and connect a simulator/autopilot","Install a MAVSDK MCP bridge"],"server":{"command":"mavsdk-mcp","args":[]}},
-"coppeliasim":{"category":"robotics-simulation","source":"https://github.com/CoppeliaRobotics/CoppeliaSimLib","prerequisites":["Install CoppeliaSim","Install a CoppeliaSim MCP bridge"],"server":{"command":"coppeliasim-mcp","args":[]}},
-"oscilloscope":{"category":"instrumentation","source":"https://github.com/pyvisa/pyvisa","prerequisites":["Install PyVISA and vendor VISA backend","Connect a supported oscilloscope or simulator"],"server":{"command":"oscilloscope-mcp","args":[]}},
-"function_generator":{"category":"instrumentation","source":"https://github.com/pyvisa/pyvisa","prerequisites":["Install PyVISA and vendor VISA backend","Connect a supported function generator or simulator"],"server":{"command":"function-generator-mcp","args":[]}},
-"power_supply":{"category":"instrumentation","source":"https://github.com/pyvisa/pyvisa","prerequisites":["Install PyVISA and vendor VISA backend","Connect a supported programmable power supply or simulator"],"server":{"command":"power-supply-mcp","args":[]}},
-"daq":{"category":"instrumentation","source":"https://github.com/pyvisa/pyvisa","prerequisites":["Install PyVISA/DAQmx backend","Connect supported DAQ hardware or simulator"],"server":{"command":"daq-mcp","args":[]}},
-"epics":{"category":"scientific-instrument-control","source":"https://github.com/epics-base/epics-base","prerequisites":["Install EPICS Base and IOC access","Install an EPICS MCP bridge"],"server":{"command":"epics-mcp","args":[]}},
-"tango":{"category":"scientific-instrument-control","source":"https://github.com/tango-controls/tango-controls","prerequisites":["Install Tango Controls and a device server","Install a Tango MCP bridge"],"server":{"command":"tango-mcp","args":[]}},
-"qcodes":{"category":"quantum-instrumentation","source":"https://github.com/QCoDeS/Qcodes","prerequisites":["Install QCoDeS","Connect instrument drivers or simulators"],"server":{"command":"qcodes-mcp","args":[]}},
-"pymeasure":{"category":"instrumentation","source":"https://github.com/pymeasure/pymeasure","prerequisites":["Install PyMeasure and PyVISA","Connect supported instrument or simulator"],"server":{"command":"pymeasure-mcp","args":[]}}
+  "mfem": {
+    "category": "finite-element-analysis",
+    "source": "https://github.com/andeplane/fem-lab",
+    "server": {
+      "command": "node",
+      "args": [
+        "/path/to/fem-lab/packages/mcp/dist/femlab-mcp.js",
+        "--project",
+        "/path/to/fem-project"
+      ],
+      "cwd": "/path/to/fem-lab"
+    }
+  },
+  "deal_ii": {
+    "category": "finite-element-analysis",
+    "source": "https://github.com/Hereon-InstituteMS/openPASO",
+    "server": {
+      "command": "/path/to/openPASO/.venv/bin/python",
+      "args": [
+        "-m",
+        "server"
+      ],
+      "cwd": "/path/to/openPASO",
+      "env": {
+        "PYTHONPATH": "/path/to/openPASO/src",
+        "VIRTUAL_ENV": "/path/to/openPASO/.venv",
+        "PYVISTA_OFF_SCREEN": "true",
+        "DEAL_II_DIR": "/path/to/dealii-install"
+      }
+    }
+  },
+  "elmer_fem": {
+    "category": "finite-element-analysis",
+    "source": "https://github.com/S2mon123/FEP-Agent-Hub",
+    "server": {
+      "command": "/path/to/FEP-Agent-Hub/.venv/bin/python",
+      "args": [
+        "-m",
+        "elmer_mcp.server"
+      ],
+      "cwd": "/path/to/FEP-Agent-Hub",
+      "env": {
+        "OPEN_CAE_CONFIG": "/path/to/FEP-Agent-Hub/configs/open-cae.local.toml",
+        "OPEN_CAE_WORKSPACE": "/path/to/cae-workspace"
+      }
+    }
+  },
+  "code_aster": {
+    "category": "finite-element-analysis",
+    "source": "https://github.com/bananadroid/Code_Aster",
+    "server": {
+      "command": "code-aster-mcp",
+      "args": []
+    }
+  },
+  "moose": {
+    "category": "multiphysics",
+    "source": "https://github.com/sukritimanna/AutoMOOSE",
+    "server": {
+      "command": "/path/to/AutoMOOSE/.venv/bin/python",
+      "args": [
+        "/path/to/AutoMOOSE/automoose/mcp_server.py",
+        "--transport",
+        "stdio"
+      ],
+      "cwd": "/path/to/AutoMOOSE",
+      "env": {
+        "AUTOMOOSE_URL": "http://127.0.0.1:8000"
+      }
+    }
+  },
+  "kratos": {
+    "category": "multiphysics",
+    "source": "https://github.com/KratosMultiphysics/Kratos",
+    "server": {
+      "command": "kratos-mcp",
+      "args": []
+    }
+  },
+  "drake": {
+    "category": "robotics",
+    "source": "https://github.com/RobotLocomotion/drake",
+    "server": {
+      "command": "drake-mcp",
+      "args": []
+    }
+  },
+  "pinocchio": {
+    "category": "robotics",
+    "source": "https://github.com/stack-of-tasks/pinocchio",
+    "server": {
+      "command": "pinocchio-mcp",
+      "args": []
+    }
+  },
+  "dart": {
+    "category": "robotics",
+    "source": "https://github.com/dartsim/dart",
+    "server": {
+      "command": "dart-mcp",
+      "args": []
+    }
+  },
+  "brax": {
+    "category": "robotics",
+    "source": "https://github.com/google/brax",
+    "server": {
+      "command": "brax-mcp",
+      "args": []
+    }
+  },
+  "genesis": {
+    "category": "robotics",
+    "source": "https://github.com/1douya1/genesis-mcp-robotics",
+    "server": {
+      "command": "/path/to/genesis-mcp-robotics/.venv/bin/python",
+      "args": [
+        "/path/to/genesis-mcp-robotics/mcp_server/simple_genesis_mcp.py"
+      ],
+      "cwd": "/path/to/genesis-mcp-robotics/mcp_server",
+      "env": {
+        "GENESIS_ASSET_DIR": "/path/to/genesis-mcp-robotics/assets/objects"
+      }
+    }
+  },
+  "nvidia_warp": {
+    "category": "gpu-scientific-computing",
+    "source": "https://github.com/NVIDIA/warp",
+    "server": {
+      "command": "warp-mcp",
+      "args": []
+    }
+  },
+  "taichi": {
+    "category": "gpu-scientific-computing",
+    "source": "https://github.com/taichi-dev/taichi",
+    "server": {
+      "command": "taichi-mcp",
+      "args": []
+    }
+  },
+  "sofa": {
+    "category": "robotics",
+    "source": "https://github.com/antennae/SOFA_MCP",
+    "server": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  },
+  "cantera": {
+    "category": "chemical-engineering",
+    "source": "https://github.com/StepFunctionLLC/mcp-server-cantera",
+    "server": {
+      "command": "/path/to/mcp-server-cantera/.venv/bin/mcp-server-cantera",
+      "args": [],
+      "cwd": "/path/to/mcp-server-cantera"
+    }
+  },
+  "coolprop": {
+    "category": "thermophysical-properties",
+    "source": "https://github.com/JerryMansikkaviita/CoolpropMCP",
+    "server": {
+      "command": "/path/to/CoolpropMCP/.venv/bin/python",
+      "args": [
+        "server.py"
+      ],
+      "cwd": "/path/to/CoolpropMCP"
+    }
+  },
+  "openmc": {
+    "category": "nuclear-engineering",
+    "source": "https://github.com/openmc-dev/openmc",
+    "server": {
+      "command": "openmc-mcp",
+      "args": []
+    }
+  },
+  "geant4": {
+    "category": "particle-physics",
+    "source": "https://github.com/egguliyev/geant4-mcp-server",
+    "server": {
+      "command": "/path/to/geant4-mcp-server/.venv/bin/python",
+      "args": [
+        "/path/to/geant4-mcp-server/geant4_mcp_server.py"
+      ],
+      "cwd": "/path/to/geant4-mcp-server",
+      "env": {
+        "GEANT4_MCP_WORKSPACE": "/path/to/geant4-mcp-workspace",
+        "GEANT4_INSTALL_DIR": "/path/to/geant4",
+        "ALLPIX2_INSTALL_DIR": "/path/to/allpix-squared",
+        "PATH": "/path/to/geant4-mcp-server/.venv/bin:/path/to/allpix-squared/bin:/path/to/geant4/bin:/usr/local/bin:/usr/bin:/bin"
+      }
+    }
+  },
+  "quantum_espresso": {
+    "category": "computational-materials",
+    "source": "https://github.com/frimpsjoek/qe-mcp",
+    "server": {
+      "command": "/path/to/qe-mcp/.venv/bin/qe-mcp",
+      "args": [],
+      "cwd": "/path/to/qe-mcp",
+      "env": {
+        "QE_RUNNER": "docker",
+        "QE_USE_DOCKER": "true",
+        "QE_DOCKER_IMAGE": "qe-local",
+        "QE_PSEUDO_DIR": "/path/to/qe-mcp/pseudopotentials/sg15_oncv",
+        "QE_WORKDIR": "/path/to/qe-calculations"
+      }
+    }
+  },
+  "cp2k": {
+    "category": "computational-materials",
+    "source": "https://github.com/wangxiancao/CP2k-Docs-MCP",
+    "server": {
+      "command": "node",
+      "args": [
+        "/path/to/CP2k-Docs-MCP/dist/index.js"
+      ],
+      "cwd": "/path/to/CP2k-Docs-MCP"
+    }
+  },
+  "gromacs": {
+    "category": "molecular-dynamics",
+    "source": "https://github.com/egtai/gmx-vmd-mcp",
+    "server": {
+      "command": "/path/to/gmx-vmd-mcp/.venv/bin/mcp",
+      "args": [
+        "run",
+        "/path/to/gmx-vmd-mcp/mcp_server.py"
+      ],
+      "cwd": "/path/to/gromacs-workspace",
+      "env": {
+        "PYTHONPATH": "/path/to/gmx-vmd-mcp"
+      }
+    }
+  },
+  "namd": {
+    "category": "molecular-dynamics",
+    "source": "https://www.ks.uiuc.edu/Research/namd/",
+    "server": {
+      "command": "namd-mcp",
+      "args": []
+    }
+  },
+  "hoomd_blue": {
+    "category": "molecular-dynamics",
+    "source": "https://github.com/glotzerlab/hoomd-blue",
+    "server": {
+      "command": "hoomd-mcp",
+      "args": []
+    }
+  },
+  "ambertools": {
+    "category": "molecular-dynamics",
+    "source": "https://ambermd.org/AmberTools.php",
+    "server": {
+      "command": "ambertools-mcp",
+      "args": []
+    }
+  },
+  "rdkit": {
+    "category": "cheminformatics",
+    "source": "https://github.com/mims-harvard/ToolUniverse",
+    "server": {
+      "command": "/path/to/ToolUniverse/.venv/bin/tooluniverse-smcp-stdio",
+      "args": [
+        "--no-search",
+        "--include-tools",
+        "RDKit_pharmacophore_features",
+        "RDKit_matched_molecular_pair"
+      ],
+      "cwd": "/path/to/ToolUniverse",
+      "env": {
+        "FASTMCP_NO_BANNER": "1",
+        "HF_HUB_OFFLINE": "1",
+        "DO_NOT_TRACK": "1"
+      }
+    }
+  },
+  "openbabel": {
+    "category": "cheminformatics",
+    "source": "https://github.com/openbabel/openbabel",
+    "server": {
+      "command": "openbabel-mcp",
+      "args": []
+    }
+  },
+  "psi4": {
+    "category": "quantum-chemistry",
+    "source": "https://github.com/Keith9922/chemaster",
+    "server": {
+      "command": "/path/to/chemaster/.venv/bin/chemaster-mcp",
+      "args": [
+        "calc_psi4"
+      ],
+      "cwd": "/path/to/chemaster"
+    }
+  },
+  "pyscf": {
+    "category": "quantum-chemistry",
+    "source": "https://github.com/lixin19/mcp2pyscf",
+    "server": {
+      "command": "/path/to/mcp2pyscf/.venv/bin/python",
+      "args": [
+        "/path/to/mcp2pyscf/main.py"
+      ],
+      "cwd": "/path/to/mcp2pyscf"
+    }
+  },
+  "icarus_verilog": {
+    "category": "hardware-verification",
+    "source": "https://github.com/zesun33/mcp-cocotb",
+    "server": {
+      "command": "node",
+      "args": [
+        "dist/index.js"
+      ],
+      "cwd": "/path/to/mcp-cocotb",
+      "env": {}
+    }
+  },
+  "ghdl": {
+    "category": "hardware-verification",
+    "source": "https://github.com/lcapossio/fpgaZeroMCP",
+    "server": {
+      "command": "/path/to/fpgaZeroMCP/.venv/bin/python",
+      "args": [
+        "/path/to/fpgaZeroMCP/server.py"
+      ],
+      "cwd": "/path/to/fpgaZeroMCP",
+      "env": {
+        "PYTHONPATH": "/path/to/fpgaZeroMCP",
+        "FPGAZERO_DATA_DIR": "/path/to/fpgazero-data"
+      }
+    }
+  },
+  "cocotb": {
+    "category": "hardware-verification",
+    "source": "https://github.com/zesun33/mcp-cocotb",
+    "server": {
+      "command": "node",
+      "args": [
+        "dist/index.js"
+      ],
+      "cwd": "/path/to/mcp-cocotb",
+      "env": {}
+    }
+  },
+  "symbiyosys": {
+    "category": "formal-verification",
+    "source": "https://github.com/zesun33/mcp-formal",
+    "server": {
+      "command": "node",
+      "args": [
+        "dist/index.js"
+      ],
+      "cwd": "/path/to/mcp-formal",
+      "env": {}
+    }
+  },
+  "nextpnr": {
+    "category": "fpga-eda",
+    "source": "https://github.com/zesun33/mcp-fpga",
+    "server": {
+      "command": "node",
+      "args": [
+        "dist/index.js"
+      ],
+      "cwd": "/path/to/mcp-fpga",
+      "env": {}
+    }
+  },
+  "opensta": {
+    "category": "eda-timing",
+    "source": "https://github.com/The-OpenROAD-Project/OpenSTA",
+    "server": {
+      "command": "opensta-mcp",
+      "args": []
+    }
+  },
+  "magic_vlsi": {
+    "category": "eda-layout",
+    "source": "https://github.com/EkanshWadhwa39/magic-agent-bridge",
+    "server": {
+      "command": "/path/to/magic-agent-bridge/.venv/bin/magic-agent-bridge",
+      "args": [],
+      "cwd": "/path/to/magic-agent-bridge",
+      "env": {
+        "MAGIC_BRIDGE_HOST": "127.0.0.1",
+        "MAGIC_BRIDGE_PORT": "5566"
+      }
+    }
+  },
+  "netgen": {
+    "category": "eda-verification",
+    "source": "https://opencircuitdesign.com/netgen/",
+    "server": {
+      "command": "netgen-mcp",
+      "args": []
+    }
+  },
+  "xyce": {
+    "category": "electronic-simulation",
+    "source": "https://github.com/Xyce/Xyce",
+    "server": {
+      "command": "xyce-mcp",
+      "args": []
+    }
+  },
+  "airsim": {
+    "category": "robotics-simulation",
+    "source": "https://github.com/microsoft/AirSim",
+    "server": {
+      "command": "airsim-mcp",
+      "args": []
+    }
+  },
+  "flightgear": {
+    "category": "flight-simulation",
+    "source": "https://github.com/FlightGear/flightgear",
+    "server": {
+      "command": "flightgear-mcp",
+      "args": []
+    }
+  },
+  "mavsdk": {
+    "category": "flight-control",
+    "source": "https://github.com/Bilalileri/EchoPilot---Ollama---PX4---MCP",
+    "server": {
+      "command": "/path/to/EchoPilot/.venv/bin/python",
+      "args": [
+        "/path/to/EchoPilot/drone_server.py"
+      ],
+      "cwd": "/path/to/EchoPilot"
+    }
+  },
+  "coppeliasim": {
+    "category": "robotics-simulation",
+    "source": "https://github.com/alsak0de/CoppeliaSim-mcpserver",
+    "server": {
+      "type": "sse",
+      "url": "http://127.0.0.1:8000/sse"
+    }
+  },
+  "oscilloscope": {
+    "category": "instrumentation",
+    "source": "https://github.com/Netlist-Studio/scope-mcp",
+    "server": {
+      "command": "/path/to/scope-mcp/.venv/bin/python",
+      "args": [
+        "scope_server.py",
+        "--host",
+        "scope.example.invalid"
+      ],
+      "cwd": "/path/to/scope-mcp"
+    }
+  },
+  "function_generator": {
+    "category": "instrumentation",
+    "source": "https://github.com/pyvisa/pyvisa",
+    "server": {
+      "command": "function-generator-mcp",
+      "args": []
+    }
+  },
+  "power_supply": {
+    "category": "instrumentation",
+    "source": "https://github.com/lymzzyh/dp100-mcp",
+    "server": {
+      "command": "/path/to/dp100-mcp/.venv/bin/python",
+      "args": [
+        "dp100_mcp.py"
+      ],
+      "cwd": "/path/to/dp100-mcp"
+    }
+  },
+  "daq": {
+    "category": "instrumentation",
+    "source": "https://github.com/BrianDavidCouch/daqmx-mcp",
+    "server": {
+      "command": "/path/to/daqmx-mcp/.venv/bin/daqmx-mcp",
+      "args": [
+        "--config",
+        "config.example.json"
+      ],
+      "cwd": "/path/to/daqmx-mcp",
+      "env": {
+        "DAQMX_MCP_BACKEND": "mock"
+      }
+    }
+  },
+  "epics": {
+    "category": "scientific-instrument-control",
+    "source": "https://github.com/Jacky1-Jiang/EPICS-MCP-Server",
+    "server": {
+      "command": "/path/to/EPICS-MCP-Server/.venv/bin/python",
+      "args": [
+        "src/epics-mcp-server/server_by_stdio.py"
+      ],
+      "cwd": "/path/to/EPICS-MCP-Server",
+      "env": {
+        "EPICS_CA_AUTO_ADDR_LIST": "NO",
+        "EPICS_CA_ADDR_LIST": "127.0.0.1"
+      }
+    }
+  },
+  "tango": {
+    "category": "scientific-instrument-control",
+    "source": "https://github.com/abogani/tango-mcp",
+    "server": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  },
+  "qcodes": {
+    "category": "quantum-instrumentation",
+    "source": "https://github.com/caidish/instrMCP",
+    "server": {
+      "command": "/path/to/instrMCP/.venv/bin/python",
+      "args": [
+        "/path/to/instrMCP/agentsetting/codexsetting/codex_launcher.py"
+      ],
+      "cwd": "/path/to/instrMCP",
+      "env": {
+        "JUPYTER_MCP_HOST": "127.0.0.1",
+        "JUPYTER_MCP_PORT": "8123",
+        "NO_PROXY": "127.0.0.1,localhost"
+      }
+    }
+  },
+  "pymeasure": {
+    "category": "instrumentation",
+    "source": "https://github.com/pymeasure/pymeasure",
+    "server": {
+      "command": "pymeasure-mcp",
+      "args": []
+    }
+  }
 }

@@ -159,7 +159,8 @@ def test_science_catalog_covers_requested_servers():
     assert expected <= set(catalog)
     for name, entry in catalog.items():
         assert entry["source"].startswith("https://")
-        assert entry["prerequisites"]
+        assert "prerequisites" not in entry
+        assert "verification" not in entry
         assert "server" in entry
         assert load_mcp_config_document({"mcpServers": {name: entry["server"]}})
 
@@ -172,3 +173,11 @@ def load_mcp_config_document(document: dict) -> dict:
         path = Path(directory) / "mcp.json"
         path.write_text(json.dumps(document), encoding="utf-8")
         return load_mcp_config(path)
+
+
+def test_catalog_cli_without_descriptive_fields():
+    result = CliRunner().invoke(cli, ["mcp", "catalog"])
+    assert result.exit_code == 0, result.output
+    assert "Requires:" not in result.output
+    for name in load_science_mcp_catalog():
+        assert name in result.output
