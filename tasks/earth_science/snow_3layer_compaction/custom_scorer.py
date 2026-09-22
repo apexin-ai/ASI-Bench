@@ -111,8 +111,22 @@ def _load_summary(path: Path) -> pd.DataFrame:
     return df[SUMMARY_COLUMNS].copy()
 
 
-def _initial_swe_mm(pred_dir: Path) -> float:
-    init = json.loads((pred_dir / "data/snowpack_init.json").read_text(encoding="utf-8"))
+def _instance_data_dir(pred_dir: Path, ref_dir: Path) -> Path:
+    """Locate the immutable task inputs.
+
+    ``pred_dir`` only holds the declared agent outputs once the run is persisted
+    (``asibench score`` / ``asibench submit``), so the instance ``data/`` folder
+    next to the reference directory is the authority; the workspace copy is a
+    fallback for live-workspace scoring.
+    """
+    for candidate in (ref_dir.parent / "data", pred_dir / "data"):
+        if candidate.is_dir():
+            return candidate
+    raise FileNotFoundError(f"instance data directory not found next to {ref_dir}")
+
+
+def _initial_swe_mm(data_dir: Path) -> float:
+    init = json.loads((data_dir / "snowpack_init.json").read_text(encoding="utf-8"))
     return float(sum(layer["ice_mm"] + layer.get("liq_mm", 0.0) for layer in init["layers"]))
 
 
@@ -127,7 +141,8 @@ class SnowpackProcessScorer(Scorer):
             ref_state = np.load(ref_dir / config.get("ref_state_file", "snow_state_ref.npy"))
             pred_summary = _load_summary(pred_dir / config.get("summary_file", "results/snow_summary.csv"))
             ref_summary = _load_summary(ref_dir / config.get("ref_summary_file", "snow_summary_ref.csv"))
-            forcing = pd.read_csv(pred_dir / "data/forcing.csv")
+            data_dir = _instance_data_dir(pred_dir, ref_dir)
+            forcing = pd.read_csv(data_dir / "forcing.csv")
 
             if pred_state.shape != ref_state.shape:
                 raise ValueError(f"snow_state shape mismatch: {pred_state.shape} vs {ref_state.shape}")
@@ -206,7 +221,7 @@ class SnowpackProcessScorer(Scorer):
             "max_error": max(state_summary_errors.values()),
         }
 
-        init_swe = _initial_swe_mm(pred_dir)
+        init_swe = _initial_swe_mm(data_dir)
         cum_in = float(forcing["snowfall_mm_hr"].sum() + forcing["rainfall_mm_hr"].sum())
         cum_runoff = float(pred_summary["runoff_mm"].sum())
         delta_swe = float(pred_summary["swe_mm"].iloc[-1] - init_swe)

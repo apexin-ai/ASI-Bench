@@ -526,12 +526,30 @@ def _load_npy(directory: Path, filename: str) -> tuple[np.ndarray | None, str | 
     return arr, None
 
 
-def _load_parameters(pred_dir: Path) -> dict:
-    """Try to read parameters.json from the workspace data/ directory."""
-    for candidate in [
+def _instance_data_dir(pred_dir: Path, ref_dir: Path) -> Path:
+    """Locate the immutable task inputs.
+
+    ``pred_dir`` only holds the declared agent outputs once the run is persisted
+    (``asibench score`` / ``asibench submit``), so the instance ``data/`` folder
+    next to the reference directory is the authority; the workspace copy is a
+    fallback for live-workspace scoring.
+    """
+    for candidate in (ref_dir.parent / "data", pred_dir / "data"):
+        if candidate.is_dir():
+            return candidate
+    raise FileNotFoundError(f"instance data directory not found next to {ref_dir}")
+
+
+def _load_parameters(pred_dir: Path, ref_dir: Path | None = None) -> dict:
+    """Read parameters.json from the instance data/ directory (workspace as fallback)."""
+    candidates = []
+    if ref_dir is not None:
+        candidates.append(ref_dir.parent / "data" / "parameters.json")
+    candidates += [
         pred_dir / "data" / "parameters.json",
         pred_dir / "parameters.json",
-    ]:
+    ]
+    for candidate in candidates:
         if candidate.exists():
             try:
                 return json.loads(candidate.read_text())
@@ -887,7 +905,7 @@ class IsingDomainSizePhysicsScorer(Scorer):
         times = arr[0].astype(float)
         sizes = arr[1].astype(float)
 
-        params = _load_parameters(pred_dir)
+        params = _load_parameters(pred_dir, ref_dir)
         lattice_size = _lattice_size_from_params(params)
         max_r = lattice_size // 2
 
@@ -1140,7 +1158,7 @@ class IsingInterfaceDensityPhysicsScorer(Scorer):
         times = arr[0].astype(float)
         rho = arr[1].astype(float)
 
-        params = _load_parameters(pred_dir)
+        params = _load_parameters(pred_dir, ref_dir)
         lattice_size = _lattice_size_from_params(params)
 
         domain_arr, domain_err = _load_npy(pred_dir, domain_size_file)
