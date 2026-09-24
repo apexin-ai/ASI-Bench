@@ -329,6 +329,10 @@ Serial and parallel local scoring must both stage instance `data/` with the
 persisted outputs in a fresh temporary workspace, reject symlinks and input
 overwrites, leave the source `.outputs` tree unchanged, and exclude staging
 failures from aggregate numerators and denominators.
+The staging check copies the complete instance `data/` tree, so literal and
+expanded input declarations (for example `pairs/<ii>/source.npy`) are both
+covered. Missing contestant files remain ordinary submission failures rather
+than evaluator failures.
 
 `score --parallel N` performs full-batch preflight before evaluator work and
 runs complete result evaluations in fresh spawned processes. The worker count

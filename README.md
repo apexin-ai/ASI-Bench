@@ -177,6 +177,9 @@ Judge provider, an evaluator runtime failure, and missing evaluator input.
 For each result, local scoring builds an isolated temporary scorer workspace
 from the persisted agent outputs plus the immutable instance `data/`; it never
 adds inputs to or otherwise modifies the persisted `.outputs` directory.
+Input declarations are contracts for the instance data root, not literal
+filesystem paths: declarations containing expansions such as `<ii>` are
+supported because the complete materialized `data/` tree is staged.
 
 `--parallel N` runs at most `N` independent result evaluations at once and
 defaults to `1`. Each result gets a fresh worker process because custom scorers

@@ -473,7 +473,11 @@ def test_evaluator_unavailable_is_unscored_and_classified(monkeypatch, tmp_path)
 
 @pytest.mark.parametrize(
     ("parallel", "declared_name"),
-    [(1, "data/input.txt"), (2, "input.txt")],
+    [
+        (1, "data/input.txt"),
+        (2, "input.txt"),
+        (1, "pairs/<ii>/source.npy"),
+    ],
 )
 def test_local_scoring_stages_instance_data_without_mutating_outputs(
     tmp_path, parallel, declared_name
@@ -514,6 +518,7 @@ def test_missing_instance_data_is_invalid_and_excluded(tmp_path, parallel):
         / "input.txt"
     )
     data_file.unlink()
+    data_file.parent.rmdir()
 
     report, _destination = score_seed31415_results(
         results_dir,

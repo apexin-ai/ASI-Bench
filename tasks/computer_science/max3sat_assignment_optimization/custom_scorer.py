@@ -417,6 +417,19 @@ def _evaluate_uncached(
     metrics: dict[str, Any],
     config: dict[str, Any],
 ) -> _EvaluationRecord:
+    if not (pred_dir / "solver.py").is_file():
+        return _EvaluationRecord(
+            False,
+            "solver.py is missing",
+            False,
+            n_variables,
+            len(clauses),
+            0,
+            int(metrics["reference_satisfied"]),
+            int(metrics["reference_unsatisfied"]),
+            "",
+            None,
+        )
     try:
         run_result = _run_submission_once(pred_dir, formula_path, config)
     except Exception as exc:
@@ -529,6 +542,11 @@ def _failure(
     *,
     scorer_internal_error: bool,
 ) -> ScoreDetail:
+    failure_kind = (
+        "evaluator_runtime_error"
+        if scorer_internal_error
+        else "submission_error"
+    )
     return ScoreDetail(
         scorer_name=name,
         score=0.0,
@@ -537,6 +555,7 @@ def _failure(
         details={
             "error": message,
             "scorer_internal_error": scorer_internal_error,
+            "failure_kind": failure_kind,
         },
         message=message,
     )

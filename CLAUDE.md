@@ -97,6 +97,9 @@
   result 内的 gate/scorer/retry/num_judges 保持串行；协调进程按源顺序原子写报告。
   每个评分 job 必须在独立临时目录合并只读 instance `data/` 与持久化 outputs，拒绝
   symlink、路径逃逸及 outputs 覆盖 evaluator input，且不得修改源 `.outputs`。
+  `input.files.name` 可以是实例展开模板；评分只要求声明输入时存在安全的 `data/`
+  根目录，并整棵复制其实际物化内容。预测文件缺失属于 submission failure，不能
+  设置 `scorer_internal_error`。
   `run-score` 在全部 agent task 完成后才逐 repetition 启动上述评分，整个流程不得
   出现 \(N \times N\) 嵌套并发。
 - host-side Claude/Kimi harness home 必须同时按 benchmark execution 与

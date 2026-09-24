@@ -68,7 +68,7 @@ class _ScoreJob:
     output_dir: str
     reference_dir: str
     data_dir: str
-    required_data_files: tuple[str, ...]
+    requires_instance_data: bool
     evaluation: dict[str, Any]
     parameters: dict[str, Any]
     max_score: float
@@ -200,28 +200,10 @@ def _staged_prediction_dir(job: _ScoreJob) -> Iterator[Path]:
         data_dir = Path(job.data_dir)
         if data_dir.exists():
             _copy_tree_without_symlinks(data_dir, pred_dir / "data", label="Instance data")
-        elif job.required_data_files:
+        elif job.requires_instance_data:
             raise _MissingEvaluatorInputError(
                 f"Required instance data directory is missing: {data_dir}"
             )
-
-        for required in job.required_data_files:
-            relative = Path(required)
-            if relative.is_absolute() or ".." in relative.parts:
-                raise _MissingEvaluatorInputError(
-                    f"Required instance input has an unsafe path: {required}"
-                )
-            if relative.parts and relative.parts[0] == "data":
-                relative = Path(*relative.parts[1:])
-            if not relative.parts:
-                raise _MissingEvaluatorInputError(
-                    f"Required instance input has an invalid path: {required}"
-                )
-            required_path = pred_dir / "data" / relative
-            if not required_path.is_file():
-                raise _MissingEvaluatorInputError(
-                    f"Required instance input is missing: {required}"
-                )
 
         _copy_output_tree(Path(job.output_dir), pred_dir)
         yield pred_dir
@@ -258,7 +240,7 @@ def _prepare_score_jobs(
         ) from exc
 
     loader = TaskLoader(tasks_root)
-    task_cache: dict[str, tuple[dict[str, Any], Path, tuple[str, ...]]] = {}
+    task_cache: dict[str, tuple[dict[str, Any], Path, bool]] = {}
     jobs: list[_ScoreJob] = []
     for index, (result_path, source) in enumerate(result_files):
         task_id = str(source["task_id"])
@@ -300,15 +282,15 @@ def _prepare_score_jobs(
                 if isinstance(input_config, dict)
                 else []
             )
-            required_data_files = tuple(
-                str(item["name"])
-                for item in input_files
-                if isinstance(item, dict)
-                and isinstance(item.get("name"), str)
-            )
-            cached = (evaluation, task_dir, required_data_files)
+            # InstanceGenerator materializes the complete data tree. Input
+            # names may contain expansion templates (for example
+            # ``pairs/<ii>/source.npy``), so local scoring validates the
+            # declared data root and stages it wholesale instead of treating
+            # declarations as literal paths.
+            requires_instance_data = bool(input_files)
+            cached = (evaluation, task_dir, requires_instance_data)
             task_cache[task_id] = cached
-        evaluation, task_dir, required_data_files = cached
+        evaluation, task_dir, requires_instance_data = cached
 
         prompt_level = str(source.get("prompt_level") or "")
         max_score = float(
@@ -329,7 +311,7 @@ def _prepare_score_jobs(
                 output_dir=str(output_dir.absolute()),
                 reference_dir=str(reference_dir.resolve()),
                 data_dir=str((instance_dir / "data").absolute()),
-                required_data_files=required_data_files,
+                requires_instance_data=requires_instance_data,
                 evaluation=evaluation,
                 parameters=_load_parameters(source, instance_dir),
                 max_score=max_score,
