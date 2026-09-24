@@ -17,6 +17,7 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import Any
 
+from ai4sci_bench.adapters.invocation import InvocationResult
 from ai4sci_bench.core.agent_interface import AgentAdapter
 from ai4sci_bench.core.types import AgentOutput, RunStatus, TaskInstance
 from ai4sci_bench.runner.linux_ns_sandbox import LinuxNSSandbox
@@ -214,70 +215,135 @@ class SubprocessAgentAdapter(AgentAdapter):
                     ),
                 )
 
-            capture_id = f"{safe_run_key(task_instance.run_key)}.{uuid.uuid4().hex}"
+        except subprocess.TimeoutExpired as e:
+            return self._invocation_to_output(
+                task_instance, workspace, self._timeout_result(e, eff_timeout, t0),
+            )
+        except Exception as e:
+            # linux_ns sandbox failed before producing a result
+            return self._invocation_to_output(
+                task_instance, workspace,
+                InvocationResult(
+                    status=RunStatus.FAILED, returncode=None, raw_stdout=None,
+                    raw_stderr=None, log=str(e),
+                    execution_time_seconds=time.time() - t0,
+                    error_message=str(e), launched=False,
+                ),
+            )
+
+        result = self._execute(
+            cmd, env=env, cwd=cwd, stdin_input=stdin_input,
+            timeout=eff_timeout, run_key=task_instance.run_key, shell=use_shell,
+        )
+        return self._invocation_to_output(task_instance, workspace, result)
+
+    def _execute(
+        self,
+        cmd: list[str] | str,
+        *,
+        env: dict[str, str] | None,
+        cwd: Path,
+        stdin_input: str | None,
+        timeout: int,
+        run_key: str,
+        shell: bool = False,
+    ) -> InvocationResult:
+        """Run one agent process under a graceful timeout. Task-independent.
+
+        Tees stdout/stderr live under ``live_log_dir`` when one is configured.
+        """
+        t0 = time.time()
+        try:
+            capture_id = f"{safe_run_key(run_key)}.{uuid.uuid4().hex}"
             result = run_subprocess_with_graceful_timeout(
                 cmd,
                 cwd=str(cwd),
-                timeout=eff_timeout,
+                timeout=timeout,
                 env=env,
-                shell=use_shell,
+                shell=shell,
                 input=stdin_input,
                 live_stdout_path=(self.live_log_dir / f"{capture_id}.stdout" if self.live_log_dir else None),
                 live_stderr_path=(self.live_log_dir / f"{capture_id}.stderr" if self.live_log_dir else None),
             )
-            elapsed = time.time() - t0
             raw_stdout = result.stdout
-            raw_stderr = result.stderr
-            log = self._build_full_log(result.stdout, result.stderr, result.returncode)
-            produced_files = collect_output_files(workspace, task_instance)
-            status = RunStatus.COMPLETED if result.returncode == 0 else RunStatus.FAILED
-            error_message = (
-                None
-                if result.returncode == 0
-                else _format_exit_error(self.__class__.__name__, result.returncode)
+            return InvocationResult(
+                status=RunStatus.COMPLETED if result.returncode == 0 else RunStatus.FAILED,
+                returncode=result.returncode,
+                raw_stdout=raw_stdout,
+                raw_stderr=result.stderr,
+                log=self._build_full_log(result.stdout, result.stderr, result.returncode),
+                execution_time_seconds=time.time() - t0,
+                error_message=(
+                    None
+                    if result.returncode == 0
+                    else _format_exit_error(self.__class__.__name__, result.returncode)
+                ),
+                raw_stdout_format=(
+                    self._raw_stdout_format() if raw_stdout is not None else None
+                ),
             )
 
         except subprocess.TimeoutExpired as e:
-            elapsed = time.time() - t0
-            raw_stdout = e.stdout or ""
-            raw_stderr = e.stderr or ""
-            log = self._build_full_log(e.stdout or "", e.stderr or "", None)
-            kill_note = (
-                " (force-killed via SIGKILL after grace period)"
-                if getattr(e, "forced_kill", False)
-                else " (terminated via SIGTERM)"
-            )
-            timeout_line = (
-                f"{self.__class__.__name__} timed out after {eff_timeout}s{kill_note}"
-            )
-            log = f"{timeout_line}\n\n{log}" if log else timeout_line
-            produced_files = collect_output_files(workspace, task_instance)
-            status = RunStatus.TIMEOUT
-            error_message = timeout_line
+            return self._timeout_result(e, timeout, t0)
 
         except Exception as e:
-            elapsed = time.time() - t0
-            raw_stdout = None
-            raw_stderr = None
-            log = str(e)
-            produced_files = []
-            status = RunStatus.FAILED
-            error_message = str(e)
+            return InvocationResult(
+                status=RunStatus.FAILED,
+                returncode=None,
+                raw_stdout=None,
+                raw_stderr=None,
+                log=str(e),
+                execution_time_seconds=time.time() - t0,
+                error_message=str(e),
+                launched=False,
+            )
 
+    def _timeout_result(
+        self, e: subprocess.TimeoutExpired, timeout: int, t0: float,
+    ) -> InvocationResult:
+        log = self._build_full_log(e.stdout or "", e.stderr or "", None)
+        kill_note = (
+            " (force-killed via SIGKILL after grace period)"
+            if getattr(e, "forced_kill", False)
+            else " (terminated via SIGTERM)"
+        )
+        timeout_line = (
+            f"{self.__class__.__name__} timed out after {timeout}s{kill_note}"
+        )
+        return InvocationResult(
+            status=RunStatus.TIMEOUT,
+            returncode=None,
+            raw_stdout=e.stdout or "",
+            raw_stderr=e.stderr or "",
+            log=f"{timeout_line}\n\n{log}" if log else timeout_line,
+            execution_time_seconds=time.time() - t0,
+            error_message=timeout_line,
+            raw_stdout_format=self._raw_stdout_format(),
+        )
+
+    def _invocation_to_output(
+        self,
+        task_instance: TaskInstance,
+        workspace: Path,
+        result: InvocationResult,
+    ) -> AgentOutput:
+        """Attach the task-level view (deliverables, instance id) to a run."""
+        produced_files = (
+            collect_output_files(workspace, task_instance) if result.launched else []
+        )
         return AgentOutput(
             instance_id=task_instance.instance_id,
             output_dir=workspace,
             code_files=[f for f in produced_files if f.endswith(".py")],
             data_files=[f for f in produced_files if not f.endswith(".py")],
-            log=log,
-            execution_time_seconds=elapsed,
-            status=status,
-            error_message=error_message,
-            raw_stdout=raw_stdout,
-            raw_stderr=raw_stderr,
-            raw_stdout_format=(
-                self._raw_stdout_format() if raw_stdout is not None else None
-            ),
+            log=result.log,
+            execution_time_seconds=result.execution_time_seconds,
+            status=result.status,
+            error_message=result.error_message,
+            raw_stdout=result.raw_stdout,
+            raw_stderr=result.raw_stderr,
+            raw_stdout_format=result.raw_stdout_format,
+            cost=result.cost,
         )
 
     # ── Subclass hooks ──────────────────────────────────────────

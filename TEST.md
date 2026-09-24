@@ -207,6 +207,30 @@ unrestricted-mode opt-out, per-instance kimi homes for both host env and
 `--sandbox os` rw mounts, concurrent Kimi root initialization, explicit
 `kimi_home` passthrough, and teardown cleanup of the whole home root.
 
+## Task-independent CLI invocation (claude_code / codex)
+
+`ClaudeCodeCLIAdapter.invoke()` and `CodexCLIAdapter.invoke()` run the CLI on
+an `Invocation` (prompt, workspace, run key, timeout, optional system prompt,
+Claude allow-list, base env) without a `TaskInstance`. `solve()` is unchanged
+and keeps its overridable task hooks; both are built from the same
+task-independent command, environment, execution and stream-check pieces.
+`invoke()` runs on the host only (`none` / `task`) and rejects `os` / `linux_ns`.
+
+System prompts: Claude `--append-system-prompt` / `--system-prompt`; Codex has
+no such flag (`codex exec --instructions` is rejected by the CLI), so append
+is `--config developer_instructions=...` and replace is
+`--config model_instructions_file=<file>`.
+
+```bash
+uv run pytest -q tests/test_adapter_invoke.py
+```
+
+Coverage includes: prompt on stdin and cwd = workspace, both system-prompt
+modes for each CLI, Claude `--allowedTools` with `--permission-mode`, Codex
+rejecting an allow-list, per-`run_key` isolated homes, base env layered under
+API env, a zero exit whose stream reports an error becoming FAILED, timeout,
+and rejection of container sandboxes.
+
 ## CLI Task Draft upload and browser confirmation
 
 Task submission tests cover manual PAT validation and storage, endpoint

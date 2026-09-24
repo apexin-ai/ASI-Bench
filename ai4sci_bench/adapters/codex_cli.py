@@ -13,6 +13,7 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from ai4sci_bench.adapters.invocation import Invocation, InvocationResult
 from ai4sci_bench.adapters.subprocess_base import (
     SubprocessAgentAdapter,
     collect_output_files,
@@ -34,6 +35,16 @@ CODEX_RESTRICTED_DISABLE_FEATURES = (
     "codex_hooks",
     "computer_use",
 )
+
+
+def _toml_string(value: str) -> str:
+    """A TOML basic string for a ``--config key=value`` override.
+
+    JSON string syntax is valid TOML except for ``\\u`` escapes of UTF-16
+    surrogates, which ``ensure_ascii`` produces for characters outside the BMP
+    and TOML rejects; keeping those characters literal avoids that.
+    """
+    return json.dumps(value, ensure_ascii=False)
 
 
 class CodexCLIAdapter(SubprocessAgentAdapter):
@@ -327,6 +338,37 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
             cost=self._extract_usage_from_jsonl(raw_stdout) if raw_stdout else None,
         )
 
+    def invoke(self, invocation: Invocation) -> InvocationResult:
+        """Run Codex once on a prompt, independent of any benchmark task.
+
+        Uses the same command line, API routing, isolated HOME and graceful
+        timeout as ``solve``. Only host-side sandboxes (``none`` / ``task``)
+        are supported: ``os`` and ``linux_ns`` need task metadata to build
+        their container or namespace.
+        """
+        if self.sandbox not in ("none", "task"):
+            raise ValueError(
+                f"invoke() runs on the host; sandbox={self.sandbox!r} is not supported"
+            )
+        if invocation.allowed_tools:
+            raise ValueError("Codex has no per-tool allow-list; allowed_tools must be unset")
+        result = self._execute(
+            self._cli_command(
+                invocation.workspace,
+                run_key=invocation.run_key,
+                system_prompt=invocation.system_prompt,
+                system_prompt_mode=invocation.system_prompt_mode,
+            ),
+            env=self._cli_env(invocation.run_key, base_env=invocation.env),
+            cwd=invocation.workspace.resolve(),
+            stdin_input=invocation.prompt,
+            timeout=invocation.timeout_seconds or self.timeout_seconds,
+            run_key=invocation.run_key,
+        )
+        if result.cost is None and result.raw_stdout:
+            result.cost = self._extract_usage_from_jsonl(result.raw_stdout)
+        return result
+
     def _should_use_windows_task_bridge(self) -> bool:
         return self.sandbox == "task" and self._is_windows_platform()
 
@@ -486,9 +528,24 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         return cmd
 
     def _build_command(self, task_instance: TaskInstance, task_env):
-        workspace = task_instance.workspace_dir
-        prompt = self._build_prompt(workspace, task_env)
+        return self._cli_command(
+            task_instance.workspace_dir, run_key=task_instance.run_key,
+        )
 
+    def _cli_command(
+        self,
+        workspace: Path,
+        *,
+        run_key: str,
+        system_prompt: str | None = None,
+        system_prompt_mode: str = "append",
+    ) -> list[str]:
+        """The codex exec command line. The prompt itself goes on stdin.
+
+        Codex has no system-prompt flag. ``developer_instructions`` adds a
+        developer message after Codex's own instructions; ``model_instructions_file``
+        replaces them, and has to be a file.
+        """
         codex_bin = "codex.cmd" if os.name == "nt" else "codex"
         # Always resolve to absolute path to avoid double-resolution when
         # both subprocess cwd= and --cd are set (fixes #15).
@@ -525,10 +582,25 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         else:
             cmd += ["--sandbox", "workspace-write"]
         self._apply_tool_isolation(cmd)
+        if system_prompt:
+            if system_prompt_mode == "append":
+                cmd += ["--config", f"developer_instructions={_toml_string(system_prompt)}"]
+            elif system_prompt_mode == "replace":
+                path = self._write_model_instructions(run_key, system_prompt)
+                cmd += ["--config", f"model_instructions_file={_toml_string(str(path))}"]
+            else:
+                raise ValueError(f"unknown system_prompt_mode {system_prompt_mode!r}")
         # Pass prompt via stdin to avoid Windows command-line length limits
         # (fixes #12). The sentinel "-" tells codex to read from stdin.
         cmd += ["--", "-"]
         return cmd
+
+    def _write_model_instructions(self, run_key: str, text: str) -> Path:
+        directory = self.repo_root / ".ai4sci-bench" / "codex_instructions"
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{safe_run_key(run_key)}.md"
+        path.write_text(text, encoding="utf-8")
+        return path
 
     def _get_stdin_input(self, task_instance=None, task_env=None) -> str | None:
         """Return prompt text to pipe via stdin (fixes #12 Windows cmd length).
@@ -545,7 +617,16 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         When tool_mode is not UNRESTRICTED, also isolate HOME so the
         Codex process cannot see ambient config, MCP servers, or skills.
         """
-        env = super()._build_run_env(task_instance, task_env) or os.environ.copy()
+        return self._cli_env(
+            task_instance.run_key,
+            base_env=super()._build_run_env(task_instance, task_env),
+        )
+
+    def _cli_env(
+        self, run_key: str, *, base_env: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        """Child environment: API routing plus, when isolated, a per-run HOME."""
+        env = dict(base_env) if base_env else os.environ.copy()
         api_env = self._build_api_env()
         if api_env:
             env.update(api_env)
@@ -554,7 +635,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         if self.tool_mode != ToolMode.UNRESTRICTED:
             api_codex_home = api_env.get("CODEX_HOME") if api_env else None
             isolated_home = self._prepare_isolated_codex_home(
-                task_instance, api_codex_home=api_codex_home,
+                run_key, api_codex_home=api_codex_home,
             )
             env["HOME"] = str(isolated_home)
             env["USERPROFILE"] = str(isolated_home)
@@ -564,7 +645,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
 
     def _prepare_isolated_codex_home(
         self,
-        task_instance: TaskInstance,
+        run_key: str,
         *,
         api_codex_home: str | None = None,
     ) -> Path:
@@ -574,7 +655,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         CODEX_HOME with config.toml), its config is copied into the
         isolated dir so the provider routing is preserved.
         """
-        home = self.repo_root / ".ai4sci-bench" / "codex_home" / safe_run_key(task_instance.run_key)
+        home = self.repo_root / ".ai4sci-bench" / "codex_home" / safe_run_key(run_key)
         codex_dir = home / ".codex"
         config_dir = home / ".config"
         codex_dir.mkdir(parents=True, exist_ok=True)

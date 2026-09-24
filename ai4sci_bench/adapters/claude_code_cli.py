@@ -12,6 +12,7 @@ import threading
 import time
 from pathlib import Path
 
+from ai4sci_bench.adapters.invocation import Invocation, InvocationResult
 from ai4sci_bench.adapters.subprocess_base import (
     SubprocessAgentAdapter,
     collect_output_files,
@@ -340,13 +341,21 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
     # ── Env override ───────────────────────────────────────────
 
     def _build_run_env(self, task_instance, task_env) -> dict[str, str] | None:
-        base_env = super()._build_run_env(task_instance, task_env)
+        return self._cli_env(
+            task_instance.run_key,
+            base_env=super()._build_run_env(task_instance, task_env),
+        )
+
+    def _cli_env(
+        self, run_key: str, *, base_env: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        """Child environment: API routing plus, when isolated, a per-run HOME."""
         api_env = self._build_api_env()
         env = dict(base_env) if base_env else dict(os.environ)
         if api_env:
             env.update(api_env)
         if self.tool_mode != ToolMode.UNRESTRICTED:
-            isolated_home = self._prepare_isolated_claude_home(task_instance)
+            isolated_home = self._prepare_isolated_claude_home(run_key)
             env["HOME"] = str(isolated_home)
             env["USERPROFILE"] = str(isolated_home)
             # Overwrite any ambient CLAUDE_CONFIG_DIR so the child cannot
@@ -354,7 +363,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             env["CLAUDE_CONFIG_DIR"] = str(isolated_home / ".claude")
         return env
 
-    def _prepare_isolated_claude_home(self, task_instance) -> Path:
+    def _prepare_isolated_claude_home(self, run_key: str) -> Path:
         """Create a minimal per-run Claude home that excludes ambient state.
 
         Host-side runs (sandbox none/task/linux_ns) must not see the real
@@ -376,7 +385,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
                 self._claude_home_root = Path(tempfile.mkdtemp(
                     prefix="execution_", dir=parent,
                 ))
-            home = self._claude_home_root / safe_run_key(task_instance.run_key)
+            home = self._claude_home_root / safe_run_key(run_key)
             claude_dir = home / ".claude"
             claude_dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -415,15 +424,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
     def solve(self, task_instance: TaskInstance) -> AgentOutput:
         """Execute agent — delegates to OSSandbox when sandbox == 'os'."""
         if self.sandbox != "os":
-            output = super().solve(task_instance)
-            if output.cost is None and output.raw_stdout:
-                output.cost = self._extract_usage_from_jsonl(output.raw_stdout)
-            if output.status == RunStatus.COMPLETED:
-                terminal_error = self._proxy_attempt_error(output.raw_stdout) or self._extract_terminal_error_from_jsonl(output.raw_stdout)
-                if terminal_error is not None:
-                    output.status = RunStatus.FAILED
-                    output.error_message = terminal_error
-            return output
+            return self._check_stream_result(super().solve(task_instance))
 
         eff_timeout = self._get_effective_timeout(task_instance)
         workspace = task_instance.workspace_dir
@@ -491,6 +492,49 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             cost=self._extract_usage_from_jsonl(raw_stdout) if raw_stdout else None,
         )
 
+    def invoke(self, invocation: Invocation) -> InvocationResult:
+        """Run Claude Code once on a prompt, independent of any benchmark task.
+
+        Uses the same command line, API routing, isolated HOME, graceful
+        timeout and stream checks as ``solve``. Only host-side sandboxes
+        (``none`` / ``task``) are supported: ``os`` and ``linux_ns`` need task
+        metadata to build their container or namespace.
+        """
+        if self.sandbox not in ("none", "task"):
+            raise ValueError(
+                f"invoke() runs on the host; sandbox={self.sandbox!r} is not supported"
+            )
+        result = self._execute(
+            self._cli_command(
+                system_prompt=invocation.system_prompt,
+                system_prompt_mode=invocation.system_prompt_mode,
+                allowed_tools=invocation.allowed_tools,
+            ),
+            env=self._cli_env(invocation.run_key, base_env=invocation.env),
+            cwd=invocation.workspace.resolve(),
+            stdin_input=self._prepare_prompt(invocation.prompt),
+            timeout=invocation.timeout_seconds or self.timeout_seconds,
+            run_key=invocation.run_key,
+        )
+        return self._check_stream_result(result)
+
+    def _check_stream_result(self, result):
+        """Fill in cost and fail a zero exit whose stream ended in an error.
+
+        Works on an ``InvocationResult`` or an ``AgentOutput``.
+        """
+        if result.cost is None and result.raw_stdout:
+            result.cost = self._extract_usage_from_jsonl(result.raw_stdout)
+        if result.status == RunStatus.COMPLETED:
+            terminal_error = (
+                self._proxy_attempt_error(result.raw_stdout)
+                or self._extract_terminal_error_from_jsonl(result.raw_stdout)
+            )
+            if terminal_error is not None:
+                result.status = RunStatus.FAILED
+                result.error_message = terminal_error
+        return result
+
     def _apply_tool_isolation(self, cmd: list[str]) -> None:
         """Append tool-isolation flags based on the resolved ToolMode."""
         if self.tool_mode == ToolMode.UNRESTRICTED:
@@ -525,9 +569,21 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         return cmd
 
     def _build_command(self, task_instance: TaskInstance, task_env):
-        workspace = task_instance.workspace_dir
-        prompt = (workspace / "prompt.md").read_text(encoding="utf-8")
+        # A task without prompt.md fails here, as it always has, rather than
+        # launching the CLI with nothing on stdin.
+        prompt_path = task_instance.workspace_dir / "prompt.md"
+        if not prompt_path.is_file():
+            raise FileNotFoundError(prompt_path)
+        return self._cli_command()
 
+    def _cli_command(
+        self,
+        *,
+        system_prompt: str | None = None,
+        system_prompt_mode: str = "append",
+        allowed_tools: str | None = None,
+    ) -> list[str]:
+        """The claude command line. The prompt itself goes on stdin."""
         claude_bin = "claude.cmd" if os.name == "nt" else "claude"
         cmd = [
             claude_bin,
@@ -542,6 +598,15 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         if self.permission_mode:
             cmd += ["--permission-mode", self.permission_mode]
         self._apply_tool_isolation(cmd)
+        if allowed_tools:
+            cmd += ["--allowedTools", allowed_tools]
+        if system_prompt:
+            if system_prompt_mode == "append":
+                cmd += ["--append-system-prompt", system_prompt]
+            elif system_prompt_mode == "replace":
+                cmd += ["--system-prompt", system_prompt]
+            else:
+                raise ValueError(f"unknown system_prompt_mode {system_prompt_mode!r}")
         # Pass prompt via stdin rather than argv so Windows cmd.exe's
         # ~8 KB command-line limit (surfaced as "参数太长" / "The command line
         # is too long") cannot kill launches of long B1 prompts (fixes #27).
