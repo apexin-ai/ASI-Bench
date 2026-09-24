@@ -816,3 +816,23 @@
 - 避免复发：从安装包而非源码 cwd 验证导入；测试完整握手/列表/错误后存活；
   区分源代码生成与真实 CAD 执行；原始 CRLF patch 通过局部 attributes 保留字节。
   原始 smoke 安装和历史失败报告保留，不以 patched 本地通过冒称上游已修复。
+
+## 2026-09-24: Preserve evaluator failures and local scorer inputs
+
+- Problem: Judge transport failures lacked `scorer_internal_error`, so local
+  scoring counted evaluator outages as valid zeros; local re-scoring also
+  passed only persisted outputs to scorers and omitted immutable instance
+  `data/` files available during the original run.
+- Resolution: standardize evaluator failure kinds, exclude all evaluator
+  failures with `evaluation_invalid` and a null final score, and construct a
+  fresh per-job scorer workspace from validated instance data plus persisted
+  outputs without mutating either source tree.
+- Verification: focused Judge/local-scoring/fault-isolation/BenchFlow tests
+  passed `101` tests; the full locked suite passed `2424` tests with `2 skipped`
+  and `24 deselected`; bytecode compilation, distribution build, and
+  `git diff --check` passed. Ruff was unavailable in the locked environment.
+- Prevention: local-scoring regressions must cover serial and spawn-parallel
+  data staging, bare and `data/`-prefixed input declarations, symlink and input
+  overwrite rejection, legitimate submission zeros, and every canonical
+  evaluator failure kind.
+- Implementation commit: `b8dc871`.
