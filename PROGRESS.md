@@ -836,3 +836,21 @@
   overwrite rejection, legitimate submission zeros, and every canonical
   evaluator failure kind.
 - Implementation commit: `b8dc871`.
+
+## 2026-09-24: Validate all public task staging contracts
+
+- Problem: local scoring treated every `input.files.name` as a literal path;
+  expanded declarations such as `pairs/<ii>/source.npy` do not exist as
+  literal files after instance materialization. The Max-3-SAT public scorer
+  also classified a missing submitted `solver.py` as an evaluator failure.
+- Resolution: score jobs now require only a declared, safe instance `data/`
+  root and copy its complete materialized tree into the isolated scorer
+  workspace. Missing contestant artifacts are explicitly `submission_error`
+  results and remain valid scored zeros.
+- Verification: all 60 formal seed31415 task metadata/evaluation contracts
+  loaded, all custom scorer imports and scorer registrations passed, all 60
+  real instance/reference bundles staged successfully, and a parallel empty
+  submission smoke scored all 60 with `scorer_error_count: 0`. The full locked
+  suite passed `2426` tests with `2 skipped` and `24 deselected`; `uv build`,
+  bytecode compilation, and `git diff --check` passed.
+- Implementation commit: `59b9b34`.
