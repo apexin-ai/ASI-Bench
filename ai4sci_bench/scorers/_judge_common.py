@@ -378,6 +378,8 @@ def evaluator_unavailable_result(
         "error": error_text,
         "evaluator_status": "unavailable",
         "evaluator_unavailable": True,
+        "scorer_internal_error": True,
+        "failure_kind": "evaluator_unavailable",
     }
     if model:
         details["model"] = model

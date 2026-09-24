@@ -361,6 +361,8 @@ class TestLLMJudgeScorer:
         assert "API rate limit" in result.details["error"]
         assert result.details["evaluator_status"] == "unavailable"
         assert result.details["evaluator_unavailable"] is True
+        assert result.details["scorer_internal_error"] is True
+        assert result.details["failure_kind"] == "evaluator_unavailable"
         assert "unavailable" in result.message.lower()
 
     def test_parse_judge_response_json(self):
@@ -567,6 +569,8 @@ class TestMultimodalScorer:
         assert result.passed is False
         assert result.details["evaluator_status"] == "unavailable"
         assert result.details["evaluator_unavailable"] is True
+        assert result.details["scorer_internal_error"] is True
+        assert result.details["failure_kind"] == "evaluator_unavailable"
         assert "OpenRouter 401" in result.details["error"]
 
     def test_pixel_sim_missing_config(self, tmp_path):

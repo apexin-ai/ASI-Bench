@@ -260,6 +260,61 @@ evaluation:
     )
 
 
+def _write_instance_data_test_scorer(
+    tasks_dir: Path,
+    instances_dir: Path,
+    *,
+    declared_name: str = "data/input.txt",
+) -> None:
+    task_dir = tasks_dir / "physics" / "example"
+    task_meta = task_dir / "task_meta.yaml"
+    task_meta.write_text(
+        task_meta.read_text(encoding="utf-8").replace(
+            "input:\n  files: []",
+            f"input:\n  files:\n    - name: {declared_name}\n      type: data",
+        ),
+        encoding="utf-8",
+    )
+    data_dir = instances_dir / "physics.example__seed31415" / "data"
+    data_dir.mkdir()
+    (data_dir / "input.txt").write_text("immutable-input", encoding="utf-8")
+    (task_dir / "custom_scorer.py").write_text(
+        '''
+from ai4sci_bench.core.scorer import Scorer, register_scorer
+from ai4sci_bench.core.types import ScoreDetail
+
+
+@register_scorer("instance_data_test_scorer")
+class InstanceDataTestScorer(Scorer):
+    def score(self, pred_dir, ref_dir, config):
+        data = (pred_dir / "data/input.txt").read_text(encoding="utf-8")
+        output_exists = (pred_dir / "output.npy").is_file()
+        weight = float(config.get("weight", 1.0))
+        passed = data == "immutable-input" and output_exists
+        return ScoreDetail(
+            scorer_name="instance_data_test_scorer",
+            score=weight if passed else 0.0,
+            max_score=weight,
+            passed=passed,
+            details={"data": data, "output_exists": output_exists},
+        )
+'''.lstrip(),
+        encoding="utf-8",
+    )
+    (task_dir / "task_eval.yaml").write_text(
+        """
+task_id: physics.example
+evaluation:
+  gates: []
+  scoring:
+    - scorer: instance_data_test_scorer
+      weight: 100
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_seed31415_local_score_uses_public_reference(tmp_path):
     tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
     report_path = tmp_path / "score.json"
@@ -383,6 +438,133 @@ def test_internal_scorer_error_is_unscored_and_excluded_from_totals(
     assert scored["evaluation_status"] == "evaluation_invalid"
     assert scored["final_score"] is None
     assert scored["max_score"] == 100.0
+    assert scored["failure_kind"] == "evaluator_runtime_error"
+
+
+def test_evaluator_unavailable_is_unscored_and_classified(monkeypatch, tmp_path):
+    from ai4sci_bench.scorers._judge_common import evaluator_unavailable_result
+
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    unavailable = evaluator_unavailable_result(
+        scorer_name="llm_judge",
+        weight=100.0,
+        error="provider unavailable",
+    )
+    monkeypatch.setattr(
+        "ai4sci_bench.runner.orchestrator._evaluate_gates_and_scores",
+        lambda *_args, **_kwargs: ([], True, 0, [unavailable], 0.0),
+    )
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+    )
+
+    scored = report["results"][0]
+    assert scored["evaluation_status"] == "evaluation_invalid"
+    assert scored["final_score"] is None
+    assert scored["scorer_internal_error"] is True
+    assert scored["failure_kind"] == "evaluator_unavailable"
+    assert report["scored_instance_count"] == 0
+    assert report["scorer_error_count"] == 1
+    assert report["total_max_score"] == 0.0
+
+
+@pytest.mark.parametrize(
+    ("parallel", "declared_name"),
+    [(1, "data/input.txt"), (2, "input.txt")],
+)
+def test_local_scoring_stages_instance_data_without_mutating_outputs(
+    tmp_path, parallel, declared_name
+):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _write_instance_data_test_scorer(
+        tasks_dir,
+        instances_dir,
+        declared_name=declared_name,
+    )
+    outputs_dir = next(results_dir.glob("*/*.outputs"))
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+        parallel=parallel,
+    )
+
+    scored = report["results"][0]
+    assert scored["evaluation_status"] == "completed"
+    assert scored["final_score"] == 100.0
+    assert scored["score_results"][0]["details"] == {
+        "data": "immutable-input",
+        "output_exists": True,
+    }
+    assert not (outputs_dir / "data").exists()
+
+
+@pytest.mark.parametrize("parallel", [1, 2])
+def test_missing_instance_data_is_invalid_and_excluded(tmp_path, parallel):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _write_instance_data_test_scorer(tasks_dir, instances_dir)
+    data_file = (
+        instances_dir
+        / "physics.example__seed31415"
+        / "data"
+        / "input.txt"
+    )
+    data_file.unlink()
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+        parallel=parallel,
+    )
+
+    scored = report["results"][0]
+    assert scored["evaluation_status"] == "evaluation_invalid"
+    assert scored["final_score"] is None
+    assert scored["scorer_internal_error"] is True
+    assert scored["failure_kind"] == "missing_evaluator_input"
+    assert scored["score_results"][0]["details"]["failure_kind"] == (
+        "missing_evaluator_input"
+    )
+    assert report["scored_instance_count"] == 0
+    assert report["scorer_error_count"] == 1
+    assert report["total_max_score"] == 0.0
+
+
+@pytest.mark.parametrize("unsafe_input", ["symlink", "output-overwrite"])
+def test_local_scoring_rejects_unsafe_staging_inputs(tmp_path, unsafe_input):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _write_instance_data_test_scorer(tasks_dir, instances_dir)
+    data_file = (
+        instances_dir
+        / "physics.example__seed31415"
+        / "data"
+        / "input.txt"
+    )
+    if unsafe_input == "symlink":
+        external = tmp_path / "external-input.txt"
+        external.write_text("immutable-input", encoding="utf-8")
+        data_file.unlink()
+        data_file.symlink_to(external)
+    else:
+        output_data = next(results_dir.glob("*/*.outputs")) / "data"
+        output_data.mkdir()
+        (output_data / "input.txt").write_text("agent-overwrite", encoding="utf-8")
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+    )
+
+    scored = report["results"][0]
+    assert scored["evaluation_status"] == "evaluation_invalid"
+    assert scored["failure_kind"] == "missing_evaluator_input"
+    assert scored["final_score"] is None
 
 
 def test_legitimate_zero_remains_a_scored_result(monkeypatch, tmp_path):
@@ -392,7 +574,11 @@ def test_legitimate_zero_remains_a_scored_result(monkeypatch, tmp_path):
         score=0.0,
         max_score=100.0,
         passed=False,
-        details={"relative_l2": 10.0},
+        details={
+            "relative_l2": 10.0,
+            "failure_kind": "submission_error",
+            "scorer_internal_error": False,
+        },
         message="prediction is outside tolerance",
     )
     monkeypatch.setattr(
@@ -414,6 +600,7 @@ def test_legitimate_zero_remains_a_scored_result(monkeypatch, tmp_path):
     scored = report["results"][0]
     assert scored["evaluation_status"] == "completed"
     assert scored["final_score"] == 0.0
+    assert "failure_kind" not in scored
 
 
 def test_score_cli_displays_internal_error_as_not_scored(monkeypatch, tmp_path):
@@ -568,7 +755,11 @@ def test_parallel_worker_crash_is_an_invalid_evaluation(tmp_path):
     assert scored["evaluation_status"] == "evaluation_invalid"
     assert scored["final_score"] is None
     assert scored["scorer_internal_error"] is True
+    assert scored["failure_kind"] == "evaluator_runtime_error"
     assert scored["score_results"][0]["details"]["scorer_internal_error"] is True
+    assert scored["score_results"][0]["details"]["failure_kind"] == (
+        "evaluator_runtime_error"
+    )
     assert report["results"][1]["evaluation_status"] == "completed"
 
 

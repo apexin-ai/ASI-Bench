@@ -322,6 +322,14 @@ from the aggregate denominator. MPSC setup failures must classify missing
 trusted inputs/runtime as scorer errors and submitted controller failures as
 ordinary scored-zero submission errors. Keep these boundaries covered with:
 
+Judge/provider failures must carry `failure_kind: evaluator_unavailable`;
+scorer, worker, and custom-loader crashes use `evaluator_runtime_error`; and
+absent or unsafe immutable instance inputs use `missing_evaluator_input`.
+Serial and parallel local scoring must both stage instance `data/` with the
+persisted outputs in a fresh temporary workspace, reject symlinks and input
+overwrites, leave the source `.outputs` tree unchanged, and exclude staging
+failures from aggregate numerators and denominators.
+
 `score --parallel N` performs full-batch preflight before evaluator work and
 runs complete result evaluations in fresh spawned processes. The worker count
 is bounded by `N`; gate/scorer/Judge loops inside one result stay sequential.

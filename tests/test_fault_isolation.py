@@ -104,6 +104,7 @@ class TestScorerExceptionIsolation:
         assert gate_results[0].passed is False
         assert gate_results[0].score == 0.0
         assert gate_results[0].details.get("scorer_internal_error") is True
+        assert gate_results[0].details["failure_kind"] == "evaluator_runtime_error"
         assert "ValueError" in gate_results[0].message
         assert hard_passed is False
         # Scoring should not run because hard gate failed
@@ -151,6 +152,7 @@ class TestScorerExceptionIsolation:
         # Second scorer crashed → 0
         assert score_results[1].score == 0.0
         assert score_results[1].details.get("scorer_internal_error") is True
+        assert score_results[1].details["failure_kind"] == "evaluator_runtime_error"
         assert "ZeroDivisionError" in score_results[1].message
         # Third scorer still ran
         assert score_results[2].score == 20.0
@@ -213,6 +215,9 @@ class TestCustomScorerLoadFailure:
         assert result.gates_passed is False
         assert len(result.score_results) == 1
         assert result.score_results[0].details.get("scorer_internal_error") is True
+        assert result.score_results[0].details["failure_kind"] == (
+            "evaluator_runtime_error"
+        )
         assert "ImportError" in result.score_results[0].message
 
 

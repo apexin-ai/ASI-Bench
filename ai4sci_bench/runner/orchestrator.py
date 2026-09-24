@@ -173,8 +173,8 @@ def _evaluate_gates_and_scores(
             config["prompt_level"] = prompt_level_value
         config["weight"] = 1.0  # gates are binary regardless of scorer mode
 
-        scorer = get_scorer(scorer_name)
         try:
+            scorer = get_scorer(scorer_name)
             result = scorer.score(pred_dir, ref_dir, config)
         except Exception as exc:
             logger.warning(
@@ -190,6 +190,7 @@ def _evaluate_gates_and_scores(
                 message=f"Scorer crashed: {type(exc).__name__}: {exc}",
                 details={
                     "scorer_internal_error": True,
+                    "failure_kind": "evaluator_runtime_error",
                     "exception_type": type(exc).__name__,
                     "traceback_tail": traceback.format_exc().splitlines()[-5:],
                 },
@@ -220,8 +221,8 @@ def _evaluate_gates_and_scores(
                 config["prompt_level"] = prompt_level_value
             config["weight"] = score_cfg.get("weight", 1.0)
 
-            scorer = get_scorer(scorer_name)
             try:
+                scorer = get_scorer(scorer_name)
                 result = scorer.score(pred_dir, ref_dir, config)
             except Exception as exc:
                 logger.warning(
@@ -237,6 +238,7 @@ def _evaluate_gates_and_scores(
                     message=f"Scorer crashed: {type(exc).__name__}: {exc}",
                     details={
                         "scorer_internal_error": True,
+                        "failure_kind": "evaluator_runtime_error",
                         "exception_type": type(exc).__name__,
                         "traceback_tail": traceback.format_exc().splitlines()[-5:],
                     },
@@ -623,6 +625,7 @@ class BenchmarkOrchestrator:
                     message=f"Evaluation crashed: {type(exc).__name__}: {exc}",
                     details={
                         "scorer_internal_error": True,
+                        "failure_kind": "evaluator_runtime_error",
                         "exception_type": type(exc).__name__,
                         "traceback_tail": traceback.format_exc().splitlines()[-5:],
                     },
@@ -873,6 +876,7 @@ class BenchmarkOrchestrator:
                     message=f"Custom scorer failed to load: {type(exc).__name__}: {exc}",
                     details={
                         "scorer_internal_error": True,
+                        "failure_kind": "evaluator_runtime_error",
                         "exception_type": type(exc).__name__,
                         "traceback_tail": traceback.format_exc().splitlines()[-5:],
                     },

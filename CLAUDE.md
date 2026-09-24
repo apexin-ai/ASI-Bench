@@ -57,7 +57,10 @@
 - produce-only 的数值零只是序列化占位符；报告不得将未评分结果显示为
   `0.0`，全未评分时应隐藏 per-task 分数表。seed31415 本地评分器内部错误
   必须记录 `evaluation_status: evaluation_invalid` 和 `final_score: null`，并从
-  聚合分子、分母中排除，同时计入 `scorer_error_count`。
+  聚合分子、分母中排除，同时计入 `scorer_error_count`。评估器故障统一设置
+  `scorer_internal_error: true`，并以 `failure_kind` 区分
+  `evaluator_unavailable`、`evaluator_runtime_error` 和
+  `missing_evaluator_input`；普通 submission failure 仍是有效零分。
 - BenchFlow 适配只接受已物化的 seed31415 manifest：必须校验
   `seed: 31415`、`instance_id` 后缀、现有 `instance_dir/reference/`、prediction artifact
   目录和 task bundle。`benchflow-score` 不得接受 seed 生成请求、调用
@@ -92,6 +95,8 @@
   共用一个有界队列，前一轮尾部释放的槽位须立即由后一轮 task 补位。
   `score --parallel N` 先完整预检，再以至多 N 个 fresh spawn 进程并行独立 result，单个
   result 内的 gate/scorer/retry/num_judges 保持串行；协调进程按源顺序原子写报告。
+  每个评分 job 必须在独立临时目录合并只读 instance `data/` 与持久化 outputs，拒绝
+  symlink、路径逃逸及 outputs 覆盖 evaluator input，且不得修改源 `.outputs`。
   `run-score` 在全部 agent task 完成后才逐 repetition 启动上述评分，整个流程不得
   出现 \(N \times N\) 嵌套并发。
 - host-side Claude/Kimi harness home 必须同时按 benchmark execution 与

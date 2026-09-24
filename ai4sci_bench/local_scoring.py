@@ -10,7 +10,9 @@ import json
 import logging
 import multiprocessing
 import os
+import shutil
 import signal
+import tempfile
 import traceback
 from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass
@@ -35,10 +37,23 @@ DEFAULT_LOCAL_SCORE_REPORT = "local_score_seed31415.json"
 logger = logging.getLogger(__name__)
 
 ScoreProgressCallback = Callable[[int, int, dict[str, Any]], None]
+_EVALUATOR_FAILURE_KINDS = frozenset(
+    {
+        "evaluator_unavailable",
+        "evaluator_runtime_error",
+        "missing_evaluator_input",
+    }
+)
 
 
 class LocalScoringError(RuntimeError):
     """Raised when a public local-scoring input is incomplete or inconsistent."""
+
+
+class _MissingEvaluatorInputError(LocalScoringError):
+    """Raised when immutable instance inputs cannot be materialized for scoring."""
+
+    failure_kind = "missing_evaluator_input"
 
 
 @dataclass(frozen=True)
@@ -52,6 +67,8 @@ class _ScoreJob:
     task_dir: str
     output_dir: str
     reference_dir: str
+    data_dir: str
+    required_data_files: tuple[str, ...]
     evaluation: dict[str, Any]
     parameters: dict[str, Any]
     max_score: float
@@ -104,6 +121,112 @@ def _has_internal_error(details: list[ScoreDetail]) -> bool:
     )
 
 
+def _failure_kind(details: list[ScoreDetail]) -> str | None:
+    """Return the first canonical evaluator failure kind, if any."""
+    for detail in details:
+        if not isinstance(detail.details, dict):
+            continue
+        if detail.details.get("scorer_internal_error") is not True:
+            continue
+        kind = detail.details.get("failure_kind")
+        if kind in _EVALUATOR_FAILURE_KINDS:
+            return kind
+        return "evaluator_runtime_error"
+    return None
+
+
+def _copy_tree_without_symlinks(source: Path, destination: Path, *, label: str) -> None:
+    """Copy a scorer input tree while rejecting symlinks and special files."""
+    if source.is_symlink() or not source.is_dir():
+        raise _MissingEvaluatorInputError(f"{label} is not a real directory: {source}")
+    destination.mkdir(parents=True, exist_ok=True)
+    for path in source.rglob("*"):
+        relative = path.relative_to(source)
+        target = destination / relative
+        if path.is_symlink():
+            raise _MissingEvaluatorInputError(
+                f"{label} contains a symlink: {relative.as_posix()}"
+            )
+        if path.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif path.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+        else:
+            raise _MissingEvaluatorInputError(
+                f"{label} contains unsupported input: {relative.as_posix()}"
+            )
+
+
+def _copy_output_tree(source: Path, destination: Path) -> None:
+    """Merge persisted outputs into a fresh staging directory."""
+    if source.is_symlink() or not source.is_dir():
+        raise _MissingEvaluatorInputError(
+            f"Persisted output directory is not a real directory: {source}"
+        )
+    for path in source.rglob("*"):
+        relative = path.relative_to(source)
+        target = destination / relative
+        if path.is_symlink():
+            raise _MissingEvaluatorInputError(
+                f"Persisted outputs contain a symlink: {relative.as_posix()}"
+            )
+        if path.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        if not path.is_file():
+            raise _MissingEvaluatorInputError(
+                f"Persisted outputs contain unsupported artifact: {relative.as_posix()}"
+            )
+        if target.exists():
+            # ``data/`` is immutable evaluator input. An agent artifact must
+            # never replace it while constructing the scorer workspace.
+            if target.is_dir() or target.is_symlink():
+                raise _MissingEvaluatorInputError(
+                    f"Persisted output conflicts with evaluator input: {relative.as_posix()}"
+                )
+            raise _MissingEvaluatorInputError(
+                f"Persisted output would overwrite evaluator input: {relative.as_posix()}"
+            )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, target)
+
+
+@contextmanager
+def _staged_prediction_dir(job: _ScoreJob) -> Iterator[Path]:
+    """Materialize immutable instance data plus persisted outputs for one job."""
+    with tempfile.TemporaryDirectory(prefix="asibench-score-") as temporary:
+        pred_dir = Path(temporary)
+        data_dir = Path(job.data_dir)
+        if data_dir.exists():
+            _copy_tree_without_symlinks(data_dir, pred_dir / "data", label="Instance data")
+        elif job.required_data_files:
+            raise _MissingEvaluatorInputError(
+                f"Required instance data directory is missing: {data_dir}"
+            )
+
+        for required in job.required_data_files:
+            relative = Path(required)
+            if relative.is_absolute() or ".." in relative.parts:
+                raise _MissingEvaluatorInputError(
+                    f"Required instance input has an unsafe path: {required}"
+                )
+            if relative.parts and relative.parts[0] == "data":
+                relative = Path(*relative.parts[1:])
+            if not relative.parts:
+                raise _MissingEvaluatorInputError(
+                    f"Required instance input has an invalid path: {required}"
+                )
+            required_path = pred_dir / "data" / relative
+            if not required_path.is_file():
+                raise _MissingEvaluatorInputError(
+                    f"Required instance input is missing: {required}"
+                )
+
+        _copy_output_tree(Path(job.output_dir), pred_dir)
+        yield pred_dir
+
+
 def _json_default(value: Any):
     if hasattr(value, "item"):
         return value.item()
@@ -135,7 +258,7 @@ def _prepare_score_jobs(
         ) from exc
 
     loader = TaskLoader(tasks_root)
-    task_cache: dict[str, tuple[dict[str, Any], Path]] = {}
+    task_cache: dict[str, tuple[dict[str, Any], Path, tuple[str, ...]]] = {}
     jobs: list[_ScoreJob] = []
     for index, (result_path, source) in enumerate(result_files):
         task_id = str(source["task_id"])
@@ -171,9 +294,21 @@ def _prepare_score_jobs(
                     f"Task {task_id} has no public evaluation contract under {tasks_root}"
                 )
             task_dir = Path(metadata["_task_dir"])
-            cached = (evaluation, task_dir)
+            input_config = metadata.get("input", {})
+            input_files = (
+                input_config.get("files", [])
+                if isinstance(input_config, dict)
+                else []
+            )
+            required_data_files = tuple(
+                str(item["name"])
+                for item in input_files
+                if isinstance(item, dict)
+                and isinstance(item.get("name"), str)
+            )
+            cached = (evaluation, task_dir, required_data_files)
             task_cache[task_id] = cached
-        evaluation, task_dir = cached
+        evaluation, task_dir, required_data_files = cached
 
         prompt_level = str(source.get("prompt_level") or "")
         max_score = float(
@@ -191,8 +326,10 @@ def _prepare_score_jobs(
                 prompt_level=prompt_level,
                 attempt=int(source.get("attempt", 1)),
                 task_dir=str(task_dir.resolve()),
-                output_dir=str(output_dir.resolve()),
+                output_dir=str(output_dir.absolute()),
                 reference_dir=str(reference_dir.resolve()),
+                data_dir=str((instance_dir / "data").absolute()),
+                required_data_files=required_data_files,
                 evaluation=evaluation,
                 parameters=_load_parameters(source, instance_dir),
                 max_score=max_score,
@@ -218,18 +355,20 @@ def _evaluate_score_job(
         else use_judge_api_override(judge_api_override)
     )
     with judge_scope:
-        gates, hard_ok, soft_failures, scores, final_score = (
-            _evaluate_gates_and_scores(
-                job.evaluation,
-                Path(job.output_dir),
-                Path(job.reference_dir),
-                job.parameters,
-                prompt_level=job.prompt_level or None,
+        with _staged_prediction_dir(job) as pred_dir:
+            gates, hard_ok, soft_failures, scores, final_score = (
+                _evaluate_gates_and_scores(
+                    job.evaluation,
+                    pred_dir,
+                    Path(job.reference_dir),
+                    job.parameters,
+                    prompt_level=job.prompt_level or None,
+                )
             )
-        )
     all_details = [*gates, *scores]
     internal_error = _has_internal_error(all_details)
-    return {
+    failure_kind = _failure_kind(all_details)
+    result = {
         "source_result": job.source_result,
         "task_id": job.task_id,
         "instance_id": job.instance_id,
@@ -244,6 +383,9 @@ def _evaluate_score_job(
         "max_score": job.max_score,
         "scorer_internal_error": internal_error,
     }
+    if failure_kind is not None:
+        result["failure_kind"] = failure_kind
+    return result
 
 
 def _redact_secret(value: Any, secret: str | None) -> Any:
@@ -299,11 +441,14 @@ def _worker_failure_result(
     *,
     error_type: str,
     error: str,
+    failure_kind: str = "evaluator_runtime_error",
     exit_code: int | None = None,
     scorer_name: str = "_parallel_scoring_worker",
 ) -> dict[str, Any]:
+    if failure_kind not in _EVALUATOR_FAILURE_KINDS:
+        failure_kind = "evaluator_runtime_error"
     details: dict[str, Any] = {
-        "failure_kind": "scorer_internal_error",
+        "failure_kind": failure_kind,
         "scorer_internal_error": True,
         "exception_type": error_type,
     }
@@ -331,6 +476,7 @@ def _worker_failure_result(
         "final_score": None,
         "max_score": job.max_score,
         "scorer_internal_error": True,
+        "failure_kind": failure_kind,
     }
 
 
@@ -364,6 +510,7 @@ def _score_job_process_entry(
                         "error",
                         type(exc).__name__,
                         _redact_secret(str(exc), secret),
+                        getattr(exc, "failure_kind", "evaluator_runtime_error"),
                     )
                 )
     except (BrokenPipeError, EOFError, OSError):
@@ -526,6 +673,7 @@ def _score_jobs_parallel(
                             worker.job,
                             error_type=str(message[1]),
                             error=str(message[2]),
+                            failure_kind=str(message[3]),
                         )
                     else:
                         worker.process.join(timeout=1)
@@ -549,6 +697,7 @@ def _score_jobs_parallel(
                                 worker.job,
                                 error_type=str(message[1]),
                                 error=str(message[2]),
+                                failure_kind=str(message[3]),
                             )
                         else:
                             result = _worker_failure_result(
@@ -690,6 +839,9 @@ def score_seed31415_results(
                         job,
                         error_type=type(exc).__name__,
                         error=_redact_secret(str(exc), secret),
+                        failure_kind=getattr(
+                            exc, "failure_kind", "evaluator_runtime_error"
+                        ),
                         scorer_name="_local_scoring_runtime",
                     )
             result = _redact_secret(result, secret)
