@@ -104,6 +104,14 @@ def _recompute_condition_numbers(system: dict[str, Any], roots: np.ndarray) -> n
 
 # ── Scorer 1: Root Set Matching ─────────────────────────────────────────────
 
+
+def _instance_data_dir(pred_dir: Path, ref_dir: Path) -> Path:
+    for candidate in (ref_dir.parent / "data", pred_dir / "data"):
+        if candidate.is_dir():
+            return candidate
+    raise FileNotFoundError(f"instance data directory not found next to {ref_dir}")
+
+
 @register_scorer("homotopy_root_set")
 class HomotopyRootSetScorer(Scorer):
     """Compare predicted roots against reference *finite* roots.
@@ -377,7 +385,7 @@ class HomotopyPathDiagnosticsScorer(Scorer):
         distinctness_score = min(1.0, n_distinct / max(1, n_paths))
 
         try:
-            sys_path = pred_dir / "data" / "system.json"
+            sys_path = _instance_data_dir(pred_dir, ref_dir) / "system.json"
             sys_data = _safe_load_json(sys_path) if sys_path.exists() else {}
             d1 = int(sys_data.get("d1", 0))
             d2 = int(sys_data.get("d2", 0))

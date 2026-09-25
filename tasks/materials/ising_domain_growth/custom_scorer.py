@@ -526,12 +526,16 @@ def _load_npy(directory: Path, filename: str) -> tuple[np.ndarray | None, str | 
     return arr, None
 
 
-def _load_parameters(pred_dir: Path) -> dict:
-    """Try to read parameters.json from the workspace data/ directory."""
-    for candidate in [
+def _load_parameters(pred_dir: Path, ref_dir: Path | None = None) -> dict:
+    """Read parameters from instance data, with workspace compatibility fallback."""
+    candidates = []
+    if ref_dir is not None:
+        candidates.append(ref_dir.parent / "data" / "parameters.json")
+    candidates += [
         pred_dir / "data" / "parameters.json",
         pred_dir / "parameters.json",
-    ]:
+    ]
+    for candidate in candidates:
         if candidate.exists():
             try:
                 return json.loads(candidate.read_text())
@@ -887,7 +891,7 @@ class IsingDomainSizePhysicsScorer(Scorer):
         times = arr[0].astype(float)
         sizes = arr[1].astype(float)
 
-        params = _load_parameters(pred_dir)
+        params = _load_parameters(pred_dir, ref_dir)
         lattice_size = _lattice_size_from_params(params)
         max_r = lattice_size // 2
 
@@ -1140,7 +1144,7 @@ class IsingInterfaceDensityPhysicsScorer(Scorer):
         times = arr[0].astype(float)
         rho = arr[1].astype(float)
 
-        params = _load_parameters(pred_dir)
+        params = _load_parameters(pred_dir, ref_dir)
         lattice_size = _lattice_size_from_params(params)
 
         domain_arr, domain_err = _load_npy(pred_dir, domain_size_file)

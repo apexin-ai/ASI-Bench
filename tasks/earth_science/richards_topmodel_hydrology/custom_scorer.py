@@ -81,6 +81,13 @@ def _column_water_storage_mm(theta: np.ndarray, dz: np.ndarray) -> np.ndarray:
     return np.sum(theta * dz[None, :], axis=1) * 1000.0
 
 
+def _instance_data_dir(pred_dir: Path, ref_dir: Path) -> Path:
+    for candidate in (ref_dir.parent / "data", pred_dir / "data"):
+        if candidate.is_dir():
+            return candidate
+    raise FileNotFoundError(f"instance data directory not found next to {ref_dir}")
+
+
 @register_scorer("richards_topmodel_process_score")
 class RichardsTopmodelProcessScorer(Scorer):
     """Score state, flux partitioning, water-table response, and closure."""
@@ -94,9 +101,10 @@ class RichardsTopmodelProcessScorer(Scorer):
             ref_wt = _load_csv(ref_dir / config.get("ref_water_table_file", "water_table_ref.csv"), WT_COLUMNS)
             pred_flux = _load_csv(pred_dir / config.get("flux_file", "results/fluxes.csv"), FLUX_COLUMNS)
             ref_flux = _load_csv(ref_dir / config.get("ref_flux_file", "fluxes_ref.csv"), FLUX_COLUMNS)
-            profile = json.loads((pred_dir / "data/soil_profile.json").read_text(encoding="utf-8"))
-            site = json.loads((pred_dir / "data/site.json").read_text(encoding="utf-8"))
-            forcing = pd.read_csv(pred_dir / "data/forcing.csv")
+            data_dir = _instance_data_dir(pred_dir, ref_dir)
+            profile = json.loads((data_dir / "soil_profile.json").read_text(encoding="utf-8"))
+            site = json.loads((data_dir / "site.json").read_text(encoding="utf-8"))
+            forcing = pd.read_csv(data_dir / "forcing.csv")
 
             if pred_theta.shape != ref_theta.shape:
                 raise ValueError(f"soil_moisture shape mismatch: {pred_theta.shape} vs {ref_theta.shape}")

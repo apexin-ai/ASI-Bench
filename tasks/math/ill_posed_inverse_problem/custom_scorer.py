@@ -21,6 +21,13 @@ from ai4sci_bench.core.scorer import Scorer, register_scorer
 from ai4sci_bench.core.types import ScoreDetail
 
 
+def _instance_data_dir(pred_dir: Path, ref_dir: Path) -> Path:
+    for candidate in (ref_dir.parent / "data", pred_dir / "data"):
+        if candidate.is_dir():
+            return candidate
+    raise FileNotFoundError(f"instance data directory not found next to {ref_dir}")
+
+
 @register_scorer("custom")
 class IllPosedScorer(Scorer):
     """Multi-dimensional scorer for the 3-phase ill-posed inverse problem task.
@@ -912,8 +919,9 @@ class IllPosedScorer(Scorer):
                 # high cross-correlation is meaningless — garbage solutions
                 # are highly correlated because they're all near zero.
                 try:
-                    K = np.load(pred_dir / "data" / "K.npy")
-                    y = np.loadtxt(pred_dir / "data" / "y_obs.csv", delimiter=",")
+                    data_dir = _instance_data_dir(pred_dir, ref_dir)
+                    K = np.load(data_dir / "K.npy")
+                    y = np.loadtxt(data_dir / "y_obs.csv", delimiter=",")
                     y_norm = np.linalg.norm(y)
                     if y_norm > 1e-14:
                         best_resid = 1.0
