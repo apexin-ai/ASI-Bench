@@ -1,5 +1,25 @@
 # Progress
 
+## Task-scoped evaluator runtimes
+
+- Problem: MPSC duplicated its dependency specification inside the scorer and
+  attempted to create a task environment during evaluation. A scoring worker
+  without the external `uv` executable therefore reported all levels as
+  evaluator runtime failures even though the task metadata declared the needed
+  SciPy/CVXPY solver packages.
+- Resolution: add the opt-in `evaluation.runtime: task` contract. Local scoring
+  now prepares and reuses the task's declared runtime before loading its scorer,
+  injects the verified interpreter and site-packages into a fresh worker, and
+  leaves non-opted-in tasks on the existing path. MPSC now uses `task_meta.yaml`
+  as its only dependency source and reuses the framework runtime.
+- Prevention: runtime setup is deduplicated by environment cache key, fails
+  closed on Python minor-version mismatch, classifies setup failures as evaluator
+  infrastructure errors, and falls back to standard-library `venv` when `uv` is
+  unavailable but the current interpreter satisfies the task requirement.
+- Verification: full default suite `2433 passed / 2 skipped / 24 deselected`;
+  final MPSC runtime-reuse regression file `7 passed`; diff checks clean.
+- Implementation commit: `35bd147`
+
 ## 2026-09: Scientific MCP catalog and integrations
 
 - Added auditable MCP profiles and integration helpers for scientific
