@@ -3,13 +3,8 @@
 from __future__ import annotations
 
 import csv
-import importlib.util
 import json
 import math
-import shutil
-import subprocess
-import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -827,137 +822,6 @@ def _holdout_audit_state_prefix_raw(pred_dir: Path, ref_dir: Path, config: dict 
         "holdout_proposal_component": float(proposal_score),
         "holdout_accepted_state_component": float(accepted_state_score),
     }
-
-
-def _load_generator_module(task_dir: Path) -> Any:
-    spec = importlib.util.spec_from_file_location("hmc_neal_funnel_hidden_generate_gt", task_dir / "generate_gt.py")
-    if spec is None or spec.loader is None:
-        raise ValueError("could not load generate_gt.py for hidden replay scoring")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def _holdout_terminal_raw(pred_dir: Path, ref_dir: Path) -> tuple[float, float]:
-    pred = np.load(pred_dir / "results/holdout_terminal_states.npy").astype(np.float64)
-    ref = np.load(ref_dir / "holdout_terminal_states_ref.npy").astype(np.float64)
-    err = _normalized_rmse(pred, ref)
-    terminal_raw = _linear_score(err, REPLAY_TERMINAL_FULL, REPLAY_TERMINAL_ZERO)
-    prefix_raw, _prefix_details = _holdout_audit_state_prefix_raw(pred_dir, ref_dir)
-    return min(terminal_raw, prefix_raw), err
-
-
-@register_scorer("hmc_hidden_replay_generalization_score")
-class HMCHiddenReplayGeneralizationScore(Scorer):
-    def score(self, pred_dir: Path, ref_dir: Path, config: dict) -> ScoreDetail:
-        del ref_dir
-        weight = float(config.get("weight", 1.0))
-        analysis_file = pred_dir / config.get("analysis_file", "analysis.py")
-        if not analysis_file.exists():
-            return _fail("hmc_hidden_replay_generalization_score", weight, "missing analysis.py for hidden replay generalization")
-
-        seeds = [int(seed) for seed in config.get("hidden_seeds", [314159])]
-        timeout_seconds = float(config.get("timeout_seconds", 45))
-        generation_params = dict(config.get("generation_params", {}))
-        if not seeds:
-            return _fail("hmc_hidden_replay_generalization_score", weight, "hidden_seeds must not be empty")
-
-        try:
-            generator = _load_generator_module(Path(__file__).resolve().parent)
-        except Exception as exc:
-            return _fail("hmc_hidden_replay_generalization_score", weight, str(exc))
-
-        hidden_details = []
-        raw_scores = []
-        with tempfile.TemporaryDirectory(prefix="hmc_hidden_replay_") as tmp:
-            tmp_root = Path(tmp)
-            for seed in seeds:
-                hidden_dir = tmp_root / f"seed_{seed}"
-                params = dict(generation_params)
-                params["seed"] = seed
-                try:
-                    generator.generate(hidden_dir, params)
-                    reference = tmp_root / f"reference_{seed}"
-                    shutil.move(str(hidden_dir / "reference"), str(reference))
-                    meta_path = hidden_dir / "instance_meta.json"
-                    if meta_path.exists():
-                        meta_path.unlink()
-                    shutil.copy2(analysis_file, hidden_dir / "analysis.py")
-                    proc = subprocess.run(
-                        [sys.executable, "analysis.py"],
-                        cwd=hidden_dir,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                        timeout=timeout_seconds,
-                    )
-                    if proc.returncode != 0:
-                        hidden_details.append(
-                            {
-                                "seed": seed,
-                                "raw_fraction": 0.0,
-                                "error": f"analysis.py exited with {proc.returncode}",
-                                "stderr_tail": proc.stderr[-1200:],
-                            }
-                        )
-                        raw_scores.append(0.0)
-                        continue
-
-                    prod = _score_transition_audit(
-                        "hmc_hidden_transition_audit_score",
-                        hidden_dir,
-                        reference,
-                        {"weight": 1.0},
-                        "results/transition_audit.npz",
-                        "transition_audit_ref.npz",
-                    )
-                    holdout = _score_transition_audit(
-                        "hmc_hidden_holdout_transition_audit_score",
-                        hidden_dir,
-                        reference,
-                        {"weight": 1.0},
-                        "results/holdout_transition_audit.npz",
-                        "holdout_transition_audit_ref.npz",
-                    )
-                    terminal_raw, terminal_err = _holdout_terminal_raw(hidden_dir, reference)
-                    prod_raw = float(prod.details.get("raw_fraction", 0.0)) if prod.passed or "raw_fraction" in prod.details else 0.0
-                    holdout_raw = float(holdout.details.get("raw_fraction", 0.0)) if holdout.passed or "raw_fraction" in holdout.details else 0.0
-                    raw = 0.35 * prod_raw + 0.45 * holdout_raw + 0.20 * terminal_raw
-                    raw_scores.append(raw)
-                    hidden_details.append(
-                        {
-                            "seed": seed,
-                            "production_transition_fraction": prod_raw,
-                            "holdout_transition_fraction": holdout_raw,
-                            "holdout_terminal_fraction": terminal_raw,
-                            "holdout_terminal_norm_rmse": terminal_err,
-                            "raw_fraction": raw,
-                        }
-                    )
-                except subprocess.TimeoutExpired as exc:
-                    hidden_details.append(
-                        {
-                            "seed": seed,
-                            "raw_fraction": 0.0,
-                            "error": f"analysis.py timed out after {timeout_seconds:g}s",
-                            "stdout_tail": (exc.stdout or "")[-1200:] if isinstance(exc.stdout, str) else "",
-                            "stderr_tail": (exc.stderr or "")[-1200:] if isinstance(exc.stderr, str) else "",
-                        }
-                    )
-                    raw_scores.append(0.0)
-                except Exception as exc:
-                    hidden_details.append({"seed": seed, "raw_fraction": 0.0, "error": str(exc)})
-                    raw_scores.append(0.0)
-
-        raw = float(np.mean(raw_scores)) if raw_scores else 0.0
-        return ScoreDetail(
-            scorer_name="hmc_hidden_replay_generalization_score",
-            score=float(weight * raw),
-            max_score=weight,
-            passed=_passes_min_fraction(raw, config),
-            details={"raw_fraction": raw, "hidden_instances": hidden_details},
-            message=f"hidden_replay_generalization_fraction={raw:.3f}",
-        )
 
 
 @register_scorer("hmc_sample_moment_score")

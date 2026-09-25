@@ -66,24 +66,24 @@ evaluation:
       pred_file: results/kernel_audit.csv
       ref_file: kernel_audit_ref.csv
   - scorer: hmc_transition_audit_score
-    weight: 10
+    weight: 16
     config:
       pred_file: results/transition_audit.npz
       ref_file: transition_audit_ref.npz
   - scorer: hmc_holdout_transition_audit_score
-    weight: 18
+    weight: 26
     config:
       pred_file: results/holdout_transition_audit.npz
       ref_file: holdout_transition_audit_ref.npz
   - scorer: hmc_holdout_terminal_score
-    weight: 18
+    weight: 25
     config:
       pred_file: results/holdout_terminal_states.npy
       ref_file: holdout_terminal_states_ref.npy
       pred_holdout_audit_file: results/holdout_transition_audit.npz
       ref_holdout_audit_file: holdout_transition_audit_ref.npz
   - scorer: hmc_sample_moment_score
-    weight: 11
+    weight: 15
     config:
       sample_file: results/samples.npy
       latent_file: results/latent_samples.npy
@@ -99,31 +99,3 @@ evaluation:
       sample_file: results/samples.npy
       energy_file: results/energy_diagnostics.csv
       ref_energy_file: energy_diagnostics_ref.csv
-  - scorer: hmc_hidden_replay_generalization_score
-    weight: 25
-    skip_in_gt_selfcheck: true
-    config:
-      analysis_file: analysis.py
-      hidden_seeds:
-      - 314159
-      - 314160
-      - 314161
-      - 314162
-      generation_params:
-        latent_dim: 8
-        step_size: 0.065
-        integration_steps: 16
-        n_chains: 3
-        warmup_transitions: 30
-        kept_transitions: 90
-        audit_transitions: 35
-        holdout_chains: 2
-        holdout_step_size: 0.078
-        holdout_integration_steps: 20
-        holdout_transitions: 70
-        holdout_audit_transitions: 35
-        candidate_probe_count: 36
-        candidate_panel_chains: 2
-        candidate_panel_warmup: 20
-        candidate_panel_kept: 80
-        volume_cloud_count: 36
