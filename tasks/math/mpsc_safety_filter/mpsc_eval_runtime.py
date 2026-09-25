@@ -23,20 +23,28 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import yaml
 
-
-_RUNTIME_SPEC = {
-    "_runtime_python": ">=3.11",
-    "_runtime_packages": [
-        "numpy>=1.26",
-        "scipy>=1.11",
-        "cvxpy>=1.4",
-        "clarabel>=0.7",
-        "scs>=3.2",
-    ],
-}
 
 _DECLARED_RUNTIME_ACTIVE = False
+
+
+def declared_runtime_spec() -> dict[str, Any]:
+    """Load the standalone fallback from the task's public runtime contract."""
+    metadata = yaml.safe_load(
+        Path(__file__).with_name("task_meta.yaml").read_text(encoding="utf-8")
+    )
+    runtime = metadata.get("runtime", {}) if isinstance(metadata, dict) else {}
+    packages = runtime.get("packages", []) if isinstance(runtime, dict) else []
+    if not isinstance(packages, list):
+        raise RuntimeError("MPSC runtime.packages must be a list")
+    return {
+        "_runtime_python": runtime.get("python"),
+        "_runtime_packages": [
+            str(package).strip() for package in packages if str(package).strip()
+        ],
+    }
+
 
 def resolve_declared_runtime_environment():
     import locale
@@ -48,7 +56,7 @@ def resolve_declared_runtime_environment():
     if os.name == "nt" and original_getencoding is not None:
         locale.getencoding = lambda: "utf-8"  # type: ignore[assignment]
     try:
-        return TaskEnvironmentManager(repo_root).ensure_env(_RUNTIME_SPEC)
+        return TaskEnvironmentManager(repo_root).ensure_env(declared_runtime_spec())
     finally:
         if original_getencoding is not None:
             locale.getencoding = original_getencoding  # type: ignore[assignment]
@@ -82,6 +90,10 @@ def activate_declared_runtime_dependencies() -> bool:
         return True
     except Exception:
         pass
+    # The scoring framework has already prepared and injected this runtime.
+    # Never trigger a second package installation from inside a scorer worker.
+    if os.environ.get("AI4SCI_TASK_RUNTIME_ACTIVE") == "1":
+        return False
     try:
         import importlib
 

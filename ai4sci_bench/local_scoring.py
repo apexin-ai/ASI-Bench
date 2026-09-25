@@ -6,16 +6,19 @@ ASI-Bench website and results must be submitted for scoring there.
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import multiprocessing
 import os
+import site
 import shutil
 import signal
+import sys
 import tempfile
 import traceback
 from contextlib import contextmanager, nullcontext
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from multiprocessing.connection import Connection, wait
 from pathlib import Path
@@ -29,6 +32,8 @@ from ai4sci_bench.core.judge_api import (
 )
 from ai4sci_bench.core.task import TaskLoader
 from ai4sci_bench.core.types import ScoreDetail
+from ai4sci_bench.runner.runtime_root import resolve_runtime_root
+from ai4sci_bench.runner.task_env import TaskEnvironment, TaskEnvironmentManager
 
 PUBLIC_LOCAL_SCORING_REPO = "seed31415"
 PRIVATE_SCORING_REPO = "seed42"
@@ -56,6 +61,12 @@ class _MissingEvaluatorInputError(LocalScoringError):
     failure_kind = "missing_evaluator_input"
 
 
+class _EvaluatorUnavailableError(LocalScoringError):
+    """Raised when an opted-in scorer runtime cannot be prepared or activated."""
+
+    failure_kind = "evaluator_unavailable"
+
+
 @dataclass(frozen=True)
 class _ScoreJob:
     index: int
@@ -72,6 +83,9 @@ class _ScoreJob:
     evaluation: dict[str, Any]
     parameters: dict[str, Any]
     max_score: float
+    task_runtime: dict[str, Any] | None = None
+    task_environment: TaskEnvironment | None = None
+    runtime_error: str | None = None
 
 
 @dataclass
@@ -133,6 +147,95 @@ def _failure_kind(details: list[ScoreDetail]) -> str | None:
             return kind
         return "evaluator_runtime_error"
     return None
+
+
+def _runtime_site_packages(environment: TaskEnvironment) -> list[Path]:
+    """Return site-package directories contained by a prepared task runtime."""
+    env_dir = Path(environment.env_dir).resolve()
+    candidates = [env_dir / "Lib" / "site-packages"]
+    candidates.extend(env_dir.glob("lib/python*/site-packages"))
+    result: list[Path] = []
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        try:
+            resolved.relative_to(env_dir)
+        except ValueError:
+            continue
+        if resolved.is_dir() and resolved not in result:
+            result.append(resolved)
+    if not result:
+        raise _EvaluatorUnavailableError(
+            f"Prepared task runtime has no site-packages directory: {env_dir}"
+        )
+    return result
+
+
+@contextmanager
+def _scoring_runtime_scope(job: _ScoreJob) -> Iterator[None]:
+    """Activate an opted-in task runtime inside an isolated scoring worker."""
+    if job.runtime_error is not None:
+        raise _EvaluatorUnavailableError(job.runtime_error)
+    environment = job.task_environment
+    if environment is None:
+        yield
+        return
+
+    original_path = os.environ.get("PATH")
+    original_virtual_env = os.environ.get("VIRTUAL_ENV")
+    runtime_env_keys = (
+        "PYTHONPATH",
+        "AI4SCI_TASK_RUNTIME_ACTIVE",
+        "AI4SCI_TASK_RUNTIME_DIR",
+        "AI4SCI_TASK_RUNTIME_PYTHON",
+        "AI4SCI_TASK_RUNTIME_BIN",
+        "AI4SCI_TRUSTED_SITE_PACKAGES",
+    )
+    original_runtime_env = {
+        key: os.environ.get(key) for key in runtime_env_keys
+    }
+    original_sys_path = list(sys.path)
+    try:
+        activated = environment.build_subprocess_env(os.environ)
+        os.environ["PATH"] = activated["PATH"]
+        os.environ["VIRTUAL_ENV"] = activated["VIRTUAL_ENV"]
+        site_packages = _runtime_site_packages(environment)
+        trusted_path = os.pathsep.join(str(path) for path in site_packages)
+        os.environ["PYTHONPATH"] = trusted_path
+        os.environ["AI4SCI_TASK_RUNTIME_ACTIVE"] = "1"
+        os.environ["AI4SCI_TASK_RUNTIME_DIR"] = str(
+            Path(environment.env_dir).resolve()
+        )
+        os.environ["AI4SCI_TASK_RUNTIME_PYTHON"] = str(
+            Path(environment.python_executable).resolve()
+        )
+        os.environ["AI4SCI_TASK_RUNTIME_BIN"] = str(
+            Path(environment.bin_dir).resolve()
+        )
+        os.environ["AI4SCI_TRUSTED_SITE_PACKAGES"] = trusted_path
+        for package_dir in reversed(site_packages):
+            package_path = str(package_dir)
+            site.addsitedir(package_path)
+            if package_path in sys.path:
+                sys.path.remove(package_path)
+            sys.path.insert(0, package_path)
+        importlib.invalidate_caches()
+        yield
+    finally:
+        sys.path[:] = original_sys_path
+        if original_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = original_path
+        if original_virtual_env is None:
+            os.environ.pop("VIRTUAL_ENV", None)
+        else:
+            os.environ["VIRTUAL_ENV"] = original_virtual_env
+        for key, value in original_runtime_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        importlib.invalidate_caches()
 
 
 def _copy_tree_without_symlinks(source: Path, destination: Path, *, label: str) -> None:
@@ -240,7 +343,10 @@ def _prepare_score_jobs(
         ) from exc
 
     loader = TaskLoader(tasks_root)
-    task_cache: dict[str, tuple[dict[str, Any], Path, bool]] = {}
+    task_cache: dict[
+        str,
+        tuple[dict[str, Any], Path, bool, dict[str, Any] | None],
+    ] = {}
     jobs: list[_ScoreJob] = []
     for index, (result_path, source) in enumerate(result_files):
         task_id = str(source["task_id"])
@@ -275,6 +381,12 @@ def _prepare_score_jobs(
                 raise LocalScoringError(
                     f"Task {task_id} has no public evaluation contract under {tasks_root}"
                 )
+            runtime_mode = evaluation.get("runtime")
+            if runtime_mode not in (None, "task"):
+                raise LocalScoringError(
+                    f"Task {task_id} has unsupported evaluation.runtime "
+                    f"{runtime_mode!r}; expected 'task' or no runtime override"
+                )
             task_dir = Path(metadata["_task_dir"])
             input_config = metadata.get("input", {})
             input_files = (
@@ -288,9 +400,15 @@ def _prepare_score_jobs(
             # declared data root and stages it wholesale instead of treating
             # declarations as literal paths.
             requires_instance_data = bool(input_files)
-            cached = (evaluation, task_dir, requires_instance_data)
+            task_runtime = None
+            if runtime_mode == "task":
+                task_runtime = {
+                    "_runtime_python": metadata.get("_runtime_python"),
+                    "_runtime_packages": list(metadata.get("_runtime_packages", [])),
+                }
+            cached = (evaluation, task_dir, requires_instance_data, task_runtime)
             task_cache[task_id] = cached
-        evaluation, task_dir, requires_instance_data = cached
+        evaluation, task_dir, requires_instance_data, task_runtime = cached
 
         prompt_level = str(source.get("prompt_level") or "")
         max_score = float(
@@ -315,9 +433,67 @@ def _prepare_score_jobs(
                 evaluation=evaluation,
                 parameters=_load_parameters(source, instance_dir),
                 max_score=max_score,
+                task_runtime=task_runtime,
             )
         )
     return jobs
+
+
+def _prepare_score_runtimes(
+    jobs: list[_ScoreJob],
+    *,
+    tasks_root: Path,
+) -> list[_ScoreJob]:
+    """Prepare each unique opted-in task runtime before scorer workers start."""
+    if not any(job.task_runtime is not None for job in jobs):
+        return jobs
+
+    manager = TaskEnvironmentManager(resolve_runtime_root(tasks_root))
+    prepared: dict[str, TaskEnvironment | str] = {}
+    result: list[_ScoreJob] = []
+    for job in jobs:
+        spec = job.task_runtime
+        if spec is None:
+            result.append(job)
+            continue
+        try:
+            cache_key = manager.compute_cache_key(spec)
+        except Exception as exc:
+            result.append(
+                replace(
+                    job,
+                    runtime_error=(
+                        "Could not identify the declared task runtime: "
+                        f"{type(exc).__name__}: {exc}"
+                    ),
+                )
+            )
+            continue
+        runtime = prepared.get(cache_key)
+        if runtime is None:
+            try:
+                runtime = manager.ensure_env(spec)
+                resolved = runtime.resolved_python_version
+                resolved_parts = tuple(
+                    int(part) for part in (resolved or "").split(".")[:2]
+                )
+                if resolved_parts != sys.version_info[:2]:
+                    raise RuntimeError(
+                        "Scoring task runtimes must use the current Python major/minor; "
+                        f"resolved {resolved!r} for current "
+                        f"{sys.version_info.major}.{sys.version_info.minor}"
+                    )
+            except Exception as exc:
+                runtime = (
+                    "Could not prepare the declared task runtime: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+            prepared[cache_key] = runtime
+        if isinstance(runtime, str):
+            result.append(replace(job, runtime_error=runtime))
+        else:
+            result.append(replace(job, task_environment=runtime))
+    return result
 
 
 def _evaluate_score_job(
@@ -326,27 +502,28 @@ def _evaluate_score_job(
     *,
     preserve_ambient_override: bool = False,
 ) -> dict[str, Any]:
-    import ai4sci_bench.scorers  # noqa: F401
-    from ai4sci_bench.runner.orchestrator import _evaluate_gates_and_scores
-    from ai4sci_bench.scorers.custom import load_custom_scorer
+    with _scoring_runtime_scope(job):
+        import ai4sci_bench.scorers  # noqa: F401
+        from ai4sci_bench.runner.orchestrator import _evaluate_gates_and_scores
+        from ai4sci_bench.scorers.custom import load_custom_scorer
 
-    load_custom_scorer(Path(job.task_dir))
-    judge_scope = (
-        nullcontext()
-        if preserve_ambient_override and judge_api_override is None
-        else use_judge_api_override(judge_api_override)
-    )
-    with judge_scope:
-        with _staged_prediction_dir(job) as pred_dir:
-            gates, hard_ok, soft_failures, scores, final_score = (
-                _evaluate_gates_and_scores(
-                    job.evaluation,
-                    pred_dir,
-                    Path(job.reference_dir),
-                    job.parameters,
-                    prompt_level=job.prompt_level or None,
+        load_custom_scorer(Path(job.task_dir))
+        judge_scope = (
+            nullcontext()
+            if preserve_ambient_override and judge_api_override is None
+            else use_judge_api_override(judge_api_override)
+        )
+        with judge_scope:
+            with _staged_prediction_dir(job) as pred_dir:
+                gates, hard_ok, soft_failures, scores, final_score = (
+                    _evaluate_gates_and_scores(
+                        job.evaluation,
+                        pred_dir,
+                        Path(job.reference_dir),
+                        job.parameters,
+                        prompt_level=job.prompt_level or None,
+                    )
                 )
-            )
     all_details = [*gates, *scores]
     internal_error = _has_internal_error(all_details)
     failure_kind = _failure_kind(all_details)
@@ -801,6 +978,7 @@ def score_seed31415_results(
         instances_root=instances_root,
         tasks_root=tasks_root,
     )
+    jobs = _prepare_score_runtimes(jobs, tasks_root=tasks_root)
     if parallel == 1:
         scored_results = []
         secret = (
@@ -809,23 +987,34 @@ def score_seed31415_results(
             else None
         )
         for completed, job in enumerate(jobs, start=1):
-            with _redact_scoring_logs(secret):
-                try:
-                    result = _evaluate_score_job(
-                        job,
-                        effective_override,
-                        preserve_ambient_override=True,
-                    )
-                except Exception as exc:
-                    result = _worker_failure_result(
-                        job,
-                        error_type=type(exc).__name__,
-                        error=_redact_secret(str(exc), secret),
-                        failure_kind=getattr(
-                            exc, "failure_kind", "evaluator_runtime_error"
-                        ),
-                        scorer_name="_local_scoring_runtime",
-                    )
+            if job.task_runtime is not None and job.runtime_error is None:
+                # A task runtime changes import state. Keep opted-in scoring in
+                # a fresh process even when the requested concurrency is one.
+                runtime_job = replace(job, index=0)
+                result = _score_jobs_parallel(
+                    [runtime_job],
+                    parallel=1,
+                    judge_api_override=effective_override,
+                    progress_callback=None,
+                )[0]
+            else:
+                with _redact_scoring_logs(secret):
+                    try:
+                        result = _evaluate_score_job(
+                            job,
+                            effective_override,
+                            preserve_ambient_override=True,
+                        )
+                    except Exception as exc:
+                        result = _worker_failure_result(
+                            job,
+                            error_type=type(exc).__name__,
+                            error=_redact_secret(str(exc), secret),
+                            failure_kind=getattr(
+                                exc, "failure_kind", "evaluator_runtime_error"
+                            ),
+                            scorer_name="_local_scoring_runtime",
+                        )
             result = _redact_secret(result, secret)
             scored_results.append(result)
             _notify_progress(progress_callback, completed, len(jobs), result)

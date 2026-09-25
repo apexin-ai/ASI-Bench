@@ -17,6 +17,10 @@ output:
 
 # Evaluation — hard/soft Gates + weighted Scoring pattern
 evaluation:
+  # Uncomment only when the scorer imports packages declared in task_meta.yaml
+  # runtime. Local scoring then prepares and isolates that task environment.
+  # runtime: task
+
   # Layer 1: gates
   # - severity: hard (default) blocks scoring when failed
   # - severity: soft records a warning but still allows scoring

@@ -1,4 +1,4 @@
-"""Task-level Python environment management backed by uv."""
+"""Task-level Python environments backed by uv or the standard library venv."""
 
 from __future__ import annotations
 
@@ -250,30 +250,46 @@ class TaskEnvironmentManager:
         env_dir.mkdir(parents=True, exist_ok=False)
         python_executable = self._python_executable(env_dir)
         requested_python = self._select_requested_python(python_requirement)
-        self._run(
-            ["uv", "venv", str(env_dir), "--python", requested_python],
-            cwd=self.repo_root,
-        )
+        uv_executable = shutil.which("uv")
+        if uv_executable is not None:
+            self._run(
+                [uv_executable, "venv", str(env_dir), "--python", requested_python],
+                cwd=self.repo_root,
+            )
+        else:
+            if requested_python != sys.executable:
+                raise RuntimeError(
+                    "Task sandbox setup requires uv to resolve a Python interpreter "
+                    f"for runtime.python {python_requirement!r}; the current Python "
+                    f"{platform.python_version()!r} does not satisfy it."
+                )
+            self._run(
+                [sys.executable, "-m", "venv", str(env_dir)],
+                cwd=self.repo_root,
+            )
         resolved_python_version = self._resolve_python_version(python_executable)
         self._validate_python_requirement(
             python_requirement,
             resolved_python_version,
             python_executable,
         )
-        self._run(
-            [
-                "uv",
+        if uv_executable is not None:
+            install_prefix = [
+                uv_executable,
                 "pip",
                 "install",
                 "--python",
                 str(python_executable),
-                *self._framework_install_args(),
-            ],
+            ]
+        else:
+            install_prefix = [str(python_executable), "-m", "pip", "install"]
+        self._run(
+            [*install_prefix, *self._framework_install_args()],
             cwd=self.repo_root,
         )
         if runtime_packages:
             self._run(
-                ["uv", "pip", "install", "--python", str(python_executable), *runtime_packages],
+                [*install_prefix, *runtime_packages],
                 cwd=self.repo_root,
             )
 

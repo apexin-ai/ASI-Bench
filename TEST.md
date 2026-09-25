@@ -334,6 +334,15 @@ expanded input declarations (for example `pairs/<ii>/source.npy`) are both
 covered. Missing contestant files remain ordinary submission failures rather
 than evaluator failures.
 
+Scorer-specific Python dependencies are opt-in: `evaluation.runtime: task`
+prepares the task's declared runtime once per unique dependency specification
+before workers start. Tests must prove that ordinary tasks never invoke the
+runtime builder, opted-in workers can import packages from the isolated task
+environment, repeated results reuse one environment, setup failures become
+`evaluator_unavailable`, and a missing `uv` executable falls back to the
+current compatible Python's `venv` and `pip`. A runtime resolved for a different
+Python major/minor must fail closed before its site-packages are loaded.
+
 `score --parallel N` performs full-batch preflight before evaluator work and
 runs complete result evaluations in fresh spawned processes. The worker count
 is bounded by `N`; gate/scorer/Judge loops inside one result stay sequential.
@@ -347,6 +356,7 @@ creation remains protected by a tag-keyed cross-process lock.
 uv run pytest -q \
   tests/test_retired_features.py \
   tests/test_local_scoring.py \
+  tests/test_task_env.py \
   tests/test_mpsc_error_classification.py \
   tests/test_no_local_scoring.py \
   tests/test_review.py \

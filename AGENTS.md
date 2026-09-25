@@ -99,7 +99,12 @@
   symlink、路径逃逸及 outputs 覆盖 evaluator input，且不得修改源 `.outputs`。
   `input.files.name` 可以是实例展开模板；评分只要求声明输入时存在安全的 `data/`
   根目录，并整棵复制其实际物化内容。预测文件缺失属于 submission failure，不能
-  设置 `scorer_internal_error`。
+  设置 `scorer_internal_error`。仅 `task_eval.yaml` 显式声明
+  `evaluation.runtime: task` 的 scorer 会在 worker 启动前按
+  `runtime.python` / `runtime.packages` 创建或复用隔离环境；普通 task 不得触发环境构建。
+  环境构建优先使用 `uv`，缺失时只可用满足版本约束的当前 Python 回退到 `venv` / `pip`，
+  scorer runtime 必须与 worker 的 Python major/minor 一致，失败必须标记
+  `evaluator_unavailable`。
   `run-score` 在全部 agent task 完成后才逐 repetition 启动上述评分，整个流程不得
   出现 \(N \times N\) 嵌套并发。
 - host-side Claude/Kimi harness home 必须同时按 benchmark execution 与

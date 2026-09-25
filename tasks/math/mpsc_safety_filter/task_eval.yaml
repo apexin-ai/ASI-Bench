@@ -1,6 +1,7 @@
 # PUBLIC SCORING CONTRACT. Ground-truth generation, reference data, and generator settings are intentionally excluded.
 task_id: math.mpsc_safety_filter
 evaluation:
+  runtime: task
   gates:
   - scorer: file_match
     severity: hard

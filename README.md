@@ -181,6 +181,17 @@ Input declarations are contracts for the instance data root, not literal
 filesystem paths: declarations containing expansions such as `<ii>` are
 supported because the complete materialized `data/` tree is staged.
 
+Scorers that need the task's declared Python packages opt in with
+`evaluation.runtime: task` in `task_eval.yaml`. Before any scorer starts,
+`score` creates or reuses one cached environment for each unique
+`runtime.python` / `runtime.packages` specification and activates it only in
+fresh scoring workers. Tasks without this opt-in keep the normal scoring path.
+Environment creation uses `uv` when available and otherwise falls back to the
+current compatible Python's standard `venv` and `pip`; setup failures are
+reported as `evaluator_unavailable`, never as a valid zero. Because packages
+are loaded into the scoring worker, the resolved runtime must use the worker's
+Python major/minor version.
+
 `--parallel N` runs at most `N` independent result evaluations at once and
 defaults to `1`. Each result gets a fresh worker process because custom scorers
 may modify process-global imports, environment, or working directory. Gates,

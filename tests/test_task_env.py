@@ -1,7 +1,10 @@
 """Regression tests for task environments from source and wheel installs."""
 
+import sys
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from ai4sci_bench.runner.task_env import TaskEnvironmentManager
 from ai4sci_bench.runner.runtime_root import resolve_runtime_root
@@ -48,6 +51,64 @@ def test_wheel_install_uses_pinned_distribution_not_site_packages(tmp_path):
     assert install_command[-1] == "asibench==0.1.0"
     assert "-e" not in install_command
     assert str(installed_root) not in install_command
+
+
+def test_build_env_falls_back_to_stdlib_venv_when_uv_is_unavailable(tmp_path):
+    project_root = tmp_path / "checkout"
+    project_root.mkdir()
+    (project_root / "pyproject.toml").write_text("[project]\nname='asibench'\n")
+    manager = TaskEnvironmentManager(project_root, cache_root=tmp_path / "cache")
+    env_dir = tmp_path / "env-fallback"
+    commands: list[list[str]] = []
+
+    with (
+        patch("ai4sci_bench.runner.task_env.shutil.which", return_value=None),
+        patch.object(manager, "_run", side_effect=lambda command, cwd: commands.append(command)),
+        patch.object(manager, "_resolve_python_version", return_value="3.12.0"),
+        patch.object(manager, "_write_metadata"),
+    ):
+        manager._build_env(
+            env_dir=env_dir,
+            cache_key="test-key",
+            runtime_packages=["cvxpy>=1.4"],
+            python_requirement=">=3.11",
+        )
+
+    python_executable = env_dir / "bin" / "python"
+    assert commands == [
+        [sys.executable, "-m", "venv", str(env_dir)],
+        [
+            str(python_executable),
+            "-m",
+            "pip",
+            "install",
+            "-e",
+            str(project_root),
+        ],
+        [
+            str(python_executable),
+            "-m",
+            "pip",
+            "install",
+            "cvxpy>=1.4",
+        ],
+    ]
+
+
+def test_build_env_without_uv_rejects_an_unavailable_python_version(tmp_path):
+    project_root = tmp_path / "checkout"
+    project_root.mkdir()
+    (project_root / "pyproject.toml").write_text("[project]\nname='asibench'\n")
+    manager = TaskEnvironmentManager(project_root, cache_root=tmp_path / "cache")
+
+    with patch("ai4sci_bench.runner.task_env.shutil.which", return_value=None):
+        with pytest.raises(RuntimeError, match="requires uv"):
+            manager._build_env(
+                env_dir=tmp_path / "env-fallback",
+                cache_key="test-key",
+                runtime_packages=[],
+                python_requirement=">=99",
+            )
 
 
 def test_runtime_root_prefers_source_checkout_hint(tmp_path):

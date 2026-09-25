@@ -8,9 +8,53 @@ from pathlib import Path
 
 import pytest
 
+from ai4sci_bench.core.task import TaskLoader
+
 
 ROOT = Path(__file__).resolve().parents[1]
 MPSC_DIR = ROOT / "tasks" / "math" / "mpsc_safety_filter"
+
+
+def test_mpsc_local_scoring_opts_into_its_declared_task_runtime():
+    metadata = TaskLoader(ROOT / "tasks").load_task_by_id("math.mpsc_safety_filter")
+
+    assert metadata["evaluation"]["runtime"] == "task"
+    assert "cvxpy>=1.4" in metadata["_runtime_packages"]
+    assert "clarabel>=0.7" in metadata["_runtime_packages"]
+    assert "scs>=3.2" in metadata["_runtime_packages"]
+
+
+def test_mpsc_workspace_launch_reuses_framework_runtime(
+    monkeypatch, tmp_path, mpsc_module
+):
+    worker_path = tmp_path / "worker.py"
+    worker_path.write_text("# worker\n", encoding="utf-8")
+    trusted_path = tmp_path / "site-packages"
+    trusted_path.mkdir()
+    runtime_bin = Path(sys.executable).resolve().parent
+
+    monkeypatch.setenv("AI4SCI_TASK_RUNTIME_ACTIVE", "1")
+    monkeypatch.setenv("AI4SCI_TASK_RUNTIME_PYTHON", sys.executable)
+    monkeypatch.setenv("AI4SCI_TASK_RUNTIME_BIN", str(runtime_bin))
+    monkeypatch.setenv("AI4SCI_TRUSTED_SITE_PACKAGES", str(trusted_path))
+
+    def unexpected_runtime_build():
+        raise AssertionError("framework runtime must not be rebuilt by the scorer")
+
+    monkeypatch.setattr(
+        mpsc_module,
+        "resolve_declared_runtime_environment",
+        unexpected_runtime_build,
+    )
+
+    command, environment = mpsc_module._workspace_python_launch(
+        tmp_path, worker_path
+    )
+
+    assert command == [str(Path(sys.executable).resolve()), str(worker_path)]
+    assert environment["PYTHONPATH"] == str(trusted_path)
+    assert environment["AI4SCI_TRUSTED_SITE_PACKAGES"] == str(trusted_path)
+    assert environment["PATH"].split(":", 1)[0] == str(runtime_bin)
 
 
 @pytest.fixture
@@ -59,7 +103,7 @@ def test_missing_evaluator_inputs_are_internal_errors(
     detail = scorer.score(pred_dir, ref_dir, {})
 
     assert detail.score == 0.0
-    assert detail.details["failure_kind"] == "scorer_internal_error"
+    assert detail.details["failure_kind"] == "evaluator_runtime_error"
     assert detail.details["scorer_internal_error"] is True
     assert "hidden_cases.json" in detail.details["setup_error"]
 
@@ -122,7 +166,7 @@ def test_unavailable_declared_runtime_is_an_internal_error(
     detail = mpsc_module.MPSCSafetyFilterScorer().score(pred_dir, ref_dir, {})
 
     assert detail.score == 0.0
-    assert detail.details["failure_kind"] == "scorer_internal_error"
+    assert detail.details["failure_kind"] == "evaluator_runtime_error"
     assert detail.details["scorer_internal_error"] is True
     assert "runtime" in detail.message.lower()
 
@@ -164,6 +208,6 @@ def test_missing_reference_certificate_is_internal_and_closes_controller(
 
     assert controller.closed is True
     assert detail.score == 0.0
-    assert detail.details["failure_kind"] == "scorer_internal_error"
+    assert detail.details["failure_kind"] == "evaluator_runtime_error"
     assert detail.details["scorer_internal_error"] is True
     assert "reference certificate" in detail.details["evaluation_error"]

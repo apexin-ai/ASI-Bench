@@ -82,7 +82,7 @@ def _setup_failure_details(
         "static_analysis": static,
         error_key: repr(exc),
         "failure_kind": (
-            "scorer_internal_error" if internal_error else "submission_error"
+            "evaluator_runtime_error" if internal_error else "submission_error"
         ),
         "scorer_internal_error": internal_error,
         "exception_type": type(exc).__name__,
@@ -519,17 +519,30 @@ def _workspace_python_launch(
     pred_dir: Path, worker_path: Path
 ) -> tuple[list[str], dict[str, str]]:
     del pred_dir
-    task_environment = resolve_declared_runtime_environment()
-    python_executable = Path(task_environment.python_executable).resolve()
+    framework_runtime = os.environ.get("AI4SCI_TASK_RUNTIME_ACTIVE") == "1"
+    if framework_runtime:
+        python_value = os.environ.get("AI4SCI_TASK_RUNTIME_PYTHON", sys.executable)
+        python_executable = Path(python_value).resolve()
+        environment = dict(os.environ)
+        runtime_bin = os.environ.get("AI4SCI_TASK_RUNTIME_BIN")
+        if runtime_bin:
+            environment["PATH"] = os.pathsep.join(
+                [runtime_bin, os.environ.get("PATH", "")]
+            ).rstrip(os.pathsep)
+        trusted_path = os.environ.get("AI4SCI_TRUSTED_SITE_PACKAGES", "")
+    else:
+        task_environment = resolve_declared_runtime_environment()
+        python_executable = Path(task_environment.python_executable).resolve()
+        environment = task_environment.build_subprocess_env(os.environ.copy())
+        trusted_path = os.pathsep.join(
+            str(path) for path in declared_runtime_site_packages(task_environment)
+        )
     if not python_executable.is_file():
         raise RuntimeError(
             f"task runtime interpreter does not exist: {python_executable}"
         )
-    environment = task_environment.build_subprocess_env(os.environ.copy())
-    trusted_sites = [str(path) for path in declared_runtime_site_packages(task_environment)]
-    if not trusted_sites:
+    if not trusted_path:
         raise RuntimeError("declared task runtime has no site-packages directory")
-    trusted_path = os.pathsep.join(trusted_sites)
     environment["PYTHONPATH"] = trusted_path
     environment["AI4SCI_TRUSTED_SITE_PACKAGES"] = trusted_path
     environment.setdefault("PYTHONUTF8", "1")

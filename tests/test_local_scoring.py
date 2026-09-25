@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import time
 from multiprocessing.process import BaseProcess
 from pathlib import Path
@@ -20,6 +21,7 @@ from ai4sci_bench.core.judge_api import (
 )
 from ai4sci_bench.core.types import ScoreDetail
 from ai4sci_bench.local_scoring import LocalScoringError, score_seed31415_results
+from ai4sci_bench.runner.task_env import TaskEnvironment, TaskEnvironmentManager
 
 
 def _write_fixture(root: Path) -> tuple[Path, Path, Path]:
@@ -126,6 +128,48 @@ def _add_result_level(results_dir: Path, level: str) -> None:
     }
     (task_dir / f"{instance_id}__{level}.json").write_text(
         json.dumps(result_json), encoding="utf-8"
+    )
+
+
+def _enable_task_scoring_runtime(tasks_dir: Path) -> None:
+    task_dir = tasks_dir / "physics" / "example"
+    eval_path = task_dir / "task_eval.yaml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            "evaluation:\n",
+            "evaluation:\n  runtime: task\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    meta_path = task_dir / "task_meta.yaml"
+    meta_path.write_text(
+        meta_path.read_text(encoding="utf-8").replace(
+            "  packages: []",
+            "  packages:\n    - fake-evaluator-dependency==1.0",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _fake_task_environment(root: Path) -> TaskEnvironment:
+    env_dir = root / "task-env"
+    site_packages = env_dir / "lib" / "python3.12" / "site-packages"
+    site_packages.mkdir(parents=True)
+    (site_packages / "fake_evaluator_dependency.py").write_text(
+        "AVAILABLE = True\n",
+        encoding="utf-8",
+    )
+    return TaskEnvironment(
+        env_dir=env_dir,
+        python_executable=env_dir / "bin" / "python",
+        bin_dir=env_dir / "bin",
+        cache_key="fake-runtime",
+        python_requirement=">=3.11",
+        packages=["fake-evaluator-dependency==1.0"],
+        cache_hit=True,
+        resolved_python_version=platform.python_version(),
     )
 
 
@@ -702,6 +746,107 @@ def test_local_scoring_without_argument_preserves_outer_judge_scope(monkeypatch,
         score_seed31415_results(results_dir, instances_dir, tasks_dir)
 
     assert seen == [outer_override]
+
+
+def test_regular_local_scoring_does_not_prepare_a_task_runtime(monkeypatch, tmp_path):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+
+    def unexpected_runtime(*_args, **_kwargs):
+        raise AssertionError("ordinary local scoring must not prepare a task runtime")
+
+    monkeypatch.setattr(TaskEnvironmentManager, "ensure_env", unexpected_runtime)
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+    )
+
+    assert report["scored_instance_count"] == 1
+    assert report["results"][0]["final_score"] == 100.0
+
+
+def test_opted_in_local_scoring_prepares_one_runtime_and_activates_it(
+    monkeypatch, tmp_path
+):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _add_result_level(results_dir, "b2")
+    _add_result_level(results_dir, "b3")
+    _enable_task_scoring_runtime(tasks_dir)
+    task_dir = tasks_dir / "physics" / "example"
+    (task_dir / "custom_scorer.py").write_text(
+        "import fake_evaluator_dependency\n",
+        encoding="utf-8",
+    )
+    environment = _fake_task_environment(tmp_path)
+    calls: list[dict[str, object]] = []
+
+    def prepare_runtime(_manager, spec):
+        calls.append(spec)
+        return environment
+
+    monkeypatch.setattr(TaskEnvironmentManager, "ensure_env", prepare_runtime)
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+        parallel=1,
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["_runtime_packages"] == [
+        "fake-evaluator-dependency==1.0"
+    ]
+    assert report["scored_instance_count"] == 3
+    assert [item["final_score"] for item in report["results"]] == [100.0] * 3
+
+
+def test_opted_in_runtime_setup_failure_is_evaluator_unavailable(
+    monkeypatch, tmp_path
+):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _enable_task_scoring_runtime(tasks_dir)
+
+    def unavailable_runtime(_manager, _spec):
+        raise FileNotFoundError("runtime installer is unavailable")
+
+    monkeypatch.setattr(TaskEnvironmentManager, "ensure_env", unavailable_runtime)
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+    )
+
+    scored = report["results"][0]
+    assert scored["evaluation_status"] == "evaluation_invalid"
+    assert scored["final_score"] is None
+    assert scored["scorer_internal_error"] is True
+    assert scored["failure_kind"] == "evaluator_unavailable"
+
+
+def test_opted_in_runtime_rejects_a_different_python_minor(monkeypatch, tmp_path):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _enable_task_scoring_runtime(tasks_dir)
+    environment = _fake_task_environment(tmp_path)
+    environment.resolved_python_version = "99.1.0"
+    monkeypatch.setattr(
+        TaskEnvironmentManager,
+        "ensure_env",
+        lambda _manager, _spec: environment,
+    )
+
+    report, _destination = score_seed31415_results(
+        results_dir,
+        instances_dir,
+        tasks_dir,
+    )
+
+    scored = report["results"][0]
+    assert scored["evaluation_status"] == "evaluation_invalid"
+    assert scored["failure_kind"] == "evaluator_unavailable"
+    assert "current Python major/minor" in scored["score_results"][0]["message"]
 
 
 def test_parallel_local_scoring_is_bounded_isolated_and_ordered(tmp_path):
