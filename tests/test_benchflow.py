@@ -121,6 +121,34 @@ def test_benchflow_emits_stable_score_details(monkeypatch, tmp_path):
     assert result["seed"] == 31415
 
 
+def test_benchflow_applies_task_score_divisor(monkeypatch, tmp_path):
+    manifest = _manifest(tmp_path)
+    task_dir = Path(manifest["tasks_dir"]) / "demo"
+    task_dir.mkdir()
+
+    class FakeLoader:
+        def __init__(self, _tasks_dir):
+            pass
+
+        def load_task_by_id(self, _task_id):
+            return {
+                "_task_dir": str(task_dir),
+                "evaluation": {"score_divisor": 1.05, "scoring": [{"weight": 105}]},
+            }
+
+    monkeypatch.setattr("ai4sci_bench.benchflow.TaskLoader", FakeLoader)
+    monkeypatch.setattr("ai4sci_bench.scorers.custom.load_custom_scorer", lambda _task_dir: None)
+    monkeypatch.setattr(
+        "ai4sci_bench.runner.orchestrator._evaluate_gates_and_scores",
+        lambda *_args, **_kwargs: ([], True, 0, [], 105.0),
+    )
+
+    result = score_seed31415_manifest(manifest)
+    assert result["score"] == 100.0
+    assert result["max_score"] == 100.0
+    assert result["score_divisor"] == 1.05
+
+
 def test_benchflow_reads_failed_run_result_instead_of_trusting_runner_exit(
     monkeypatch, tmp_path
 ):

@@ -220,9 +220,56 @@ class TestCustomScorerLoadFailure:
         )
         assert "ImportError" in result.score_results[0].message
 
+    def test_bad_custom_scorer_uses_task_score_divisor(self, tmp_path):
+        from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator
+
+        instance = _make_instance(tmp_path=tmp_path)
+        instance.metadata["evaluation"] = {
+            "score_divisor": 1.05,
+            "scoring": [{"scorer": "x", "weight": 105}],
+        }
+        agent_output = _make_agent_output(instance)
+        orchestrator = MagicMock(spec=BenchmarkOrchestrator)
+        orchestrator.agent = MagicMock()
+        orchestrator.agent.__class__.__name__ = "TestAgent"
+
+        with patch(
+            "ai4sci_bench.scorers.custom.load_custom_scorer",
+            side_effect=ImportError("missing numpy"),
+        ):
+            result = BenchmarkOrchestrator._evaluate(orchestrator, instance, agent_output)
+
+        assert result.max_possible_score == pytest.approx(100.0)
+        assert result.score_results[0].max_score == pytest.approx(100.0)
+
 
 class TestEvaluationCrashIsolation:
     """Analysis failures must not abort produce-only execution."""
+
+    def test_evaluation_crash_uses_normalized_task_maximum(self, tmp_path):
+        from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator
+
+        instance = _make_instance(tmp_path=tmp_path)
+        instance.metadata["evaluation"] = {
+            "score_divisor": 1.05,
+            "scoring": [{"scorer": "x", "weight": 105}],
+        }
+        agent_output = _make_agent_output(instance)
+        orchestrator = MagicMock(spec=BenchmarkOrchestrator)
+        orchestrator.agent = MagicMock()
+        orchestrator.agent.__class__.__name__ = "TestAgent"
+        orchestrator._run_agent = MagicMock(return_value=agent_output)
+        orchestrator._evaluate = MagicMock(side_effect=RuntimeError("boom"))
+        orchestrator.config = MagicMock(score=True)
+        orchestrator.analyzer = MagicMock(enabled=False)
+
+        result = BenchmarkOrchestrator._run_and_evaluate(
+            orchestrator, instance, attempt=1
+        )
+
+        assert result.final_score == 0.0
+        assert result.max_possible_score == pytest.approx(100.0)
+        assert result.score_results[0].max_score == pytest.approx(100.0)
 
     def test_analyzer_crash_does_not_abort(self, tmp_path):
         """If error analyzer crashes, the eval result is still returned."""

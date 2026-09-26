@@ -302,6 +302,18 @@ class TestStaticValidation:
         assert not result.passed
         assert any("weight" in e for e in result.errors)
 
+    @pytest.mark.parametrize("divisor", [False, 0, -1, ".nan", "invalid"])
+    def test_invalid_score_divisor(self, task_scaffold, divisor):
+        task_dir, tasks_root = task_scaffold
+        metadata = yaml.safe_load((task_dir / "task.yaml").read_text())
+        metadata["evaluation"]["score_divisor"] = divisor
+        (task_dir / "task.yaml").write_text(yaml.dump(metadata))
+
+        result = validate_task_static(task_dir, tasks_root=tasks_root)
+
+        assert not result.passed
+        assert any("score_divisor" in error for error in result.errors)
+
     def test_custom_scorer_script_missing(self, task_scaffold):
         task_dir, tasks_root = task_scaffold
         metadata = yaml.safe_load((task_dir / "task.yaml").read_text())

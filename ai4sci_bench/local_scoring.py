@@ -30,6 +30,12 @@ from ai4sci_bench.core.judge_api import (
     get_judge_api_override,
     use_judge_api_override,
 )
+from ai4sci_bench.core.scorer import (
+    failure_score_metadata,
+    normalize_task_score,
+    score_divisor,
+    scoring_max_score,
+)
 from ai4sci_bench.core.task import TaskLoader
 from ai4sci_bench.core.types import ScoreDetail
 from ai4sci_bench.runner.runtime_root import resolve_runtime_root
@@ -411,12 +417,7 @@ def _prepare_score_jobs(
         evaluation, task_dir, requires_instance_data, task_runtime = cached
 
         prompt_level = str(source.get("prompt_level") or "")
-        max_score = float(
-            sum(
-                float(config.get("weight", 1.0))
-                for config in evaluation.get("scoring", [])
-            )
-        )
+        max_score = scoring_max_score(evaluation)
         jobs.append(
             _ScoreJob(
                 index=index,
@@ -527,6 +528,11 @@ def _evaluate_score_job(
     all_details = [*gates, *scores]
     internal_error = _has_internal_error(all_details)
     failure_kind = _failure_kind(all_details)
+    normalized_final, normalized_max = normalize_task_score(
+        job.evaluation,
+        None if internal_error else float(final_score),
+        job.max_score,
+    )
     result = {
         "source_result": job.source_result,
         "task_id": job.task_id,
@@ -538,8 +544,9 @@ def _evaluate_score_job(
         "gate_results": [_detail_dict(item) for item in gates],
         "score_results": [_detail_dict(item) for item in scores],
         "evaluation_status": "evaluation_invalid" if internal_error else "completed",
-        "final_score": None if internal_error else float(final_score),
-        "max_score": job.max_score,
+        "final_score": normalized_final,
+        "max_score": normalized_max,
+        "score_divisor": score_divisor(job.evaluation),
         "scorer_internal_error": internal_error,
     }
     if failure_kind is not None:
@@ -621,6 +628,7 @@ def _worker_failure_result(
         message=f"Scoring evaluator failed: {error_type}: {error}",
         details=details,
     )
+    normalized_max, divisor = failure_score_metadata(job.evaluation, job.max_score)
     return {
         "source_result": job.source_result,
         "task_id": job.task_id,
@@ -633,7 +641,8 @@ def _worker_failure_result(
         "score_results": [_detail_dict(detail)],
         "evaluation_status": "evaluation_invalid",
         "final_score": None,
-        "max_score": job.max_score,
+        "max_score": normalized_max,
+        "score_divisor": divisor,
         "scorer_internal_error": True,
         "failure_kind": failure_kind,
     }

@@ -14,6 +14,7 @@ from typing import Any
 
 import yaml
 
+from ai4sci_bench.core.scorer import score_divisor
 from ai4sci_bench.core.task import merge_task_eval, resolve_task_sources
 
 
@@ -187,6 +188,12 @@ def _check_evaluation_block(metadata: dict, result: ValidationResult) -> None:
     if not isinstance(evaluation, dict):
         result.errors.append("evaluation must be a mapping")
         return
+
+    if "score_divisor" in evaluation:
+        try:
+            score_divisor(evaluation)
+        except ValueError as exc:
+            result.errors.append(f"evaluation.{exc}")
 
     gates = evaluation.get("gates")
     scoring = evaluation.get("scoring")

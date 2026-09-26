@@ -16,7 +16,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ai4sci_bench.core.agent_interface import AgentAdapter
-from ai4sci_bench.core.scorer import get_scorer
+from ai4sci_bench.core.scorer import (
+    failure_score_metadata,
+    get_scorer,
+    normalize_task_score,
+    scoring_max_score,
+)
 from ai4sci_bench.core.task import TaskLoader
 from ai4sci_bench.core.types import (
     AgentOutput,
@@ -608,6 +613,11 @@ class BenchmarkOrchestrator:
                 "Evaluation crashed for %s: %s", instance.instance_id, exc,
             )
             logger.debug("Traceback:\n%s", traceback.format_exc())
+            evaluation = instance.metadata.get("evaluation", {})
+            raw_max_score = scoring_max_score(evaluation)
+            max_possible_score, _divisor = failure_score_metadata(
+                evaluation, raw_max_score
+            )
             eval_result = EvalResult(
                 instance_id=instance.instance_id,
                 task_id=instance.task_id,
@@ -620,7 +630,7 @@ class BenchmarkOrchestrator:
                 score_results=[ScoreDetail(
                     scorer_name="_evaluation",
                     score=0.0,
-                    max_score=100.0,
+                    max_score=max_possible_score,
                     passed=False,
                     message=f"Evaluation crashed: {type(exc).__name__}: {exc}",
                     details={
@@ -631,6 +641,7 @@ class BenchmarkOrchestrator:
                     },
                 )],
                 final_score=0.0,
+                max_possible_score=max_possible_score,
                 execution_time_seconds=agent_output.execution_time_seconds,
                 status=agent_output.status,
                 agent_output=agent_output,
@@ -859,6 +870,10 @@ class BenchmarkOrchestrator:
                 instance.task_dir, exc,
             )
             logger.debug("Traceback:\n%s", traceback.format_exc())
+            raw_max_score = scoring_max_score(evaluation)
+            max_possible_score, _divisor = failure_score_metadata(
+                evaluation, raw_max_score
+            )
             return EvalResult(
                 instance_id=instance.instance_id,
                 task_id=instance.task_id,
@@ -871,7 +886,7 @@ class BenchmarkOrchestrator:
                 score_results=[ScoreDetail(
                     scorer_name="custom_scorer_loader",
                     score=0.0,
-                    max_score=100.0,
+                    max_score=max_possible_score,
                     passed=False,
                     message=f"Custom scorer failed to load: {type(exc).__name__}: {exc}",
                     details={
@@ -882,6 +897,7 @@ class BenchmarkOrchestrator:
                     },
                 )],
                 final_score=0.0,
+                max_possible_score=max_possible_score,
                 execution_time_seconds=agent_output.execution_time_seconds,
                 status=agent_output.status,
                 agent_output=agent_output,
@@ -896,6 +912,10 @@ class BenchmarkOrchestrator:
                 prompt_level=instance.prompt_level,
             )
         )
+        raw_max_score = scoring_max_score(evaluation)
+        final_score, max_possible_score = normalize_task_score(
+            evaluation, final_score, raw_max_score
+        )
 
         return EvalResult(
             instance_id=instance.instance_id,
@@ -908,7 +928,8 @@ class BenchmarkOrchestrator:
             hard_gates_passed=hard_gates_passed,
             soft_gate_failures=soft_gate_failures,
             score_results=score_results,
-            final_score=final_score,
+            final_score=float(final_score or 0.0),
+            max_possible_score=max_possible_score,
             execution_time_seconds=agent_output.execution_time_seconds,
             status=agent_output.status,
             agent_output=agent_output,

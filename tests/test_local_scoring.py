@@ -19,9 +19,42 @@ from ai4sci_bench.core.judge_api import (
     get_judge_api_override,
     use_judge_api_override,
 )
+from ai4sci_bench.core.scorer import (
+    failure_score_metadata,
+    normalize_task_score,
+)
 from ai4sci_bench.core.types import ScoreDetail
-from ai4sci_bench.local_scoring import LocalScoringError, score_seed31415_results
+from ai4sci_bench.local_scoring import (
+    LocalScoringError,
+    score_seed31415_results,
+)
 from ai4sci_bench.runner.task_env import TaskEnvironment, TaskEnvironmentManager
+
+
+def test_task_score_divisor_normalizes_score_and_max_score():
+    score, maximum = normalize_task_score(
+        {"score_divisor": 1.05},
+        105.0,
+        105.0,
+    )
+    assert score == pytest.approx(100.0)
+    assert maximum == pytest.approx(100.0)
+
+
+def test_task_score_divisor_defaults_to_one():
+    score, maximum = normalize_task_score({}, 42.0, 100.0)
+    assert score == 42.0
+    assert maximum == 100.0
+
+
+@pytest.mark.parametrize("divisor", [False, 0, -1, float("inf"), "invalid"])
+def test_invalid_task_score_divisor_is_rejected(divisor):
+    with pytest.raises(ValueError, match="finite positive number"):
+        normalize_task_score({"score_divisor": divisor}, 42.0, 100.0)
+
+
+def test_worker_failure_preserves_raw_max_for_invalid_score_divisor():
+    assert failure_score_metadata({"score_divisor": 0}, 105.0) == (105.0, None)
 
 
 def _write_fixture(root: Path) -> tuple[Path, Path, Path]:

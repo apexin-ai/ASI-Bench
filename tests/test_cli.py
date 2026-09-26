@@ -878,6 +878,25 @@ class TestGTSelfCheck:
         assert "100.00/100.00" in result.output
         assert "FAIL:  0" in result.output
 
+    def test_gt_selfcheck_applies_task_score_divisor(self, sample_task_dir):
+        metadata_path = sample_task_dir / "task.yaml"
+        metadata = yaml.safe_load(metadata_path.read_text())
+        metadata["evaluation"]["score_divisor"] = 1.05
+        metadata["evaluation"]["scoring"][0]["weight"] = 105
+        metadata_path.write_text(yaml.dump(metadata))
+
+        result = CliRunner().invoke(cli, [
+            "validate",
+            "--gt-selfcheck",
+            "--task", "physics.test_task",
+            "--tasks-dir", str(sample_task_dir.parent.parent),
+            "--gt-timeout", "30",
+        ])
+
+        assert result.exit_code == 0, result.output
+        assert "PASS  physics.test_task" in result.output
+        assert "100.00/100.00" in result.output
+
     def test_gt_selfcheck_respects_explicit_skip_flag(self, tmp_dir):
         """Wrapper scorers can opt out of GT self-check even if their scorer
         name is not one of the built-in LLM/code-analysis names."""

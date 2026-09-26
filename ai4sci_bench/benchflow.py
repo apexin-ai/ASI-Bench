@@ -20,6 +20,11 @@ from typing import Any
 
 from ai4sci_bench.core.task import TaskLoader
 from ai4sci_bench.core.judge_api import JudgeAPIOverride, use_judge_api_override
+from ai4sci_bench.core.scorer import (
+    normalize_task_score,
+    score_divisor,
+    scoring_max_score,
+)
 from ai4sci_bench.local_scoring import _detail_dict, _has_internal_error, _json_default
 
 PUBLIC_SEED = 31415
@@ -255,7 +260,10 @@ def score_seed31415_manifest(
         )
     all_details = [*gates, *scores]
     internal_error = _has_internal_error(all_details)
-    max_score = float(sum(float(item.get("weight", 1.0)) for item in evaluation.get("scoring", [])))
+    raw_max_score = scoring_max_score(evaluation)
+    final_score, max_score = normalize_task_score(
+        evaluation, final_score, raw_max_score
+    )
     scorer_revision = _load_public_scorer_revision(tasks_dir)
     requested_revision = manifest.get("scorer_revision")
     if requested_revision is not None and str(requested_revision) != scorer_revision:
@@ -300,8 +308,9 @@ def score_seed31415_manifest(
         },
         "hard_gates_passed": hard_ok,
         "soft_gate_failures": soft_failures,
-        "score": float(final_score),
+        "score": float(final_score or 0.0),
         "max_score": max_score,
+        "score_divisor": score_divisor(evaluation),
         "gate_results": [_detail_dict(item) for item in gates],
         "score_details": [_detail_dict(item) for item in scores],
         "scorer_internal_error": internal_error,

@@ -3421,6 +3421,7 @@ def _gt_selfcheck_one_task(
     timeout: int,
 ) -> dict[str, Any]:
     """Run GT self-check for a single task. Returns a result dict."""
+    from ai4sci_bench.core.scorer import normalize_task_score, scoring_max_score
     from ai4sci_bench.core.task import TaskLoader
     from ai4sci_bench.runner.orchestrator import (
         _evaluate_gates_and_scores,
@@ -3511,8 +3512,9 @@ def _gt_selfcheck_one_task(
             )
 
             # Compute max possible score (after stripping LLM scorers)
-            max_possible = sum(
-                s.get("weight", 1.0) for s in evaluation.get("scoring", [])
+            raw_max_possible = scoring_max_score(evaluation)
+            final_score, max_possible = normalize_task_score(
+                evaluation, final_score, raw_max_possible
             )
             skipped_weight = _skipped_llm_weight(metadata.get("evaluation", {}))
 

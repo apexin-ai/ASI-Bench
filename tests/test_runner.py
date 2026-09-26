@@ -176,6 +176,42 @@ class TestBenchmarkOrchestrator:
         assert result.gates_passed is True
         assert result.final_score == 100.0
 
+    def test_evaluate_applies_task_score_divisor(self, sample_task_instance, tmp_dir):
+        sample_task_instance.metadata["evaluation"]["score_divisor"] = 1.05
+        sample_task_instance.metadata["evaluation"]["scoring"] = [
+            {
+                "scorer": "numerical",
+                "weight": 105,
+                "config": {
+                    "metric": "relative_l2",
+                    "pred_file": "output.npy",
+                    "ref_file": "output_ref.npy",
+                    "threshold": 0.1,
+                },
+            }
+        ]
+        ref_data = np.random.randn(50).astype(np.float32)
+        np.save(sample_task_instance.reference_dir / "output_ref.npy", ref_data)
+        np.save(sample_task_instance.workspace_dir / "output.npy", ref_data.copy())
+        agent = DummyAgent(output_data={"output.npy": ref_data})
+        orch = BenchmarkOrchestrator(RunConfig(
+            agent=agent,
+            tasks_dir=str(sample_task_instance.task_dir.parent.parent),
+            output_dir=str(tmp_dir / "results"),
+        ))
+        agent_output = AgentOutput(
+            instance_id=sample_task_instance.instance_id,
+            output_dir=sample_task_instance.workspace_dir,
+            code_files=[],
+            data_files=["output.npy"],
+            log="ok",
+            execution_time_seconds=0.1,
+            status=RunStatus.COMPLETED,
+        )
+        result = orch._evaluate(sample_task_instance, agent_output)
+        assert result.final_score == pytest.approx(100.0)
+        assert result.max_possible_score == pytest.approx(100.0)
+
     def test_evaluate_gates_fail(self, sample_task_instance, tmp_dir):
         """If gates fail, scoring is skipped and score is 0."""
         # Add a gate that will fail
