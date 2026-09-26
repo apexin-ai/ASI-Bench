@@ -221,16 +221,14 @@ class RichardsTopmodelProcessScorer(Scorer):
         precip = pd.to_numeric(forcing["precip_mm_day"], errors="coerce").to_numpy(float)
         storage = _column_water_storage_mm(pred_theta, dz)
         storage_init = float(np.sum(np.asarray(profile["theta_init"], dtype=float) * dz) * 1000.0)
-        # Mirror the reference model's initial-state clamp.  Some valid
-        # parameter combinations place the requested water table above the
-        # bottom-layer center; run_simulation first moves it to the same 0.05 m
-        # separation used by the Darcy boundary before deriving storage.
-        z_bottom_center = float(np.asarray(profile["layer_centers_m"], dtype=float)[-1])
-        initial_water_table = max(
-            float(site["init_water_table_m"]),
-            z_bottom_center + 0.05,
-        )
-        aquifer_init = max(0.0, (5.0 - initial_water_table) * 0.20 * 1000.0)
+        # Closure is a self-consistency check on the submission, so the aquifer
+        # storage change must be taken on the submission's own datum: the task
+        # text only says "aquifer_storage += net_flux_mm" and never fixes the
+        # absolute value, so agents legitimately start the accumulator at 0
+        # (or anywhere else).  Using the reference model's hidden datum
+        # ((5 m - water table) * Sy * 1000) here made every literal solution
+        # fail closure by ~200% and hit the 35-point cap.
+        aquifer_init = float(pred_wt["aquifer_storage_mm"].iloc[0])
         aquifer_end = float(pred_wt["aquifer_storage_mm"].iloc[-1])
         delta_storage = (float(storage[-1]) - storage_init) + (aquifer_end - aquifer_init)
         cum_in = float(np.nansum(precip))
