@@ -2698,6 +2698,30 @@ class TestClaudeCodeCLITrajectoryEnhancements:
         assert cost.output_tokens == 1000
         assert cost.total_tokens == 6000
 
+    def test_claude_extract_usage_counts_cache_and_cli_cost(self):
+        # Numbers from a real claude-opus-5 run (data-pipeline
+        # optimization-check-qmwht): with prompt caching nearly all input is
+        # cache reads/writes, and input_tokens alone was 110 of ~3.4M.  The
+        # CLI reports its own dollar cost; it used to be dropped as 0.0.
+        adapter = ClaudeCodeCLIAdapter()
+        jsonl = json.dumps({
+            "type": "result",
+            "subtype": "success",
+            "total_cost_usd": 10.14185275,
+            "usage": {
+                "input_tokens": 110,
+                "cache_creation_input_tokens": 1196663,
+                "cache_read_input_tokens": 2195918,
+                "output_tokens": 62568,
+            },
+        })
+        cost = adapter._extract_usage_from_jsonl(jsonl)
+        assert cost is not None
+        assert cost.input_tokens == 110 + 1196663 + 2195918
+        assert cost.output_tokens == 62568
+        assert cost.total_tokens == 110 + 1196663 + 2195918 + 62568
+        assert cost.estimated_cost_usd == 10.14185275
+
     def test_claude_no_usage_in_result_event(self):
         adapter = ClaudeCodeCLIAdapter()
         jsonl = json.dumps({"type": "result", "subtype": "success"})

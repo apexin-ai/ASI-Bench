@@ -840,14 +840,27 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             usage = event.get("usage")
             if not usage or not isinstance(usage, dict):
                 continue
-            input_tokens = usage.get("input_tokens", 0)
+            # Anthropic's input_tokens counts only uncached input; with prompt
+            # caching almost every prompt token is a cache read or write, so
+            # all three make up what the run consumed.
+            input_parts = [
+                usage.get(key, 0)
+                for key in ("input_tokens", "cache_creation_input_tokens",
+                            "cache_read_input_tokens")
+            ]
             output_tokens = usage.get("output_tokens", 0)
             if any(not isinstance(value, int) or value < 0
-                   for value in (input_tokens, output_tokens)):
+                   for value in (*input_parts, output_tokens)):
                 continue
+            input_tokens = sum(input_parts)
+            # The CLI prices the run itself; there is no local price table.
+            cost_usd = event.get("total_cost_usd")
+            if not isinstance(cost_usd, (int, float)) or isinstance(cost_usd, bool) or cost_usd < 0:
+                cost_usd = 0.0
             return CostInfo(
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 total_tokens=input_tokens + output_tokens,
+                estimated_cost_usd=float(cost_usd),
             )
         return None
