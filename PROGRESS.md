@@ -1,5 +1,19 @@
 # Progress
 
+## Claude CLI 成本统计丢掉了缓存 token 和 CLI 自报的费用
+
+- `ClaudeCodeCLIAdapter._extract_usage_from_jsonl` 只取 result 事件的
+  `usage.input_tokens`。Anthropic 的这个字段只算未命中缓存的输入；开了 prompt
+  缓存，几乎所有输入都在 `cache_creation_input_tokens` / `cache_read_input_tokens`。
+  它也没读 `total_cost_usd`，`estimated_cost_usd` 一直是默认的 0.0。
+- 实例：data-pipeline 的 `optimization-check-qmwht`，claude-opus-5 xhigh 跑了
+  2h53m，缓存输入约 339 万 token、CLI 自报 $10.14，`run_result.json` 却记成
+  `input_tokens: 110`、`estimated_cost_usd: 0.0`。
+- 修复（`957ecae`）：输入 = 三类输入 token 之和，费用取 CLI 的 `total_cost_usd`
+  （本库没有价格表，CLI 自己算价最准）。测试用这个 Run 的真实数值。
+- 以后：新接一个 CLI 的用量解析，先拿一份真实开了缓存的 JSONL 对一遍，
+  别只用手写的 `{input_tokens, output_tokens}` 两字段样例。
+
 ## OpenAI empty-response recovery and publishing the full repair
 
 - Actual public-task diagnostics reproduced the thinking/text converter error
