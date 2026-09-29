@@ -28,8 +28,10 @@ upstream licenses apply.
   reads Claude Code stream-json (or the trajectory) and the persisted outputs
   and checks connection, tool call, tool result, answer provenance and bypass.
 
-Verified 2026-09-29 on AWS Linux amd64 (Ubuntu 26.04) and Linux aarch64: pyscf
-smoke all PASS with the stdout WARN below.
+Verified 2026-09-29: the original pyscf smoke (`pyscf_rhf_energy` +
+`generate_pyscf_geom_input`) passed on AWS Linux amd64 (Ubuntu 26.04) and Linux
+aarch64. The all-tools smoke below passed on Linux aarch64 (19 PASS, 8 WARN,
+0 FAIL, ~4 s); amd64 rerun pending.
 
 ## Run (Linux, as the unprivileged E2E user)
 
@@ -50,18 +52,38 @@ credentials. Exit code is non-zero if any check FAILs; WARNs do not fail.
 
 ### pyscf (`lixin19/mcp2pyscf`)
 
-- Upstream requires Python ≥ 3.13 (`.python-version` 3.13); the lockfile pins
-  PySCF 2.9.0, RDKit 2025.3.3, geomeTRIC 1.1, MCP SDK 1.9.4.
-- L1 checks `pyscf_rhf_energy` for H₂/STO-3G, H₂O/STO-3G and H₂O/6-31G against
-  PySCF RHF with identical settings (`symmetry=True`), tolerance 1e-7 Ha, and
-  checks that `generate_pyscf_geom_input("O")` returns O,H,H coordinates that
-  PySCF can parse. RDKit embedding is unseeded (random conformer), so geometry
-  values are not compared.
-- **Known WARN:** PySCF logs `converged SCF energy = ...` to **stdout** at its
-  default verbosity, so every RHF call injects a non-JSON line into the stdio
-  transport. Whether a given agent client tolerates this must be verified in
-  the agent E2E run.
-- Not covered by this smoke: `scan_pes_rhf` (fixed H₂ demo that also `print`s
-  to stdout), bond-stretch scans, geometry optimisation, plotting and
-  `visualize_molecule_3d_mcp` (writes into cwd and reports a hard-coded
-  developer path).
+Upstream requires Python ≥ 3.13 (`.python-version` 3.13); the lockfile pins
+PySCF 2.9.0, RDKit 2025.3.3, geomeTRIC 1.1, MCP SDK 1.9.4. The smoke calls all
+seven tools. References are computed in the smoke process with the same
+libraries but independently of the server code:
+
+| Tool | L1 check (FAIL if wrong) | Known WARN on the pinned revision |
+|---|---|---|
+| `pyscf_rhf_energy` | H₂/STO-3G, H₂O/STO-3G, H₂O/6-31G vs PySCF RHF (`symmetry=True`), 1e-7 Ha | one stdout line per call |
+| `generate_pyscf_geom_input` | H₂O, NH₃, HCN: atom order and sorted interatomic distances (≤1e-3 Å) vs seeded RDKit ETKDG + UFF, RHF/STO-3G energy at both geometries (≤1e-5 Ha) | invalid SMILES returns `"Error: ..."` with `isError=false` |
+| → `pyscf_rhf_energy` chain | benzene ×8: geometry from the tool passed to `pyscf_rhf_energy`; successful energies must agree | intermittent `PointGroupSymmetryError` (about half of the calls; can be 0/8 by chance) |
+| `run_bond_stretch_calculation_mcp` | H₂O O–H 0.8–1.2 Å ×5 and HCN C–N 1.0–1.3 Å ×4 vs the same stretch of a seeded UFF geometry, RHF/STO-3G, 1e-5 Ha | `basis` is ignored (always STO-3G); errors returned in-band as `{"error": ...}` |
+| `optimize_molecule_mcp` | NH₃, H₂CO: sorted distances (≤2e-3 Å) and RHF/STO-3G energy at the returned geometry (≤1e-6 Ha) vs PySCF + geomeTRIC from a seeded UFF start | returns only an XYZ block (documented `optimized_energy` missing); invalid SMILES in-band; prints the geometry to stdout |
+| `scan_pes_rhf` | 9 H₂/STO-3G energies (0.7–1.5 Å, hard-coded upstream) vs PySCF, 1e-7 Ha | ~19 stdout lines per call |
+| `plot_energy_scan_image_mcp` | one `image/png` block, valid PNG (1000×600); mismatched input lengths must give `isError` | — |
+| `visualize_molecule_3d_mcp` | HTML with the 3Dmol viewer and the geometry is written to the server cwd | result text is a hard-coded developer path; the HTML is never returned |
+
+Why the geometry checks are loose: RDKit embedding in the server is unseeded,
+so conformers differ between calls. For the rigid molecules above the UFF
+minimum is unique up to rotation, translation and H permutation (measured over
+repeated embeddings: distances within 4e-6 Å, RHF/STO-3G energies within
+3e-7 Ha), so the smoke compares rotation- and permutation-invariant quantities.
+Flexible molecules (e.g. ethanol, 7e-4 Ha spread) are deliberately not used.
+
+Implications for agent runs:
+
+- PySCF, geomeTRIC and upstream `print` calls write to **stdout**, i.e. into the
+  stdio transport. Claude Code 2.1.284 tolerated this in the
+  `mcp_e2e.pyscf_rhf_energy` runs; stricter clients may not.
+- `generate_pyscf_geom_input` → `pyscf_rhf_energy` is fragile for
+  high-symmetry molecules (benzene, sometimes methane/ethane); fake tasks must
+  not depend on that chain for such molecules.
+- `visualize_molecule_3d_mcp` writes `optimized_geom_3d.html` into the server
+  cwd, which in `--mcp-config` runs is the MCP checkout (untracked file; it
+  does not block `setup.py`, which only refuses modified tracked files). It is
+  not usable as an agent-verifiable tool and has no L2 task.

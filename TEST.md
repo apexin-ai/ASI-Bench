@@ -586,13 +586,20 @@ Checks that `scripts/mcp/e2e/manifest.json` entries are pinned to 40-char
 revisions and match catalog sources, that rendered `*.mcp.json` passes
 `load_mcp_config` with absolute paths, that absolute launch paths and foreign
 checkout remotes are rejected, and that the stdlib stdio client paginates
-`tools/list`, surfaces `isError`, and records non-JSON stdout lines.
+`tools/list`, surfaces `isError`, and records non-JSON stdout lines. For
+`smoke_pyscf.py` it also covers the PySCF-free parts: atom-string/XYZ/float-list
+parsing, rotation- and permutation-invariant distance comparison, PNG header
+checks, per-tool stdout attribution, the PASS/WARN/FAIL split for invalid input
+(isError vs in-band error vs accepted), the plot and visualize checks against a
+stub client, and that every manifest tool is called by the smoke.
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
 then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke_pyscf.py --config
-~/mcp/pyscf.mcp.json`. It checks real `tools/call` results against PySCF run
-in the smoke process and reports stdout pollution as WARN.
+~/mcp/pyscf.mcp.json`. It calls all seven tools and checks the results against
+PySCF, RDKit and geomeTRIC run in the smoke process; expected outcome on the
+pinned revision is `PASS` with 0 FAIL and 7–8 WARN (upstream defects listed in
+`scripts/mcp/e2e/README.md`; the benzene symmetry probe is intermittent).
 
 MCP E2E fake tasks and run verifier (offline, no MCP server or PySCF):
 

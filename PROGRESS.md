@@ -931,3 +931,29 @@
   (red before the fix, green after); confirmed on AWS with `--retries 3`/`5`
   producing one result per attempt.
 - Implementation commit: `0e43cdd`.
+
+## 2026-09-29: pyscf MCP smoke covers all seven tools (L1)
+
+- Problem: the pyscf smoke checked only `pyscf_rhf_energy` values and the atom
+  labels of one `generate_pyscf_geom_input` call; five tools were never called,
+  so upstream defects were unknown before designing further fake tasks.
+- Resolution: `smoke_pyscf.py` now calls every manifest tool and compares
+  against references computed in the smoke process (seeded RDKit + UFF,
+  PySCF RHF, PySCF + geomeTRIC). Unseeded server geometries are compared with
+  rotation/permutation-invariant distances and energies; only rigid molecules
+  are used. Wrong values FAIL; upstream defects are WARN: in-band errors
+  (`isError=false`), ignored `basis` in the bond scan, missing optimized energy,
+  intermittent `PointGroupSymmetryError` when chaining geometry → RHF for
+  benzene, visualize writing into the server cwd while returning a hard-coded
+  path, and stdout pollution now attributed per tool.
+- Lesson: probe every tool over stdio before designing agent tasks; the tool
+  docstrings promised fields (`optimized_energy`) and behaviour (`basis`) that
+  the code does not deliver.
+- Verification: Linux aarch64 smoke 19 PASS / 8 WARN / 0 FAIL;
+  `tests/test_mcp_e2e_scripts.py` adds PySCF-free tests (parsers, invariants,
+  PNG header, WARN/FAIL classification, stub-client plot/visualize, every
+  manifest tool called). Full suite on macOS / Python 3.13: only the two known
+  environment failures that also occur on unmodified main
+  (`test_mimo_accepts_all_four_modes` needs Linux for `linux_ns`,
+  `test_kimi_host_env_uses_host_path` assumes a temporary path layout).
+- Implementation commit: pending (to be filled after commit).
