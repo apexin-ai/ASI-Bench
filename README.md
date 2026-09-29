@@ -366,7 +366,9 @@ not modify your MCP configuration or certify real CAD backends.
 
 To install a catalog MCP server at a pinned revision and exercise real
 `tools/call` against independently computed references (no agent involved), see
-[MCP E2E setup and smoke tests](scripts/mcp/e2e/README.md).
+[MCP E2E setup and smoke tests](scripts/mcp/e2e/README.md). To check that an
+agent in a real `asibench run` actually calls the MCP tool and uses its result,
+see the [MCP E2E fake tasks](examples/mcp-e2e-tasks/README.md).
 
 
 ASI-Bench ships an operator-configured catalog for COMSOL, OpenFOAM, MATLAB,

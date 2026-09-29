@@ -10,6 +10,7 @@ upstream licenses apply.
 |---|---|
 | L0 | `initialize` succeeds; `tools/list` is complete, stable and matches `manifest.json` |
 | L1 | Real `tools/call` results are checked against an independent computation done by the smoke script, outside the server process |
+| L2 | An agent in `asibench run` calls the tool for a fake task and its answer comes from the tool (`verify_run.py`, see `examples/mcp-e2e-tasks/README.md`) |
 
 ## Layout
 
@@ -23,6 +24,12 @@ upstream licenses apply.
   stdout so non-JSON lines are **recorded**, not swallowed by an SDK.
 - `smoke_<id>.py` — per-server L0/L1 checks; writes a JSON report with versions,
   revision, every check and the server's stderr tail.
+- `verify_run.py` — L2 verifier for agent runs of `examples/mcp-e2e-tasks`:
+  reads Claude Code stream-json (or the trajectory) and the persisted outputs
+  and checks connection, tool call, tool result, answer provenance and bypass.
+
+Verified 2026-09-29 on AWS Linux amd64 (Ubuntu 26.04) and Linux aarch64: pyscf
+smoke all PASS with the stdout WARN below.
 
 ## Run (Linux, as the unprivileged E2E user)
 
@@ -58,6 +65,3 @@ credentials. Exit code is non-zero if any check FAILs; WARNs do not fail.
   to stdout), bond-stretch scans, geometry optimisation, plotting and
   `visualize_molecule_3d_mcp` (writes into cwd and reports a hard-coded
   developer path).
-
-Verified 2026-09-29 on Linux aarch64 (Python 3.13.15): all checks PASS, one WARN
-(stdout pollution).

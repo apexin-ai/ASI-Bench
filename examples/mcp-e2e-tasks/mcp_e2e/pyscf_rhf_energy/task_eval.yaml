@@ -1,0 +1,32 @@
+task_id: mcp_e2e.pyscf_rhf_energy
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    - scorer: pyscf_e2e_result_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  scoring:
+    - scorer: pyscf_e2e_energy
+      weight: 100
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        # |E_pred - E_ref| in Hartree. Full credit at or below full_score_tol,
+        # zero at or above zero_score_tol, log-linear in between.
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-3
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 300

@@ -593,3 +593,17 @@ Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke_pyscf.py --config
 ~/mcp/pyscf.mcp.json`. It checks real `tools/call` results against PySCF run
 in the smoke process and reports stdout pollution as WARN.
+
+MCP E2E fake tasks and run verifier (offline, no MCP server or PySCF):
+
+```bash
+uv run --frozen pytest tests/test_mcp_e2e_tasks.py -q
+```
+
+Checks that `examples/mcp-e2e-tasks` tasks are `status: test` and invisible to
+`tasks/`, seeded instances are deterministic and perturbed, only B1 names the
+tool, the custom scorer's log-linear credit, submission-vs-evaluator failure
+split, and that `verify_run.py` passes a genuine MCP run but fails direct PySCF
+use, an unavailable server, an uncalled tool, and an answer not returned by the
+tool. The live agent run (generate → run → score → verify) is documented in
+`examples/mcp-e2e-tasks/README.md`.

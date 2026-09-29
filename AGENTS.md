@@ -121,6 +121,11 @@
   revision 与各 server 自己的 Python 版本（忽略调用方 `UV_PYTHON`），只 clone
   不 vendor 上游；smoke 用 server 自身 venv 在进程外独立计算参考值，L0/L1 分级，
   stdout 非 JSON 行记为 WARN。直连 smoke 通过不等于 agent E2E 通过。
+- MCP E2E fake task 仅放 `examples/mcp-e2e-tasks/`（`status: test`，不进 `tasks/`），
+  以 `--params '{"seed":31415}'` 生成以复用本地评分；参考值只在 `generate --sandbox task`
+  的隔离环境中计算，agent 以 `--sandbox none` 运行。scorer 只比对输出与 reference；
+  是否真实调用 MCP 工具、答案是否来自工具及是否绕过 MCP 由 `scripts/mcp/e2e/verify_run.py`
+  依据 `e2e_check.json` 读取 run 产物判定，框架评分契约不变。
 - 外部仿真 benchmark 接入通过 `ai4sci_bench.integrations`：ScienceAgentBench
   转换器只把源记录放入本地 `private/`，CFDLLMBench 使用本地固定 OpenFOAM
   镜像，SciAgentGym 工具逐实例 allowlist，COSMO-Agent 使用
