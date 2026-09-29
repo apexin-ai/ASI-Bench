@@ -389,6 +389,25 @@ class TestRetryStrategyAll:
             assert "attempt" in data
             assert data["attempt"] in (1, 2)
 
+    def test_produce_only_run_keeps_every_attempt(self, sample_task_instance, tmp_dir):
+        """`asibench run` is produce-only (score=False); retries must not overwrite attempt 1."""
+        output_data = {"output.npy": np.zeros(50, dtype=np.float32)}
+        agent = AlwaysSucceedAgent(output_data=output_data)
+        orch = self._make_orchestrator(agent, tmp_dir, sample_task_instance.task_dir, retries=3)
+        orch.config.score = False
+
+        orch._run_single_instance(sample_task_instance)
+
+        assert agent.call_count == 3
+        result_dir = tmp_dir / "results" / "physics.test_task"
+        attempts = sorted(
+            json.loads(path.read_text())["attempt"] for path in result_dir.glob("*.json")
+            if ".trajectory." not in path.name and ".model_calls." not in path.name
+        )
+        assert attempts == [1, 2, 3]
+        assert len(list(result_dir.glob("*__attempt2.json"))) == 1
+        assert len(list(result_dir.glob("*__attempt3.json"))) == 1
+
 
 # ---------------------------------------------------------------------------
 # Retry: strategy="until_success"

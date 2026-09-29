@@ -616,3 +616,8 @@ checks that a result JSON which records no outputs is a completed zero while
 other results in the batch still score, and
 `test_vanished_output_directory_is_still_rejected` keeps a missing but recorded
 `.outputs` directory a preflight error.
+
+Produce-only retries:
+`tests/test_retry.py::TestRetryStrategyAll::test_produce_only_run_keeps_every_attempt`
+checks that `asibench run --retries N` (score=False) saves N result files with
+attempts 1..N instead of overwriting attempt 1.

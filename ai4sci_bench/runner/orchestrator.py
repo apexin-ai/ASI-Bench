@@ -604,6 +604,9 @@ class BenchmarkOrchestrator:
                 status=agent_output.status,
                 agent_output=agent_output,
                 cost=agent_output.cost,
+                # Produce-only returns early; without the attempt number every
+                # retry would be saved under the attempt-1 name and overwrite it.
+                attempt=attempt,
             )
 
         try:
