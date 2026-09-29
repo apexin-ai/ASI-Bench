@@ -30,8 +30,8 @@ upstream licenses apply.
 
 Verified 2026-09-29: the original pyscf smoke (`pyscf_rhf_energy` +
 `generate_pyscf_geom_input`) passed on AWS Linux amd64 (Ubuntu 26.04) and Linux
-aarch64. The all-tools smoke below passed on Linux aarch64 (19 PASS, 8 WARN,
-0 FAIL, ~4 s); amd64 rerun pending.
+aarch64. The all-tools smoke below passed on both with identical values
+(19 PASS, 8 WARN, 0 FAIL, ~4 s).
 
 ## Run (Linux, as the unprivileged E2E user)
 

@@ -949,11 +949,12 @@
 - Lesson: probe every tool over stdio before designing agent tasks; the tool
   docstrings promised fields (`optimized_energy`) and behaviour (`basis`) that
   the code does not deliver.
-- Verification: Linux aarch64 smoke 19 PASS / 8 WARN / 0 FAIL;
+- Verification: smoke 19 PASS / 8 WARN / 0 FAIL on Linux aarch64 and on AWS
+  Linux amd64 (identical values);
   `tests/test_mcp_e2e_scripts.py` adds PySCF-free tests (parsers, invariants,
   PNG header, WARN/FAIL classification, stub-client plot/visualize, every
   manifest tool called). Full suite on macOS / Python 3.13: only the two known
   environment failures that also occur on unmodified main
   (`test_mimo_accepts_all_four_modes` needs Linux for `linux_ns`,
   `test_kimi_host_env_uses_host_path` assumes a temporary path layout).
-- Implementation commit: pending (to be filled after commit).
+- Implementation commit: `77f0929`.
