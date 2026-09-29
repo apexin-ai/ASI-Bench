@@ -573,3 +573,23 @@ For opt-in installed-server stdio tests, follow
 `scripts/mcp/cad-repairs/README.md`. The live suite uses a temporary HOME/cwd,
 port protection, and 60-second per-server timeouts; validates initialization,
 all tools pages, repeated lists, errors and recovery; never calls real CAD.
+
+## MCP E2E setup/smoke scripts
+
+Offline checks (no network, no upstream installs):
+
+```bash
+uv run --frozen pytest tests/test_mcp_e2e_scripts.py -q
+```
+
+Checks that `scripts/mcp/e2e/manifest.json` entries are pinned to 40-char
+revisions and match catalog sources, that rendered `*.mcp.json` passes
+`load_mcp_config` with absolute paths, that absolute launch paths and foreign
+checkout remotes are rejected, and that the stdlib stdio client paginates
+`tools/list`, surfaces `isError`, and records non-JSON stdout lines.
+
+Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
+`scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
+then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke_pyscf.py --config
+~/mcp/pyscf.mcp.json`. It checks real `tools/call` results against PySCF run
+in the smoke process and reports stdout pollution as WARN.

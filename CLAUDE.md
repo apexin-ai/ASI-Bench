@@ -117,6 +117,10 @@
 - CAD MCP 上游兼容补丁仅存于 `scripts/mcp/cad-repairs/`，绑定源 revision 和
   SHA-256；只对显式指定的干净副本应用，不捆绑 CAD 软件、不自动更改本机凭据配置。
   patched stdio 冒烟通过不得升级为真实 CAD 业务认证；复测需临时 HOME 与端口保护。
+- MCP E2E 安装/冒烟脚本位于 `scripts/mcp/e2e/`：`manifest.json` 绑定 40 位
+  revision 与各 server 自己的 Python 版本（忽略调用方 `UV_PYTHON`），只 clone
+  不 vendor 上游；smoke 用 server 自身 venv 在进程外独立计算参考值，L0/L1 分级，
+  stdout 非 JSON 行记为 WARN。直连 smoke 通过不等于 agent E2E 通过。
 - 外部仿真 benchmark 接入通过 `ai4sci_bench.integrations`：ScienceAgentBench
   转换器只把源记录放入本地 `private/`，CFDLLMBench 使用本地固定 OpenFOAM
   镜像，SciAgentGym 工具逐实例 allowlist，COSMO-Agent 使用

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "servers": [
+    {
+      "id": "pyscf",
+      "catalog_id": "pyscf",
+      "repository": "https://github.com/lixin19/mcp2pyscf.git",
+      "revision": "df4ea682ec640f429015974d1daec3afa75b5142",
+      "python": "3.13",
+      "install": "uv-sync-frozen",
+      "launch": {
+        "command": ".venv/bin/python",
+        "args": ["main.py"]
+      },
+      "smoke": "smoke_pyscf.py",
+      "expected_tools": [
+        "generate_pyscf_geom_input",
+        "optimize_molecule_mcp",
+        "plot_energy_scan_image_mcp",
+        "pyscf_rhf_energy",
+        "run_bond_stretch_calculation_mcp",
+        "scan_pes_rhf",
+        "visualize_molecule_3d_mcp"
+      ]
+    }
+  ]
+}
