@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "server": "pyscf",
+  "tool": "pyscf_rhf_energy",
+  "reference_file": "reference.json",
+  "reference_key": "energy_hartree",
+  "prediction_file": "result.json",
+  "prediction_key": "energy_hartree",
+  "abs_tol": 1e-6,
+  "tool_inputs_from_reference": {"atom": "atom", "basis": "basis"},
+  "bypass_patterns": [
+    "(import|from)\\s+(pyscf|psi4)\\b",
+    "\\b(pip|pip3|uv|uvx|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b[^\\n]*\\b(pyscf|psi4)\\b",
+    "\\buv\\s+run\\b[^\\n]*--with\\b[^\\n]*\\b(pyscf|psi4)\\b",
+    "\\buvx\\b[^\\n]*\\b(pyscf|psi4)\\b"
+  ],
+  "suspicious_patterns": [
+    "\\bpyscf\\b",
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ]
+}

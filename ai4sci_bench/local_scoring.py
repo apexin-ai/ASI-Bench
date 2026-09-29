@@ -92,6 +92,25 @@ class _ScoreJob:
     task_runtime: dict[str, Any] | None = None
     task_environment: TaskEnvironment | None = None
     runtime_error: str | None = None
+    outputs_recorded_empty: bool = False
+
+
+def _run_recorded_no_outputs(result: dict[str, Any]) -> bool:
+    """Return whether a result JSON explicitly records that the agent wrote no files.
+
+    ``asibench run`` omits ``persisted_outputs`` when the agent produced no
+    output files and records ``dir: None`` when every listed file was missing.
+    Only such explicit records are treated as an empty submission; a result
+    without ``agent_output`` or one pointing at a vanished directory remains an
+    incomplete results tree.
+    """
+    agent_output = result.get("agent_output")
+    if not isinstance(agent_output, dict):
+        return False
+    persisted = agent_output.get("persisted_outputs")
+    if persisted is None and "persisted_outputs" not in agent_output:
+        return agent_output.get("code_files") == [] and agent_output.get("data_files") == []
+    return isinstance(persisted, dict) and persisted.get("dir") is None
 
 
 @dataclass
@@ -314,7 +333,8 @@ def _staged_prediction_dir(job: _ScoreJob) -> Iterator[Path]:
                 f"Required instance data directory is missing: {data_dir}"
             )
 
-        _copy_output_tree(Path(job.output_dir), pred_dir)
+        if not job.outputs_recorded_empty:
+            _copy_output_tree(Path(job.output_dir), pred_dir)
         yield pred_dir
 
 
@@ -371,10 +391,16 @@ def _prepare_score_jobs(
             )
 
         output_dir = result_path.parent / f"{result_path.stem}.outputs"
+        outputs_recorded_empty = False
         if not output_dir.is_dir():
-            raise LocalScoringError(
-                f"Persisted output directory not found for {result_path.name}: {output_dir}"
-            )
+            if not _run_recorded_no_outputs(source):
+                raise LocalScoringError(
+                    f"Persisted output directory not found for {result_path.name}: {output_dir}"
+                )
+            # The run itself recorded that the agent produced no files. That is
+            # a submission failure (scored as an ordinary zero by the task's
+            # gates/scorers), not a missing evaluator input.
+            outputs_recorded_empty = True
 
         cached = task_cache.get(task_id)
         if cached is None:
@@ -428,6 +454,7 @@ def _prepare_score_jobs(
                 attempt=int(source.get("attempt", 1)),
                 task_dir=str(task_dir.resolve()),
                 output_dir=str(output_dir.absolute()),
+                outputs_recorded_empty=outputs_recorded_empty,
                 reference_dir=str(reference_dir.resolve()),
                 data_dir=str((instance_dir / "data").absolute()),
                 requires_instance_data=requires_instance_data,

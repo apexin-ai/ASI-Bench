@@ -986,6 +986,54 @@ def test_preflight_validates_later_jobs_before_loading_or_running_scorer(
     assert not import_marker.exists()
 
 
+def _record_agent_wrote_nothing(results_dir: Path, agent_output: dict) -> None:
+    task_dir = results_dir / "physics.example"
+    stem = "physics.example__seed31415__b1"
+    outputs = task_dir / f"{stem}.outputs"
+    (outputs / "output.npy").unlink()
+    outputs.rmdir()
+    result_path = task_dir / f"{stem}.json"
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result["agent_output"] = agent_output
+    result_path.write_text(json.dumps(result), encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "agent_output",
+    [
+        {"status": "completed", "code_files": [], "data_files": []},
+        {"status": "completed", "code_files": [], "data_files": [],
+         "persisted_outputs": {"dir": None, "files": [{"path": "output.npy", "missing": True}]}},
+    ],
+)
+def test_run_that_recorded_no_outputs_is_a_scored_submission_failure(tmp_path, agent_output):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _add_result_level(results_dir, "b2")
+    _record_agent_wrote_nothing(results_dir, agent_output)
+
+    report, _destination = score_seed31415_results(results_dir, instances_dir, tasks_dir)
+
+    assert report["scorer_error_count"] == 0
+    assert report["scored_instance_count"] == 2
+    by_level = {item["prompt_level"]: item for item in report["results"]}
+    assert by_level["b1"]["evaluation_status"] == "completed"
+    assert by_level["b1"]["final_score"] == 0.0
+    assert by_level["b1"]["scorer_internal_error"] is False
+    assert by_level["b2"]["final_score"] == 100.0
+
+
+def test_vanished_output_directory_is_still_rejected(tmp_path):
+    tasks_dir, instances_dir, results_dir = _write_fixture(tmp_path)
+    _record_agent_wrote_nothing(
+        results_dir,
+        {"status": "completed", "code_files": [], "data_files": ["output.npy"],
+         "persisted_outputs": {"dir": "physics.example__seed31415__b1.outputs", "files": []}},
+    )
+
+    with pytest.raises(LocalScoringError, match="Persisted output directory"):
+        score_seed31415_results(results_dir, instances_dir, tasks_dir)
+
+
 def test_parallel_worker_start_failure_does_not_drop_other_results(
     monkeypatch, tmp_path
 ):
