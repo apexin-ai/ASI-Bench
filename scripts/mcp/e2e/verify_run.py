@@ -43,6 +43,8 @@ class Evidence:
     tools_offered: list[str] | None = None
     calls: list[dict] = field(default_factory=list)  # {id,name,input,result_text,is_error}
     bash_commands: list[str] = field(default_factory=list)
+    assistant_text: list[str] = field(default_factory=list)
+    permission_mode: str | None = None
     final_result: dict | None = None
 
 
@@ -52,6 +54,13 @@ def _text_of(content) -> str:
     if isinstance(content, list):
         return "\n".join(str(b.get("text", "")) for b in content if isinstance(b, dict) and b.get("type") == "text")
     return ""
+
+
+def _content_blocks(event: dict) -> list[dict]:
+    """Return content blocks of an assistant/user event, tolerating string payloads."""
+    message = event.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    return [block for block in content if isinstance(block, dict)] if isinstance(content, list) else []
 
 
 def parse_claude_stream(path: Path) -> Evidence:
@@ -65,14 +74,17 @@ def parse_claude_stream(path: Path) -> Evidence:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(event, dict):
+            continue
         etype = event.get("type")
         if etype == "system" and event.get("subtype") == "init":
             servers = event.get("mcp_servers") or []
             ev.mcp_servers = {s.get("name"): s.get("status") for s in servers if isinstance(s, dict)}
             ev.tools_offered = [t for t in event.get("tools", []) if isinstance(t, str)]
+            ev.permission_mode = event.get("permissionMode")
         elif etype == "assistant":
-            for block in (event.get("message") or {}).get("content", []) or []:
-                if isinstance(block, dict) and block.get("type") == "tool_use":
+            for block in _content_blocks(event):
+                if block.get("type") == "tool_use":
                     call = {"id": block.get("id"), "name": block.get("name", ""), "input": block.get("input") or {},
                             "result_text": None, "is_error": None}
                     ev.calls.append(call)
@@ -80,16 +92,18 @@ def parse_claude_stream(path: Path) -> Evidence:
                         by_id[call["id"]] = call
                     if call["name"] == "Bash" and isinstance(call["input"], dict):
                         ev.bash_commands.append(str(call["input"].get("command", "")))
+                elif block.get("type") == "text":
+                    ev.assistant_text.append(str(block.get("text", "")))
         elif etype == "user":
-            content = (event.get("message") or {}).get("content", [])
-            for block in content if isinstance(content, list) else []:
-                if isinstance(block, dict) and block.get("type") == "tool_result":
+            for block in _content_blocks(event):
+                if block.get("type") == "tool_result":
                     call = by_id.get(block.get("tool_use_id"))
                     if call is not None:
                         call["result_text"] = _text_of(block.get("content"))
                         call["is_error"] = bool(block.get("is_error"))
         elif etype == "result":
-            ev.final_result = {k: event.get(k) for k in ("subtype", "is_error", "num_turns", "result")}
+            ev.final_result = {k: event.get(k) for k in ("subtype", "is_error", "num_turns")}
+            ev.final_result["result"] = str(event.get("result") or "")[:1000]
     return ev
 
 
@@ -171,6 +185,12 @@ def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: 
         out["tool_call_counts"][call["name"]] = out["tool_call_counts"].get(call["name"], 0) + 1
     if ev.final_result:
         out["agent_final"] = ev.final_result
+    out["permission_mode"] = ev.permission_mode
+    out["persisted_outputs"] = agent.get("persisted_outputs")
+    out["agent_status"] = agent.get("status")
+    out["agent_error"] = agent.get("error_message")
+    if ev.assistant_text:
+        out["last_assistant_text"] = ev.assistant_text[-1][:1000]
 
     # 1. MCP server connected and tool offered
     target = f"mcp__{server}__{tool}"
@@ -290,6 +310,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"         {name}: {check['detail']}")
         for note in row["notes"]:
             print(f"         note: {note}")
+        if row["verdict"] == "FAIL":
+            said = (row.get("agent_final") or {}).get("result") or row.get("last_assistant_text") or ""
+            print(f"         agent status={row.get('agent_status')} permission_mode={row.get('permission_mode')}")
+            if said:
+                print("         agent said: " + " ".join(said.split())[:400])
     summary = {name: sum(1 for r in rows if r["verdict"] == name) for name in ("PASS", "FAIL", "SKIP")}
     report = {"schema_version": 1, "results_dir": str(results_dir), "summary": summary, "results": rows}
     destination = Path(args.report) if args.report else results_dir / "mcp_e2e_verify.json"

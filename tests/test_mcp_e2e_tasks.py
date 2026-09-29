@@ -157,6 +157,21 @@ def test_verifier_requires_answer_to_come_from_tool(tmp_path):
     assert row["failure"] == "answer_from_tool"
 
 
+def test_verifier_tolerates_string_message_payloads(tmp_path):
+    odd = "\n".join(json.dumps(e) for e in (
+        {"type": "user", "message": "plain string payload"},
+        {"type": "user", "message": {"role": "user", "content": "string content"}},
+        {"type": "assistant", "message": "x"},
+    ))
+    row = _run(tmp_path, odd + "\n" + _stream())
+    assert row["verdict"] == "PASS", row["checks"]
+
+
+def test_verifier_reports_missing_outputs_as_answer_failure(tmp_path):
+    row = _run(tmp_path, _stream(), answer=None)
+    assert row["failure"] == "answer_from_tool"
+
+
 def test_verifier_warns_when_tool_inputs_were_reformatted(tmp_path):
     row = _run(tmp_path, _stream(atom=ATOM.replace("0.016793", "0.0168")))
     assert row["checks"]["tool_correct"]["status"] == "WARN" and row["verdict"] == "PASS"
