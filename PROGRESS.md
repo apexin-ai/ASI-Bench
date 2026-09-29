@@ -874,3 +874,60 @@
   suite passed `2426` tests with `2 skipped` and `24 deselected`; `uv build`,
   bytecode compilation, and `git diff --check` passed.
 - Implementation commit: `59b9b34`.
+
+## 2026-09-29: MCP end-to-end (E2E) fake tasks, starting with pyscf
+
+- Problem: the MCP survey only proved L0 (`initialize` + `tools/list`); no
+  catalog server had evidence that an agent inside `asibench run` actually
+  calls a tool and uses its result. Scorers only see outputs and references, so
+  a correct answer could not show whether it came from the MCP tool.
+- Resolution: `scripts/mcp/e2e/` installs servers at pinned revisions with
+  their own Python (`setup.py`) and checks real `tools/call` against
+  independently computed references (`smoke_pyscf.py`, L1).
+  `examples/mcp-e2e-tasks/mcp_e2e/pyscf_rhf_energy` (status `test`, outside
+  `tasks/`) runs through the normal generate → run → score path, and
+  `verify_run.py` checks connection, tool call, tool result, answer provenance
+  and bypass from the run artefacts (L2). Framework scoring is unchanged.
+- Lessons: (1) `asibench run` redacts every user-role event in the persisted
+  stream-json, which also removes tool results; read them from the trajectory
+  (a bare JSON list) by `tool_call_id`. (2) Prompts must name the MCP server
+  and tool, never a harness-specific name: B1 with Claude's
+  `mcp__pyscf__pyscf_rhf_energy` failed 2 of 4 verified runs (agent looked for
+  ToolSearch, then `claude mcp list` falsely reported no servers because
+  servers are passed by `--mcp-config`); agent-neutral B1 passed 5/5.
+  (3) mcp2pyscf needs Python 3.13 and PySCF prints to stdout; neither broke
+  Claude Code 2.1.284.
+- Verification: AWS Linux amd64, `claude-opus-5-5`: B1–B4 ×3 11/12 verified
+  PASS (the failure was the B1 naming issue), agent-neutral B1 ×5 5/5; smoke
+  L0/L1 PASS on amd64 and aarch64; new offline tests in
+  `tests/test_mcp_e2e_scripts.py` and `tests/test_mcp_e2e_tasks.py`.
+- Implementation commits: `3cb28d5`, `1a225f1`, `fa977ff`, `e7093ae`,
+  `02d29cd`.
+
+## 2026-09-29: Score runs that produced no files instead of aborting the batch
+
+- Problem: when an agent wrote no files, `asibench run` created no `.outputs`
+  directory, and `asibench score` preflight rejected the whole batch, so every
+  other result went unscored. The documented contract is that missing
+  predictions are submission failures (valid zeros).
+- Resolution: preflight accepts a missing `.outputs` only when the result JSON
+  itself records no outputs (no `persisted_outputs` with empty code/data files,
+  or `persisted_outputs.dir: null`) and stages empty outputs; the task's gates
+  and scorers then produce an ordinary zero. A recorded but vanished directory
+  is still rejected.
+- Prevention: `tests/test_local_scoring.py` covers both recorded-empty forms
+  and the vanished-directory rejection.
+- Implementation commit: `e7093ae`.
+
+## 2026-09-29: Keep every produce-only retry attempt
+
+- Problem: `_run_and_evaluate` returns early in produce-only mode (`score=False`,
+  i.e. every `asibench run`) without setting `attempt`, so `--retries N` saved all
+  attempts under the attempt-1 file name; only the last attempt survived on
+  disk while the summary reported the best one. Existing retry tests all ran
+  with scoring enabled and missed it.
+- Resolution: set `attempt` on the produce-only `EvalResult`.
+- Prevention: `tests/test_retry.py::TestRetryStrategyAll::test_produce_only_run_keeps_every_attempt`
+  (red before the fix, green after); confirmed on AWS with `--retries 3`/`5`
+  producing one result per attempt.
+- Implementation commit: `0e43cdd`.

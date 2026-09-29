@@ -55,6 +55,7 @@ also wrong for Codex).
 | B2 | 3/3 | |
 | B3 | 3/3 | tool found without being named |
 | B4 | 3/3 | |
+| B1 (agent-neutral prompt) | 5/5 | re-generated instance, `--retries 5` |
 
 In every run the server reported `connected` and all 7 tools were offered;
 every tool call returned the reference energy within 1e-13 Ha. PySCF's stdout
@@ -71,7 +72,7 @@ tool (ToolSearch is not offered in these runs, so the call errors), then runs
 harness passes servers with `--mcp-config` rather than a config file, and gives
 up without writing output. The B1 prompt then named the tool as
 `mcp__pyscf__pyscf_rhf_energy` "in Claude Code"; it now names only the server
-and tool. `verify_run.py` shows this as `mcp_connected=PASS`,
+and tool, after which B1 passed 5/5. `verify_run.py` shows this as `mcp_connected=PASS`,
 `tool_called=FAIL` with the tool sequence and `toolsearch_offered`.
 
 Related observation for formal runs: host-mode agents can start a nested
