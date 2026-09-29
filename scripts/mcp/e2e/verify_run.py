@@ -107,12 +107,17 @@ def parse_claude_stream(path: Path) -> Evidence:
     return ev
 
 
+def _trajectory_steps(path: Path) -> list[dict]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    steps = data.get("steps", []) if isinstance(data, dict) else data  # run writes a bare list
+    return [s for s in steps if isinstance(s, dict)] if isinstance(steps, list) else []
+
+
 def parse_trajectory(path: Path) -> Evidence:
     """Adapter-neutral fallback: tool names and results, but no tool inputs."""
     ev = Evidence(source=f"trajectory ({path.name})")
-    data = json.loads(path.read_text(encoding="utf-8"))
     by_id: dict[str, dict] = {}
-    for step in data.get("steps", []):
+    for step in _trajectory_steps(path):
         meta = step.get("metadata") or {}
         if step.get("step_type") == "tool_call":
             call = {"id": meta.get("tool_call_id"), "name": meta.get("tool_name", ""), "input": None,
@@ -129,6 +134,27 @@ def parse_trajectory(path: Path) -> Evidence:
                 call["result_text"] = step.get("content", "")
                 call["is_error"] = bool(meta.get("is_error"))
     return ev
+
+
+def enrich_results_from_trajectory(ev: Evidence, path: Path) -> int:
+    """Fill tool results missing from the persisted stream.
+
+    `asibench run` redacts the content of every user-role event in the saved
+    stream-json (prompt protection), which also removes tool_result payloads.
+    The trajectory is extracted from the unredacted stream and keeps them,
+    keyed by the same tool_call_id.
+    """
+    results = {}
+    for step in _trajectory_steps(path):
+        meta = step.get("metadata") or {}
+        if step.get("step_type") == "tool_result" and meta.get("tool_call_id"):
+            results[meta["tool_call_id"]] = (step.get("content", ""), bool(meta.get("is_error")))
+    filled = 0
+    for call in ev.calls:
+        if call["result_text"] in (None, "<redacted>") and call["id"] in results:
+            call["result_text"], call["is_error"] = results[call["id"]]
+            filled += 1
+    return filled
 
 
 def _float(value) -> float | None:
@@ -174,12 +200,20 @@ def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: 
             ev = None  # not a Claude stream-json log
     if ev is None and traj_file and (run_dir / traj_file).is_file():
         ev = parse_trajectory(run_dir / traj_file)
+    elif ev is not None and traj_file and (run_dir / traj_file).is_file():
+        filled = enrich_results_from_trajectory(ev, run_dir / traj_file)
+        if filled:
+            ev.source += f" + {filled} tool result(s) from {traj_file}"
     if ev is None:
         out["verdict"] = "FAIL"
         out["failure"] = "no_evidence"
         out["notes"].append("neither raw stdout nor trajectory artefact found")
         return out
     out["evidence_source"] = ev.source
+    out["tool_sequence"] = [call["name"] for call in ev.calls]
+    if ev.tools_offered is not None:
+        out["toolsearch_offered"] = "ToolSearch" in ev.tools_offered
+        out["mcp_tools_offered"] = [t for t in ev.tools_offered if t.startswith("mcp__")]
     out["tool_call_counts"] = {}
     for call in ev.calls:
         out["tool_call_counts"][call["name"]] = out["tool_call_counts"].get(call["name"], 0) + 1
@@ -312,7 +346,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"         note: {note}")
         if row["verdict"] == "FAIL":
             said = (row.get("agent_final") or {}).get("result") or row.get("last_assistant_text") or ""
-            print(f"         agent status={row.get('agent_status')} permission_mode={row.get('permission_mode')}")
+            print(f"         agent status={row.get('agent_status')} permission_mode={row.get('permission_mode')}"
+                  f" toolsearch_offered={row.get('toolsearch_offered')} mcp_tools_offered={row.get('mcp_tools_offered')}")
+            print(f"         tool sequence: {row.get('tool_sequence')}")
             if said:
                 print("         agent said: " + " ".join(said.split())[:400])
     summary = {name: sum(1 for r in rows if r["verdict"] == name) for name in ("PASS", "FAIL", "SKIP")}

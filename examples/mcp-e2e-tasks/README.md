@@ -21,6 +21,12 @@ stream-json, or the normalised trajectory) for what the scorer cannot see:
 `asibench score` answers "is the number right"; `verify_run.py` answers "did
 the number come from the MCP tool". An E2E pass needs both.
 
+Evidence note: `asibench run` redacts the content of every user-role event in
+the persisted `*.agent_stdout.jsonl` (prompt protection), which also blanks
+tool results. The verifier therefore takes tool names, inputs, Bash commands
+and the MCP init status from the stream, and fills tool results from
+`*.trajectory.json` by `tool_call_id`.
+
 ## Tasks
 
 | Task | MCP server | Tool | Reference |

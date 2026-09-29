@@ -112,7 +112,21 @@ def _stream(tool_value=REF_ENERGY, atom=ATOM, server_status="connected", call_to
     return "\n".join(json.dumps(e) for e in events) + "\n"
 
 
-def _run(tmp_path, stream, answer=REF_ENERGY):
+def _persist_like_run(stream: str) -> tuple[str, str]:
+    """Return (persisted stream, trajectory JSON) exactly as `asibench run` writes them."""
+    from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator
+    from ai4sci_bench.trajectory.claude_extractor import extract_from_jsonl
+
+    orchestrator = object.__new__(BenchmarkOrchestrator)
+    persisted = "".join(
+        json.dumps(orchestrator._redact_raw_prompt_fields(json.loads(line))) + "\n"
+        for line in stream.splitlines() if line.strip()
+    )
+    steps = [step.to_dict() for step in extract_from_jsonl(stream, INSTANCE_ID).steps]
+    return persisted, json.dumps(steps)
+
+
+def _run(tmp_path, stream, answer=REF_ENERGY, persist=True):
     results, instances = tmp_path / "out", tmp_path / "instances"
     task_out = results / TASK_ID
     outputs = task_out / f"{INSTANCE_ID}__b1.outputs"
@@ -124,13 +138,27 @@ def _run(tmp_path, stream, answer=REF_ENERGY):
     if answer is not None:
         outputs.joinpath("result.json").write_text(json.dumps({"energy_hartree": answer}))
     stdout = f"{INSTANCE_ID}__b1.agent_stdout.jsonl"
+    agent_output = {"raw_stdout_file": stdout, "persisted_outputs": {"dir": outputs.name}}
+    if persist:
+        stream, trajectory = _persist_like_run(stream)
+        traj = f"{INSTANCE_ID}__b1.trajectory.json"
+        task_out.joinpath(traj).write_text(trajectory)
+        agent_output["trajectory_file"] = traj
     task_out.joinpath(stdout).write_text(stream)
     result = {"task_id": TASK_ID, "instance_id": INSTANCE_ID, "prompt_level": "b1", "status": "completed",
-              "agent_output": {"raw_stdout_file": stdout,
-                               "persisted_outputs": {"dir": outputs.name}}}
+              "agent_output": agent_output}
     path = task_out / f"{INSTANCE_ID}__b1.json"
     path.write_text(json.dumps(result))
     return verify.verify_one(path, result, instances, E2E_TASKS)
+
+
+def test_run_redaction_removes_tool_results_from_the_stream():
+    persisted, _trajectory = _persist_like_run(_stream())
+    assert repr(REF_ENERGY) not in persisted  # why the verifier must use the trajectory
+
+
+def test_verifier_reads_unredacted_stream_too(tmp_path):
+    assert _run(tmp_path, _stream(), persist=False)["verdict"] == "PASS"
 
 
 def test_verifier_passes_a_genuine_mcp_run(tmp_path):
@@ -163,7 +191,7 @@ def test_verifier_tolerates_string_message_payloads(tmp_path):
         {"type": "user", "message": {"role": "user", "content": "string content"}},
         {"type": "assistant", "message": "x"},
     ))
-    row = _run(tmp_path, odd + "\n" + _stream())
+    row = _run(tmp_path, odd + "\n" + _stream(), persist=False)
     assert row["verdict"] == "PASS", row["checks"]
 
 

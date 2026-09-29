@@ -606,4 +606,13 @@ tool, the custom scorer's log-linear credit, submission-vs-evaluator failure
 split, and that `verify_run.py` passes a genuine MCP run but fails direct PySCF
 use, an unavailable server, an uncalled tool, and an answer not returned by the
 tool. The live agent run (generate → run → score → verify) is documented in
-`examples/mcp-e2e-tasks/README.md`.
+`examples/mcp-e2e-tasks/README.md`. Verifier fixtures are persisted through the
+real run redaction and Claude trajectory extractor, so tool results are only
+recoverable from the trajectory, as in real runs.
+
+Local scoring of runs that produced no files:
+`tests/test_local_scoring.py::test_run_that_recorded_no_outputs_is_a_scored_submission_failure`
+checks that a result JSON which records no outputs is a completed zero while
+other results in the batch still score, and
+`test_vanished_output_directory_is_still_rejected` keeps a missing but recorded
+`.outputs` directory a preflight error.

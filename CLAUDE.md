@@ -97,6 +97,9 @@
   result 内的 gate/scorer/retry/num_judges 保持串行；协调进程按源顺序原子写报告。
   每个评分 job 必须在独立临时目录合并只读 instance `data/` 与持久化 outputs，拒绝
   symlink、路径逃逸及 outputs 覆盖 evaluator input，且不得修改源 `.outputs`。
+  run 结果 JSON 明确记录 agent 未产出文件（无 `persisted_outputs` 且 code/data_files
+  为空，或 `persisted_outputs.dir` 为 null）时按空 outputs 评分为 submission failure；
+  其余缺失 `.outputs` 仍在预检中整批拒绝。
   `input.files.name` 可以是实例展开模板；评分只要求声明输入时存在安全的 `data/`
   根目录，并整棵复制其实际物化内容。预测文件缺失属于 submission failure，不能
   设置 `scorer_internal_error`。仅 `task_eval.yaml` 显式声明
@@ -125,7 +128,8 @@
   以 `--params '{"seed":31415}'` 生成以复用本地评分；参考值只在 `generate --sandbox task`
   的隔离环境中计算，agent 以 `--sandbox none` 运行。scorer 只比对输出与 reference；
   是否真实调用 MCP 工具、答案是否来自工具及是否绕过 MCP 由 `scripts/mcp/e2e/verify_run.py`
-  依据 `e2e_check.json` 读取 run 产物判定，框架评分契约不变。
+  依据 `e2e_check.json` 读取 run 产物判定，框架评分契约不变。持久化 stream-json 会脱敏
+  user 事件（含 tool_result），工具返回值须从同 tool_call_id 的 trajectory 补齐。
 - 外部仿真 benchmark 接入通过 `ai4sci_bench.integrations`：ScienceAgentBench
   转换器只把源记录放入本地 `private/`，CFDLLMBench 使用本地固定 OpenFOAM
   镜像，SciAgentGym 工具逐实例 allowlist，COSMO-Agent 使用
