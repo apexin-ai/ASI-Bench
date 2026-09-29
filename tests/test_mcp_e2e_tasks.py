@@ -53,7 +53,10 @@ def test_prompts_name_the_tool_only_at_b1_and_forbid_direct_pyscf():
     for level in ("b1", "b2", "b3", "b4"):
         text = (PYSCF_TASK / f"prompt_{level}.md").read_text()
         assert "result.json" in text and "Do not install, import or run PySCF" in text
-        assert ("mcp__pyscf__pyscf_rhf_energy" in text) == (level == "b1")
+        assert ("`pyscf_rhf_energy`" in text) == (level == "b1")
+        # Harness-specific tool names (e.g. Claude's mcp__<server>__<tool>) primed
+        # agents to look for a tool-loading step and give up; keep prompts agent-neutral.
+        assert "mcp__" not in text and "Claude" not in text
 
 
 def _dirs(tmp_path, prediction, reference=REF_ENERGY):

@@ -39,6 +39,44 @@ the energy cannot be recalled. The agent must write `result.json` with
 `energy_hartree`; full credit at |ΔE| ≤ 1e-6 Ha, zero at ≥ 1e-3 Ha, log-linear
 in between. Only B1 names the tool; B3/B4 only say "use the MCP tools available".
 
+Prompts must stay agent-neutral: name the MCP server and tool
+(`pyscf_rhf_energy` of the `pyscf` server), never a harness-specific name such
+as Claude Code's `mcp__pyscf__pyscf_rhf_energy` (see failure mode below; it is
+also wrong for Codex).
+
+## Results
+
+2026-09-29, AWS Linux amd64, Claude Code 2.1.284, `claude-opus-5-5`, seed 31415
+(water, 6-31G), `--retries 3` per level:
+
+| Level | Verified PASS | Notes |
+|---|---|---|
+| B1 | 2/3 | prompt still contained the Claude-specific tool name; see below |
+| B2 | 3/3 | |
+| B3 | 3/3 | tool found without being named |
+| B4 | 3/3 | |
+
+In every run the server reported `connected` and all 7 tools were offered;
+every tool call returned the reference energy within 1e-13 Ha. PySCF's stdout
+line, the `cwd` config field and the `mcp__pyscf__*` tool allowlist caused no
+problems. An earlier single pass of B1–B4 with the same model also failed only
+at B1, with the same reasoning.
+
+## Observed failure modes
+
+**Agent believes an offered MCP tool is unavailable** (B1, 2 of 4 verified
+runs; 0 of 12 at B2–B4). Sequence: the agent tries `ToolSearch` to "load" the
+tool (ToolSearch is not offered in these runs, so the call errors), then runs
+`claude mcp list` in Bash, which prints "No MCP servers configured" because the
+harness passes servers with `--mcp-config` rather than a config file, and gives
+up without writing output. The B1 prompt then named the tool as
+`mcp__pyscf__pyscf_rhf_energy` "in Claude Code"; it now names only the server
+and tool. `verify_run.py` shows this as `mcp_connected=PASS`,
+`tool_called=FAIL` with the tool sequence and `toolsearch_offered`.
+
+Related observation for formal runs: host-mode agents can start a nested
+`claude` process and read their isolated harness home.
+
 ## Run (Linux host, unprivileged E2E user)
 
 Prerequisites: the MCP server is installed and its smoke test passes

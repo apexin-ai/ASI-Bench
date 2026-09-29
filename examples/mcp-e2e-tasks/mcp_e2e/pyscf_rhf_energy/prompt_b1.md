@@ -5,7 +5,7 @@
 ## Steps
 
 1. Read `data/molecule.json`.
-2. Call the MCP tool `pyscf_rhf_energy` of the `pyscf` MCP server (in Claude Code it is named `mcp__pyscf__pyscf_rhf_energy`) with:
+2. Call the `pyscf_rhf_energy` tool provided by the `pyscf` MCP server with:
    - `atom`: the `atom` string from the file, passed **verbatim** (do not round, reorder or reformat coordinates);
    - `basis`: the `basis` string from the file.
 3. The tool returns the RHF total energy in Hartree as text. Write it to `result.json` as described below.
