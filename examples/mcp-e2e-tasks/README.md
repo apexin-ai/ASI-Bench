@@ -12,10 +12,11 @@ stream-json, or the normalised trajectory) for what the scorer cannot see:
 
 | Check | Meaning |
 |---|---|
-| `mcp_connected` | the MCP server reported `connected` and the target tool was offered to the agent |
-| `tool_called` | the agent called `mcp__<server>__<tool>` |
-| `tool_correct` | a successful call returned the reference value; WARN if the tool inputs were not the reference inputs verbatim |
-| `answer_from_tool` | the output file value equals a value the tool returned and matches the reference |
+| `mcp_connected` | the MCP server reported `connected` and every required tool was offered to the agent |
+| `tool_called` | the agent called every required `mcp__<server>__<tool>` |
+| `tool_correct` | per required tool, a successful call returned the expected result (value, JSON field, or an image of the expected media type); WARN if the inputs were not the reference inputs verbatim, or if the result type is not observable in older artefacts |
+| `tool_chain` | only when configured: a call's inputs equal the result of an earlier call (e.g. the plot was drawn from the scan output, not retyped data) |
+| `answer_from_tool` | each configured output-file value equals a value a tool returned and matches the reference |
 | `no_bypass` | no Bash command or produced source file installs/imports the backend directly (FAIL); broader matches are WARN for review |
 
 `asibench score` answers "is the number right"; `verify_run.py` answers "did
@@ -25,13 +26,24 @@ Evidence note: `asibench run` redacts the content of every user-role event in
 the persisted `*.agent_stdout.jsonl` (prompt protection), which also blanks
 tool results. The verifier therefore takes tool names, inputs, Bash commands
 and the MCP init status from the stream, and fills tool results from
-`*.trajectory.json` by `tool_call_id`.
+`*.trajectory.json` by `tool_call_id`. Image results are not copied into the
+trajectory; the Claude extractor records `content_types` and
+`image_media_types` in the tool_result metadata so that a returned PNG stays
+observable.
+
+`e2e_check.json` schema 2 lists `calls` (each with `tool`, optional
+`inputs_from_reference`, optional `inputs_from_call` for chaining, and a
+`result` of format `number`, `json` + `key`, or `image` + `media_type`) and
+`answers` (output-file key, the call and result key it must be copied from,
+reference key and tolerance). Schema 1 (single `tool`, scalar answer) is still
+accepted and normalised to schema 2.
 
 ## Tasks
 
 | Task | MCP server | Tool | Reference |
 |---|---|---|---|
 | `mcp_e2e.pyscf_rhf_energy` | `pyscf` (`scripts/mcp/e2e/manifest.json`) | `pyscf_rhf_energy` | PySCF RHF computed in `generate_gt.py` |
+| `mcp_e2e.pyscf_bond_stretch` | `pyscf` | `run_bond_stretch_calculation_mcp` → `plot_energy_scan_image_mcp` | seeded RDKit + UFF geometry, rigid stretch, PySCF RHF/STO-3G in `generate_gt.py` |
 
 `mcp_e2e.pyscf_rhf_energy`: a seed picks one of five small closed-shell
 molecules and STO-3G or 6-31G, and perturbs every coordinate by up to ±0.02 Å so
@@ -39,12 +51,38 @@ the energy cannot be recalled. The agent must write `result.json` with
 `energy_hartree`; full credit at |ΔE| ≤ 1e-6 Ha, zero at ≥ 1e-3 Ha, log-linear
 in between. Only B1 names the tool; B3/B4 only say "use the MCP tools available".
 
+`mcp_e2e.pyscf_bond_stretch`: a seed picks one of seven bonds in rigid
+molecules (H₂O, NH₃, HF, HCN ×2, H₂CO, CH₃F), a start of 0.85–0.95 and an end
+of 1.25–1.45 times the bond length, and 5–9 points. The agent must run the
+scan tool, then call the plot tool with the scan result unchanged, and write
+`result.json` with `bond_lengths`, `energies_hartree` and the lowest point.
+Scoring: 80 for energies (full credit at max |ΔE| ≤ 1e-5 Ha, zero at ≥ 1e-3,
+log-linear; the grid must match) and 20 for the minimum. The plot cannot be
+scored from files (the image goes into the agent's context); `verify_run.py`
+checks that the plot tool was called with the scan output and returned a PNG.
+The server builds its geometry from an unseeded conformer, which for these
+rigid molecules reproduces the reference to ~1e-7 Ha (checked against the
+upstream code for 41 seeds). The tool ignores its `basis` argument, so the task
+is fixed to STO-3G. This is the only L2 task for the remaining pyscf tools; the
+others are covered by the L1 smoke only (`scripts/mcp/e2e/README.md`).
+
 Prompts must stay agent-neutral: name the MCP server and tool
 (`pyscf_rhf_energy` of the `pyscf` server), never a harness-specific name such
 as Claude Code's `mcp__pyscf__pyscf_rhf_energy` (see failure mode below; it is
 also wrong for Codex).
 
 ## Results
+
+### `mcp_e2e.pyscf_bond_stretch`
+
+Not yet run with an agent. Offline: a simulated run built from the real
+server's scan and plot results passes all verifier checks, and the scorer gives
+full credit (max |ΔE| 5.6e-10 Ha). Open question for the first run: how Claude
+Code represents an MCP image in its stream (the extractor accepts both
+`source.media_type` and `mimeType`); if it is not recorded, `tool_correct`
+shows a WARN for the plot call rather than a PASS.
+
+### `mcp_e2e.pyscf_rhf_energy`
 
 2026-09-29, AWS Linux amd64, Claude Code 2.1.284, `claude-opus-5-5`, seed 31415
 (water, 6-31G), `--retries 3` per level:
@@ -86,12 +124,14 @@ Prerequisites: the MCP server is installed and its smoke test passes
 ```sh
 cd ~/ASI-Bench
 
-# 1. Instance + reference. PySCF is needed only here, in an isolated task venv.
-#    seed 31415 makes the instance id end in __seed31415, as local scoring requires.
+# 1. Instance + reference. PySCF (and RDKit for the bond scan) is needed only
+#    here, in an isolated task venv. seed 31415 makes the instance id end in
+#    __seed31415, as local scoring requires. Repeat for mcp_e2e.pyscf_bond_stretch.
 uv run asibench generate --task mcp_e2e.pyscf_rhf_energy --params '{"seed": 31415}' \
   --sandbox task --tasks-dir examples/mcp-e2e-tasks --output-dir ~/e2e/instances
 
 # 2. Agent run on the host; PySCF is reachable only through the MCP server.
+#    For the bond scan use --tasks mcp_e2e.pyscf_bond_stretch.
 uv run asibench run --agent claude_code_cli \
   --agent-config '{"model": "claude-opus-4-6", "permission_mode": "bypassPermissions"}' \
   --mcp-config ~/mcp/pyscf.mcp.json \
@@ -117,6 +157,7 @@ still find PySCF elsewhere on the host (the MCP venv, the generation task venv)
 
 Copy the pyscf task layout: `task_meta.yaml` (`status: test`), `task_eval.yaml`,
 `generate_gt.py` computing an independent reference, `custom_scorer.py`,
-`prompt_b1..b4.md`, and `e2e_check.json` naming the server, tool, reference
-key, prediction file/key, tolerance and bypass patterns. Add the server to
+`prompt_b1..b4.md`, and `e2e_check.json` (schema 2: `calls` and `answers`,
+see `pyscf_bond_stretch`; schema 1 for a single tool with a scalar answer, see
+`pyscf_rhf_energy`) plus bypass patterns. Add the server to
 `scripts/mcp/e2e/manifest.json` with a smoke test first.

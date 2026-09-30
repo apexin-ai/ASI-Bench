@@ -612,7 +612,17 @@ Checks that `examples/mcp-e2e-tasks` tasks are `status: test` and invisible to
 tool, the custom scorer's log-linear credit, submission-vs-evaluator failure
 split, and that `verify_run.py` passes a genuine MCP run but fails direct PySCF
 use, an unavailable server, an uncalled tool, and an answer not returned by the
-tool. The live agent run (generate → run → score → verify) is documented in
+tool.
+
+`tests/test_mcp_e2e_bond_stretch.py` covers `mcp_e2e.pyscf_bond_stretch` and
+`verify_run.py` schema 2 offline: deterministic seeded cases within range, rigid
+molecules only, B1-only tool naming, energy/minimum scorers (log-linear credit,
+grid mismatch, submission vs evaluator failures), the Claude extractor keeping
+image results observable (`content_types`, `image_media_types`), a genuine
+scan → plot run passing every check, and failures for a missing plot call, a
+plot drawn from retyped data (`tool_chain`), a plot without an image, answers
+not copied from the tool, plus WARN-only handling of older trajectories and
+schema-1 normalisation. The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`. Verifier fixtures are persisted through the
 real run redaction and Claude trajectory extractor, so tool results are only
 recoverable from the trajectory, as in real runs.

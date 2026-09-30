@@ -1,0 +1,50 @@
+id: mcp_e2e.pyscf_bond_stretch
+name: "MCP E2E: bond-stretch scan and plot through the pyscf MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. It exercises a two-tool chain (scan → plot) and an image
+# tool result; see examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: chemistry
+subdomain: "quantum_chemistry_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/lixin19/mcp2pyscf"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 1-5
+  requires_gpu: false
+  requires_network: false
+
+tags: [mcp_e2e, pyscf, rhf, bond_scan, plot, tool_chain]
+
+# Only generate_gt.py needs PySCF/RDKit (independent reference; RDKit pinned to
+# the server's lockfile version). Generate instances with
+# `asibench generate --sandbox task`; run the agent with --sandbox none so that
+# PySCF is reachable only through the MCP server.
+runtime:
+  python: ">=3.11"
+  packages: ["pyscf==2.9.0", "rdkit==2025.3.3"]
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: scan.json
+      type: data
+      description: "Molecule name and SMILES, 0-based atom indices of the bond (RDKit order), scan start/end distance in Angstrom, number of points, method RHF/STO-3G."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with bond_lengths (Angstrom), energies_hartree, min_bond_length, min_energy_hartree and molecule."

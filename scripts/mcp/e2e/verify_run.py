@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
-"""Verify that agent runs of MCP E2E fake tasks really went through the MCP tool.
+"""Verify that agent runs of MCP E2E fake tasks really went through the MCP tools.
 
 `asibench score` only compares output files with references. This verifier
 reads the persisted run artefacts (raw Claude Code stream-json, or the
 normalised trajectory as a fallback) and checks, per result:
 
-  mcp_connected     the MCP server was connected and the target tool offered
-  tool_called       the agent called mcp__<server>__<tool>
-  tool_correct      a successful call returned a value matching the reference
-                    (and, if configured, with the reference inputs verbatim)
-  answer_from_tool  the output file value equals a value the tool returned
-                    and matches the reference
+  mcp_connected     the MCP server was connected and every required tool offered
+  tool_called       every required tool was called (mcp__<server>__<tool>)
+  tool_correct      per required tool, a successful call returned a result that
+                    matches the reference (value, JSON field or image type); WARN
+                    if the inputs were not the reference inputs verbatim
+  tool_chain        (only if configured) a call's inputs are exactly the result
+                    of an earlier tool call, e.g. plot(scan output)
+  answer_from_tool  each configured output-file value equals a value a tool
+                    returned and matches the reference
   no_bypass         no Bash command or produced source file installs/imports
                     the backend directly (suspicious commands are WARN)
 
 Per-task expectations come from ``e2e_check.json`` in the task directory.
-Stdlib only.
+Schema 1 (one tool, one scalar) is normalised to schema 2 (``calls`` and
+``answers`` lists); see examples/mcp-e2e-tasks/README.md. Stdlib only.
 
 Usage::
 
@@ -32,8 +36,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CHECK_ORDER = ("mcp_connected", "tool_called", "tool_correct", "answer_from_tool", "no_bypass")
+CHECK_ORDER = ("mcp_connected", "tool_called", "tool_correct", "tool_chain", "answer_from_tool", "no_bypass")
 SKIP_MARKERS = (".trajectory.", ".agent_model_output.", ".model_calls.", "local_score_")
+SEVERITY = {"PASS": 0, "WARN": 1, "FAIL": 2}
 
 
 @dataclass
@@ -41,11 +46,17 @@ class Evidence:
     source: str
     mcp_servers: dict[str, str] | None = None  # name -> status; None = unknown
     tools_offered: list[str] | None = None
-    calls: list[dict] = field(default_factory=list)  # {id,name,input,result_text,is_error}
+    # {id, name, input, result_text, is_error, content_types, media_types}; None = not observable
+    calls: list[dict] = field(default_factory=list)
     bash_commands: list[str] = field(default_factory=list)
     assistant_text: list[str] = field(default_factory=list)
     permission_mode: str | None = None
     final_result: dict | None = None
+
+
+def _new_call(call_id, name, inputs) -> dict:
+    return {"id": call_id, "name": name, "input": inputs, "result_text": None, "is_error": None,
+            "content_types": None, "media_types": None}
 
 
 def _text_of(content) -> str:
@@ -54,6 +65,23 @@ def _text_of(content) -> str:
     if isinstance(content, list):
         return "\n".join(str(b.get("text", "")) for b in content if isinstance(b, dict) and b.get("type") == "text")
     return ""
+
+
+def _block_types(content) -> tuple[list[str] | None, list[str] | None]:
+    """Content block types and image media types of a tool_result payload."""
+    if isinstance(content, str):
+        return (["text"], []) if content != "<redacted>" else (None, None)
+    if not isinstance(content, list):
+        return None, None
+    types, media = [], []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        types.append(str(block.get("type", "")))
+        if block.get("type") == "image":
+            source = block.get("source") if isinstance(block.get("source"), dict) else {}
+            media.append(str(source.get("media_type") or block.get("media_type") or block.get("mimeType") or ""))
+    return types, media
 
 
 def _content_blocks(event: dict) -> list[dict]:
@@ -85,8 +113,7 @@ def parse_claude_stream(path: Path) -> Evidence:
         elif etype == "assistant":
             for block in _content_blocks(event):
                 if block.get("type") == "tool_use":
-                    call = {"id": block.get("id"), "name": block.get("name", ""), "input": block.get("input") or {},
-                            "result_text": None, "is_error": None}
+                    call = _new_call(block.get("id"), block.get("name", ""), block.get("input") or {})
                     ev.calls.append(call)
                     if call["id"]:
                         by_id[call["id"]] = call
@@ -101,6 +128,7 @@ def parse_claude_stream(path: Path) -> Evidence:
                     if call is not None:
                         call["result_text"] = _text_of(block.get("content"))
                         call["is_error"] = bool(block.get("is_error"))
+                        call["content_types"], call["media_types"] = _block_types(block.get("content"))
         elif etype == "result":
             ev.final_result = {k: event.get(k) for k in ("subtype", "is_error", "num_turns")}
             ev.final_result["result"] = str(event.get("result") or "")[:1000]
@@ -113,6 +141,12 @@ def _trajectory_steps(path: Path) -> list[dict]:
     return [s for s in steps if isinstance(s, dict)] if isinstance(steps, list) else []
 
 
+def _result_fields(step: dict) -> dict:
+    meta = step.get("metadata") or {}
+    return {"result_text": step.get("content", ""), "is_error": bool(meta.get("is_error")),
+            "content_types": meta.get("content_types"), "media_types": meta.get("image_media_types")}
+
+
 def parse_trajectory(path: Path) -> Evidence:
     """Adapter-neutral fallback: tool names and results, but no tool inputs."""
     ev = Evidence(source=f"trajectory ({path.name})")
@@ -120,8 +154,7 @@ def parse_trajectory(path: Path) -> Evidence:
     for step in _trajectory_steps(path):
         meta = step.get("metadata") or {}
         if step.get("step_type") == "tool_call":
-            call = {"id": meta.get("tool_call_id"), "name": meta.get("tool_name", ""), "input": None,
-                    "result_text": None, "is_error": None}
+            call = _new_call(meta.get("tool_call_id"), meta.get("tool_name", ""), None)
             ev.calls.append(call)
             if call["id"]:
                 by_id[call["id"]] = call
@@ -131,8 +164,7 @@ def parse_trajectory(path: Path) -> Evidence:
         elif step.get("step_type") == "tool_result":
             call = by_id.get(meta.get("tool_call_id"))
             if call is not None:
-                call["result_text"] = step.get("content", "")
-                call["is_error"] = bool(meta.get("is_error"))
+                call.update(_result_fields(step))
     return ev
 
 
@@ -141,23 +173,29 @@ def enrich_results_from_trajectory(ev: Evidence, path: Path) -> int:
 
     `asibench run` redacts the content of every user-role event in the saved
     stream-json (prompt protection), which also removes tool_result payloads.
-    The trajectory is extracted from the unredacted stream and keeps them,
-    keyed by the same tool_call_id.
+    The trajectory is extracted from the unredacted stream and keeps the result
+    text and content block types, keyed by the same tool_call_id.
     """
     results = {}
     for step in _trajectory_steps(path):
         meta = step.get("metadata") or {}
         if step.get("step_type") == "tool_result" and meta.get("tool_call_id"):
-            results[meta["tool_call_id"]] = (step.get("content", ""), bool(meta.get("is_error")))
+            results[meta["tool_call_id"]] = _result_fields(step)
     filled = 0
     for call in ev.calls:
         if call["result_text"] in (None, "<redacted>") and call["id"] in results:
-            call["result_text"], call["is_error"] = results[call["id"]]
+            call.update(results[call["id"]])
             filled += 1
     return filled
 
 
+# --------------------------------------------------------------------------
+# Values
+# --------------------------------------------------------------------------
+
 def _float(value) -> float | None:
+    if isinstance(value, bool):
+        return None
     try:
         number = float(str(value).strip())
     except (TypeError, ValueError):
@@ -165,31 +203,213 @@ def _float(value) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def _values(value):
+    """A finite float, a list of finite floats, or None. Accepts numeric strings and JSON-encoded lists."""
+    if isinstance(value, str) and value.strip().startswith("["):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    if isinstance(value, list):
+        numbers = [_float(v) for v in value]
+        return numbers if numbers and all(n is not None for n in numbers) else None
+    return _float(value)
+
+
+def _diff(a, b) -> float:
+    """Max absolute difference between two scalars or two equal-length lists; inf otherwise."""
+    if a is None or b is None:
+        return math.inf
+    if isinstance(a, list) != isinstance(b, list):
+        return math.inf
+    if isinstance(a, list):
+        return max((abs(x - y) for x, y in zip(a, b)), default=0.0) if len(a) == len(b) else math.inf
+    return abs(a - b)
+
+
+def _same(a, b) -> bool:
+    """Equal up to printing precision: the value was copied, not recomputed."""
+    scale = max((abs(v) for v in (a if isinstance(a, list) else [a])), default=0.0) if a is not None else 0.0
+    return _diff(a, b) <= max(1e-9, 1e-12 * scale)
+
+
+def _same_input(given, expected) -> bool:
+    """Numbers compare numerically (0.9 == "0.9"); anything else as stripped strings."""
+    a, b = _values(given), _values(expected)
+    if a is not None and b is not None:
+        return _diff(a, b) <= 1e-12
+    return str(given).strip() == str(expected).strip()
+
+
+def _result_value(call: dict, key: str | None):
+    """Numeric value of a text result, or of field `key` of a JSON-object result."""
+    text = call.get("result_text")
+    if text is None:
+        return None
+    if key is None:
+        return _values(text)
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return _values(data.get(key)) if isinstance(data, dict) else None
+
+
+def _json_result(call: dict) -> dict | None:
+    try:
+        data = json.loads(call.get("result_text") or "")
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+# --------------------------------------------------------------------------
+# Spec
+# --------------------------------------------------------------------------
+
+def normalize_spec(spec: dict) -> dict:
+    """Return a schema-2 spec; schema 1 is one numeric-result tool and one scalar answer."""
+    if int(spec.get("schema_version", 1)) >= 2:
+        return spec
+    tol = float(spec["abs_tol"])
+    return {
+        "schema_version": 2,
+        "server": spec["server"],
+        "reference_file": spec["reference_file"],
+        "prediction_file": spec["prediction_file"],
+        "calls": [{"name": spec["tool"], "tool": spec["tool"],
+                   "inputs_from_reference": spec.get("tool_inputs_from_reference") or {},
+                   "result": {"format": "number", "reference_key": spec["reference_key"], "abs_tol": tol}}],
+        "answers": [{"prediction_key": spec["prediction_key"], "from_call": spec["tool"],
+                     "reference_key": spec["reference_key"], "abs_tol": tol}],
+        "bypass_patterns": spec.get("bypass_patterns", []),
+        "suspicious_patterns": spec.get("suspicious_patterns", []),
+    }
+
+
 def _is_target(name: str, server: str, tool: str) -> bool:
     return name == f"mcp__{server}__{tool}" or (server in name and name.endswith(tool))
 
 
-def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: Path) -> dict:
-    task_id = result["task_id"]
-    task_dir = tasks_dir / Path(*task_id.split("."))
-    spec_path = task_dir / "e2e_check.json"
-    out = {"result_file": str(result_path), "task_id": task_id, "instance_id": result.get("instance_id"),
-           "prompt_level": result.get("prompt_level"), "attempt": result.get("attempt"),
-           "run_status": result.get("status"), "checks": {}, "notes": []}
-    checks = out["checks"]
-    if not spec_path.is_file():
-        out["verdict"] = "SKIP"
-        out["notes"].append(f"no e2e_check.json in {task_dir}")
-        return out
-    spec = json.loads(spec_path.read_text(encoding="utf-8"))
-    server, tool, tol = spec["server"], spec["tool"], float(spec["abs_tol"])
+def _worst(statuses) -> str:
+    return max(statuses, key=lambda s: SEVERITY[s], default="PASS")
 
-    ref_path = instances_dir / result["instance_id"] / "reference" / spec["reference_file"]
-    reference = json.loads(ref_path.read_text(encoding="utf-8"))
-    ref_value = float(reference[spec["reference_key"]])
-    out["reference_value"] = ref_value
 
-    agent = result.get("agent_output") or {}
+def _judge_call(call: dict, call_spec: dict, reference: dict) -> dict:
+    """Assess one actual tool call against its spec: inputs and result."""
+    report = {"id": call["id"], "is_error": call["is_error"], "result_text": (call["result_text"] or "")[:300]}
+    inputs_ok = None
+    if isinstance(call["input"], dict) and call_spec.get("inputs_from_reference"):
+        inputs_ok = all(_same_input(call["input"].get(arg), reference.get(ref_key))
+                        for arg, ref_key in call_spec["inputs_from_reference"].items())
+    report["inputs_match_reference"] = inputs_ok
+    result_spec = call_spec.get("result") or {}
+    fmt = result_spec.get("format", "number")
+    if call["is_error"] or (call["result_text"] is None and fmt != "image"):
+        report["result_ok"] = False
+    elif fmt == "image":
+        if call["content_types"] is None:
+            report["result_ok"] = None  # not observable in this evidence
+        else:
+            wanted = result_spec.get("media_type")
+            images = call["media_types"] or []
+            report["media_types"] = images
+            report["result_ok"] = bool(images) and (wanted is None or wanted in images)
+    else:
+        value = _result_value(call, result_spec.get("key") if fmt == "json" else None)
+        ref_value = _values(reference.get(result_spec.get("reference_key")))
+        err = _diff(value, ref_value)
+        report["abs_error"] = None if math.isinf(err) else err
+        report["result_ok"] = err <= float(result_spec.get("abs_tol", 0.0))
+    return report
+
+
+def _check_calls(ev: Evidence, spec: dict, reference: dict, checks: dict) -> dict[str, list[dict]]:
+    server = spec["server"]
+    by_spec = {cs["name"]: [c for c in ev.calls if _is_target(c["name"], server, cs["tool"])] for cs in spec["calls"]}
+
+    missing = [cs["tool"] for cs in spec["calls"] if not by_spec[cs["name"]]]
+    counts = ", ".join(f"{cs['tool']}×{len(by_spec[cs['name']])}" for cs in spec["calls"])
+    checks["tool_called"] = {"status": "FAIL" if missing else "PASS",
+                             "detail": (f"not called: {missing}; " if missing else "") + counts}
+
+    per_call, statuses = {}, []
+    for cs in spec["calls"]:
+        reports = [_judge_call(c, cs, reference) for c in by_spec[cs["name"]]]
+        good = [r for r in reports if r["result_ok"]]
+        verbatim = [r for r in good if r["inputs_match_reference"] is not False]
+        if verbatim:
+            status, detail = "PASS", f"{len(good)} correct call(s)"
+        elif good:
+            status, detail = "WARN", "result correct but inputs differ from reference"
+        elif any(r["result_ok"] is None for r in reports):
+            status, detail = "WARN", "result type not observable in this evidence"
+        else:
+            status, detail = "FAIL", "no successful call returned the expected result"
+        statuses.append(status)
+        per_call[cs["name"]] = {"tool": cs["tool"], "status": status, "detail": detail, "calls": reports}
+    failing = [f"{n}: {c['detail']}" for n, c in per_call.items() if c["status"] != "PASS"]
+    checks["tool_correct"] = {"status": _worst(statuses),
+                              "detail": "; ".join(failing) or "all required tools returned expected results",
+                              "per_call": per_call}
+    return by_spec
+
+
+def _check_chain(spec: dict, by_spec: dict[str, list[dict]], checks: dict) -> None:
+    chained = [cs for cs in spec["calls"] if cs.get("inputs_from_call")]
+    if not chained:
+        return
+    statuses, details = [], []
+    for cs in chained:
+        link = cs["inputs_from_call"]
+        sources = [data for c in by_spec.get(link["call"], []) if not c["is_error"]
+                   for data in [_json_result(c)] if data is not None]
+        consumers = by_spec.get(cs["name"], [])
+        if not consumers or not sources:
+            statuses.append("FAIL")
+            details.append(f"{cs['name']}←{link['call']}: no {'consumer' if not consumers else 'source'} call")
+            continue
+        if all(not isinstance(c["input"], dict) for c in consumers):
+            statuses.append("WARN")
+            details.append(f"{cs['name']}←{link['call']}: tool inputs not observable in this evidence")
+            continue
+        linked = any(isinstance(c["input"], dict) and all(
+            _same(_values(c["input"].get(arg)), _values(src.get(key))) for arg, key in link["map"].items())
+            for c in consumers for src in sources)
+        statuses.append("PASS" if linked else "FAIL")
+        details.append(f"{cs['name']}←{link['call']}: " + ("inputs equal an earlier result" if linked else
+                       f"inputs {sorted(link['map'])} do not equal any {link['call']} result"))
+    checks["tool_chain"] = {"status": _worst(statuses), "detail": "; ".join(details)}
+
+
+def _check_answers(spec: dict, by_spec: dict[str, list[dict]], reference: dict, pred_path: Path,
+                   out: dict, checks: dict) -> None:
+    try:
+        prediction = json.loads(pred_path.read_text(encoding="utf-8"))
+        if not isinstance(prediction, dict):
+            raise ValueError("not a JSON object")
+    except (OSError, ValueError) as exc:
+        checks["answer_from_tool"] = {"status": "FAIL", "detail": f"{spec['prediction_file']} missing or unreadable ({exc})"}
+        out["prediction_value"] = None
+        return
+    statuses, details = [], []
+    for k, answer in enumerate(spec["answers"]):
+        pred = _values(prediction.get(answer["prediction_key"]))
+        ref = _values(reference.get(answer["reference_key"]))
+        returned = [_result_value(c, answer.get("result_key")) for c in by_spec.get(answer["from_call"], [])
+                    if not c["is_error"]]
+        from_tool = any(_same(pred, v) for v in returned if v is not None)
+        err = _diff(pred, ref)
+        correct = err <= float(answer["abs_tol"])
+        if k == 0:
+            out["prediction_value"], out["reference_value"] = pred, ref
+        statuses.append("PASS" if from_tool and correct else "FAIL")
+        details.append(f"{answer['prediction_key']}: " + ("missing/not numeric" if pred is None else
+                       f"|d|={err:.2e} vs reference, equals a tool-returned value: {from_tool}"))
+    checks["answer_from_tool"] = {"status": _worst(statuses), "detail": "; ".join(details)}
+
+
+def _load_evidence(result_path: Path, agent: dict) -> Evidence | None:
     run_dir = result_path.parent
     stdout_file = agent.get("raw_stdout_file")
     traj_file = agent.get("trajectory_file")
@@ -204,6 +424,28 @@ def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: 
         filled = enrich_results_from_trajectory(ev, run_dir / traj_file)
         if filled:
             ev.source += f" + {filled} tool result(s) from {traj_file}"
+    return ev
+
+
+def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: Path) -> dict:
+    task_id = result["task_id"]
+    task_dir = tasks_dir / Path(*task_id.split("."))
+    spec_path = task_dir / "e2e_check.json"
+    out = {"result_file": str(result_path), "task_id": task_id, "instance_id": result.get("instance_id"),
+           "prompt_level": result.get("prompt_level"), "attempt": result.get("attempt"),
+           "run_status": result.get("status"), "checks": {}, "notes": []}
+    checks = out["checks"]
+    if not spec_path.is_file():
+        out["verdict"] = "SKIP"
+        out["notes"].append(f"no e2e_check.json in {task_dir}")
+        return out
+    spec = normalize_spec(json.loads(spec_path.read_text(encoding="utf-8")))
+    server = spec["server"]
+    reference = json.loads((instances_dir / result["instance_id"] / "reference" / spec["reference_file"])
+                           .read_text(encoding="utf-8"))
+
+    agent = result.get("agent_output") or {}
+    ev = _load_evidence(result_path, agent)
     if ev is None:
         out["verdict"] = "FAIL"
         out["failure"] = "no_evidence"
@@ -226,66 +468,27 @@ def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: 
     if ev.assistant_text:
         out["last_assistant_text"] = ev.assistant_text[-1][:1000]
 
-    # 1. MCP server connected and tool offered
-    target = f"mcp__{server}__{tool}"
+    # 1. MCP server connected and every required tool offered
+    targets = [f"mcp__{server}__{cs['tool']}" for cs in spec["calls"]]
     if ev.mcp_servers is None:
         checks["mcp_connected"] = {"status": "WARN", "detail": "init event not available in this evidence"}
     else:
         status = ev.mcp_servers.get(server)
-        offered = ev.tools_offered is not None and target in ev.tools_offered
-        ok = status == "connected" and offered
-        checks["mcp_connected"] = {"status": "PASS" if ok else "FAIL",
-                                   "detail": f"server status={status!r}, {target} offered={offered}",
+        not_offered = [t for t in targets if ev.tools_offered is None or t not in ev.tools_offered]
+        checks["mcp_connected"] = {"status": "PASS" if status == "connected" and not not_offered else "FAIL",
+                                   "detail": f"server status={status!r}, not offered={not_offered}",
                                    "mcp_servers": ev.mcp_servers}
 
-    # 2. target tool called
-    target_calls = [c for c in ev.calls if _is_target(c["name"], server, tool)]
-    checks["tool_called"] = {"status": "PASS" if target_calls else "FAIL", "detail": f"{len(target_calls)} call(s)"}
+    # 2-4. tools called, results correct, chained inputs
+    by_spec = _check_calls(ev, spec, reference, checks)
+    _check_chain(spec, by_spec, checks)
 
-    # 3. a successful call returned the reference value (with reference inputs)
-    returned: list[float] = []
-    call_reports = []
-    for call in target_calls:
-        value = _float(call["result_text"]) if call["result_text"] is not None else None
-        inputs_ok = None
-        if isinstance(call["input"], dict) and spec.get("tool_inputs_from_reference"):
-            inputs_ok = all(str(call["input"].get(arg, "")).strip() == str(reference.get(ref_key, "")).strip()
-                            for arg, ref_key in spec["tool_inputs_from_reference"].items())
-        if value is not None and not call["is_error"]:
-            returned.append(value)
-        call_reports.append({"is_error": call["is_error"], "returned": value,
-                             "abs_error": None if value is None else abs(value - ref_value),
-                             "inputs_match_reference": inputs_ok,
-                             "result_text": (call["result_text"] or "")[:300]})
-    good = [r for r in call_reports if r["returned"] is not None and not r["is_error"] and r["abs_error"] <= tol]
-    if good:
-        verbatim = [r for r in good if r["inputs_match_reference"] is not False]
-        checks["tool_correct"] = {"status": "PASS" if verbatim else "WARN",
-                                  "detail": f"{len(good)} correct call(s)" + ("" if verbatim else
-                                            "; inputs differ from reference but value within tolerance"),
-                                  "calls": call_reports}
-    else:
-        checks["tool_correct"] = {"status": "FAIL", "detail": "no successful call returned the reference value",
-                                  "calls": call_reports}
-
-    # 4. the answer file carries a tool-returned value
+    # 5. the answer file carries tool-returned values
+    run_dir = result_path.parent
     outputs_dir = run_dir / ((agent.get("persisted_outputs") or {}).get("dir") or f"{result_path.stem}.outputs")
-    pred_path = outputs_dir / spec["prediction_file"]
-    try:
-        pred = _float(json.loads(pred_path.read_text(encoding="utf-8"))[spec["prediction_key"]])
-    except (OSError, ValueError, KeyError, TypeError):
-        pred = None
-    out["prediction_value"] = pred
-    if pred is None:
-        checks["answer_from_tool"] = {"status": "FAIL", "detail": f"{spec['prediction_file']} missing or unreadable"}
-    else:
-        from_tool = any(abs(pred - v) <= max(1e-9, 1e-12 * abs(v)) for v in returned)
-        correct = abs(pred - ref_value) <= tol
-        checks["answer_from_tool"] = {
-            "status": "PASS" if from_tool and correct else "FAIL",
-            "detail": f"pred={pred!r} ref={ref_value!r} |d|={abs(pred - ref_value):.2e}; equals a tool-returned value: {from_tool}"}
+    _check_answers(spec, by_spec, reference, outputs_dir / spec["prediction_file"], out, checks)
 
-    # 5. bypass detection over Bash commands and produced source files
+    # 6. bypass detection over Bash commands and produced source files
     texts = [("bash", c) for c in ev.bash_commands]
     if outputs_dir.is_dir():
         for path in sorted(outputs_dir.rglob("*")):
@@ -336,7 +539,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"No result JSON found under {results_dir}", file=sys.stderr)
         return 2
     for row in rows:
-        marks = " ".join(f"{name}={row['checks'].get(name, {}).get('status', '-')}" for name in CHECK_ORDER)
+        marks = " ".join(f"{name}={row['checks'][name]['status']}" for name in CHECK_ORDER if name in row["checks"])
         print(f"[{row['verdict']}] {row['instance_id']} {row['prompt_level']} (run {row['run_status']}): {marks}")
         for name in CHECK_ORDER:
             check = row["checks"].get(name)
@@ -352,7 +555,7 @@ def main(argv: list[str] | None = None) -> int:
             if said:
                 print("         agent said: " + " ".join(said.split())[:400])
     summary = {name: sum(1 for r in rows if r["verdict"] == name) for name in ("PASS", "FAIL", "SKIP")}
-    report = {"schema_version": 1, "results_dir": str(results_dir), "summary": summary, "results": rows}
+    report = {"schema_version": 2, "results_dir": str(results_dir), "summary": summary, "results": rows}
     destination = Path(args.report) if args.report else results_dir / "mcp_e2e_verify.json"
     destination.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"\nPASS {summary['PASS']}  FAIL {summary['FAIL']}  SKIP {summary['SKIP']}  report -> {destination}")

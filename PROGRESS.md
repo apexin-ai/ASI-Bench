@@ -958,3 +958,26 @@
   (`test_mimo_accepts_all_four_modes` needs Linux for `linux_ns`,
   `test_kimi_host_env_uses_host_path` assumes a temporary path layout).
 - Implementation commit: `77f0929`.
+
+## 2026-09-30: L2 pyscf bond-stretch task with a two-tool chain and an image result
+
+- Problem: L2 evidence covered one tool returning one number. Multi-step tool
+  use and image results were untested, and the verifier could only check a
+  single tool with a scalar answer. The Claude trajectory extractor dropped
+  non-text tool_result blocks, and the persisted stream redacts user events, so
+  an image returned by an MCP tool was invisible in the run artefacts.
+- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/pyscf_bond_stretch` (scan with
+  `run_bond_stretch_calculation_mcp`, then plot the returned data with
+  `plot_energy_scan_image_mcp`; reference from seeded RDKit + UFF and PySCF,
+  rigid molecules only). `verify_run.py` schema 2 checks every required call,
+  JSON-field and image results, `tool_chain` (plot inputs equal the scan
+  output) and several answers; schema 1 specs are normalised. The Claude
+  extractor records `content_types` and `image_media_types` in tool_result
+  metadata without copying image data.
+- Lesson: check what the persisted artefacts can show before designing a
+  verifier check; a correct but unobservable result looks like a failure.
+- Verification: 41 seeds × 2 unseeded upstream runs agree with the reference
+  within 1.4e-7 Ha; a simulated run from real server outputs passes all checks
+  with full score; offline tests in `tests/test_mcp_e2e_bond_stretch.py`.
+  Agent run on AWS pending.
+- Implementation commit: pending.

@@ -26,7 +26,8 @@ upstream licenses apply.
   revision, every check and the server's stderr tail.
 - `verify_run.py` — L2 verifier for agent runs of `examples/mcp-e2e-tasks`:
   reads Claude Code stream-json (or the trajectory) and the persisted outputs
-  and checks connection, tool call, tool result, answer provenance and bypass.
+  and checks connection, every required tool call and its result (including
+  image results), chained inputs between calls, answer provenance and bypass.
 
 Verified 2026-09-29: the original pyscf smoke (`pyscf_rhf_energy` +
 `generate_pyscf_geom_input`) passed on AWS Linux amd64 (Ubuntu 26.04) and Linux
@@ -87,3 +88,9 @@ Implications for agent runs:
   cwd, which in `--mcp-config` runs is the MCP checkout (untracked file; it
   does not block `setup.py`, which only refuses modified tracked files). It is
   not usable as an agent-verifiable tool and has no L2 task.
+
+L2 coverage: `pyscf_rhf_energy` (`mcp_e2e.pyscf_rhf_energy`) and
+`run_bond_stretch_calculation_mcp` → `plot_energy_scan_image_mcp`
+(`mcp_e2e.pyscf_bond_stretch`). The remaining tools are L1 only by design: the
+agent-level path (connection, calls, results, chaining, images) is already
+exercised by these two tasks.
