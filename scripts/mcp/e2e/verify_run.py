@@ -2,10 +2,13 @@
 """Verify that agent runs of MCP E2E fake tasks really went through the MCP tools.
 
 `asibench score` only compares output files with references. This verifier
-reads the persisted run artefacts (raw Claude Code stream-json, or the
-normalised trajectory as a fallback) and checks, per result:
+reads the persisted run artefacts (raw Claude Code stream-json or Codex
+``exec --json`` JSONL, or the normalised trajectory as a fallback) and checks,
+per result:
 
   mcp_connected     the MCP server was connected and every required tool offered
+                    (Codex has no server list: every required tool must have
+                    returned a result)
   tool_called       every required tool was called (mcp__<server>__<tool>)
   tool_correct      per required tool, a successful call returned a result that
                     matches the reference (value, JSON field or image type); WARN
@@ -133,6 +136,94 @@ def parse_claude_stream(path: Path) -> Evidence:
             ev.final_result = {k: event.get(k) for k in ("subtype", "is_error", "num_turns")}
             ev.final_result["result"] = str(event.get("result") or "")[:1000]
     return ev
+
+
+def _codex_arguments(value):
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
+def parse_codex_stream(path: Path) -> Evidence | None:
+    """Parse ``codex exec --json`` output; None if the file is not such a log.
+
+    MCP calls are ``mcp_tool_call`` items carrying server, tool, arguments and
+    (on ``item.completed``) result or error. They are named
+    ``mcp__<server>__<tool>`` here, as in Claude Code. There is no event listing
+    the connected servers or offered tools. Codex's own ``list_mcp_resources`` /
+    ``list_mcp_resource_templates`` calls appear under the server name too; they
+    are kept in the tool sequence but never match a required tool.
+    """
+    ev = Evidence(source=f"codex exec JSONL ({path.name})")
+    by_id: dict[str, dict] = {}
+    recognised = False
+
+    def call_for(item: dict, name: str, inputs) -> tuple[dict, bool]:
+        call = by_id.get(item.get("id")) if item.get("id") else None
+        if call is not None:
+            return call, False
+        call = _new_call(item.get("id"), name, inputs)
+        ev.calls.append(call)
+        if call["id"]:
+            by_id[call["id"]] = call
+        return call, True
+
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        etype = event.get("type")
+        if etype in ("thread.started", "turn.started"):
+            recognised = True
+        elif etype in ("turn.completed", "turn.failed"):
+            recognised = True
+            error = event.get("error")
+            message = error.get("message") if isinstance(error, dict) else error
+            ev.final_result = {"subtype": etype, "is_error": etype == "turn.failed", "num_turns": None,
+                               "result": str(message or "")[:1000]}
+        item = event.get("item")
+        if etype not in ("item.started", "item.updated", "item.completed") or not isinstance(item, dict):
+            continue
+        recognised = True
+        kind, done = item.get("type"), etype == "item.completed"
+        if kind == "agent_message" and done:
+            ev.assistant_text.append(str(item.get("text", "")))
+        elif kind == "command_execution":
+            command = str(item.get("command", ""))
+            call, created = call_for(item, "command_execution", {"command": command})
+            if created:
+                ev.bash_commands.append(command)
+            if done:
+                call["result_text"] = str(item.get("aggregated_output") or "")
+                call["is_error"] = item.get("exit_code") not in (None, 0)
+                call["content_types"], call["media_types"] = ["text"], []
+        elif kind == "mcp_tool_call":
+            name = f"mcp__{item.get('server', '')}__{item.get('tool', '')}"
+            call, _created = call_for(item, name, _codex_arguments(item.get("arguments")))
+            if not done:
+                continue
+            result, error = item.get("result"), item.get("error")
+            if error is not None or item.get("status") == "failed" or not isinstance(result, dict):
+                call["is_error"] = True
+                call["result_text"] = str(error.get("message", error) if isinstance(error, dict) else error or "")
+                continue
+            content = result.get("content")
+            call["is_error"] = bool(result.get("is_error") or result.get("isError"))
+            call["result_text"] = _text_of(content)
+            call["content_types"], call["media_types"] = _block_types(content)
+            structured = result.get("structured_content")
+            if not call["result_text"] and structured is not None:
+                call["result_text"] = json.dumps(structured)
+    return ev if recognised else None
 
 
 def _trajectory_steps(path: Path) -> list[dict]:
@@ -417,7 +508,7 @@ def _load_evidence(result_path: Path, agent: dict) -> Evidence | None:
     if stdout_file and (run_dir / stdout_file).is_file():
         ev = parse_claude_stream(run_dir / stdout_file)
         if ev.mcp_servers is None and not ev.calls and ev.final_result is None:
-            ev = None  # not a Claude stream-json log
+            ev = parse_codex_stream(run_dir / stdout_file)  # None: not a Codex log either
     if ev is None and traj_file and (run_dir / traj_file).is_file():
         ev = parse_trajectory(run_dir / traj_file)
     elif ev is not None and traj_file and (run_dir / traj_file).is_file():
@@ -471,7 +562,14 @@ def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: 
     # 1. MCP server connected and every required tool offered
     targets = [f"mcp__{server}__{cs['tool']}" for cs in spec["calls"]]
     if ev.mcp_servers is None:
-        checks["mcp_connected"] = {"status": "WARN", "detail": "init event not available in this evidence"}
+        # No server list (Codex JSONL, trajectory): a result returned by the
+        # server's tool is the only proof that it was connected and offered.
+        silent = [cs["tool"] for cs in spec["calls"]
+                  if not any(_is_target(c["name"], server, cs["tool"]) and c["is_error"] is False for c in ev.calls)]
+        checks["mcp_connected"] = (
+            {"status": "PASS", "detail": "no server list in this evidence; every required tool returned a result"}
+            if not silent else
+            {"status": "WARN", "detail": f"no server list in this evidence and no successful call of {silent}"})
     else:
         status = ev.mcp_servers.get(server)
         not_offered = [t for t in targets if ev.tools_offered is None or t not in ev.tools_offered]
@@ -501,7 +599,7 @@ def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: 
     elif soft:
         checks["no_bypass"] = {"status": "WARN", "detail": f"review: {soft[:5]}"}
     else:
-        checks["no_bypass"] = {"status": "PASS", "detail": f"{len(ev.bash_commands)} Bash command(s) scanned"}
+        checks["no_bypass"] = {"status": "PASS", "detail": f"{len(ev.bash_commands)} shell command(s) scanned"}
     out["bash_commands"] = ev.bash_commands[:50]
 
     failed = [name for name in CHECK_ORDER if checks.get(name, {}).get("status") == "FAIL"]

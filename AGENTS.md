@@ -133,8 +133,11 @@
   依据 `e2e_check.json`（schema 2：多工具 `calls`、`inputs_from_call` 串联、
   `image` 结果、`answers`；schema 1 自动归一化）读取 run 产物判定，框架评分契约不变。
   持久化 stream-json 会脱敏 user 事件（含 tool_result），工具返回值须从同 tool_call_id
-  的 trajectory 补齐；Claude trajectory 不保存图片内容，只在 tool_result metadata 记录
-  `content_types` / `image_media_types`。
+  的 trajectory 补齐；Claude/Codex trajectory 不保存图片内容，只在 tool_result metadata 记录
+  `content_types` / `image_media_types`。Codex 证据来自 `exec --json` 的 `mcp_tool_call`
+  item（统一命名为 `mcp__<server>__<tool>`，输入与结果在持久化 JSONL 中保留）；Codex 无
+  server/tool 列表事件，`mcp_connected` 只能由必需工具的成功返回证明，否则为 WARN；
+  Codex 内置的 `list_mcp_resources*` 调用不算必需工具。
 - 外部仿真 benchmark 接入通过 `ai4sci_bench.integrations`：ScienceAgentBench
   转换器只把源记录放入本地 `private/`，CFDLLMBench 使用本地固定 OpenFOAM
   镜像，SciAgentGym 工具逐实例 allowlist，COSMO-Agent 使用

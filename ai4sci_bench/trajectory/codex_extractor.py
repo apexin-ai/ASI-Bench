@@ -26,12 +26,49 @@ def _first_change_path(item: dict[str, object]) -> str:
     return ""
 
 
+def _mcp_result(item: dict[str, object]) -> tuple[str, dict[str, object]]:
+    """Text and metadata of a completed ``mcp_tool_call`` item.
+
+    Non-text blocks (e.g. images) are not copied into the trajectory, but their
+    presence and media type are recorded so that a returned image stays observable.
+    """
+    result, error = item.get("result"), item.get("error")
+    if error is not None or item.get("status") == "failed" or not isinstance(result, dict):
+        message = error.get("message", error) if isinstance(error, dict) else error
+        return _coerce_text(message or ""), {"is_error": True, "content_types": []}
+    parts: list[str] = []
+    content_types: list[str] = []
+    image_media_types: list[str] = []
+    content = result.get("content")
+    for block in content if isinstance(content, list) else []:
+        if not isinstance(block, dict):
+            continue
+        block_type = _coerce_text(block.get("type", ""))
+        content_types.append(block_type)
+        if block_type == "text":
+            parts.append(_coerce_text(block.get("text", "")))
+        elif block_type == "image":
+            image_media_types.append(_coerce_text(block.get("mimeType") or block.get("media_type") or ""))
+    text = "\n".join(parts)
+    structured = result.get("structured_content")
+    if not text and structured is not None:
+        text = json.dumps(structured, ensure_ascii=False)
+    metadata: dict[str, object] = {
+        "is_error": bool(result.get("is_error") or result.get("isError")),
+        "content_types": content_types,
+    }
+    if image_media_types:
+        metadata["image_media_types"] = image_media_types
+    return text, metadata
+
+
 def extract_from_jsonl(jsonl_text: str, instance_id: str = "") -> Trajectory:
     """Parse Codex CLI JSONL into a Trajectory object."""
     steps: list[TrajectoryStep] = []
     step_idx = 0
     first_ts: float | None = None
     last_tool_name: str = ""
+    mcp_call_ids: set[str] = set()
 
     text = _coerce_text(jsonl_text)
     for line in text.splitlines():
@@ -246,6 +283,44 @@ def extract_from_jsonl(jsonl_text: str, instance_id: str = "") -> Trajectory:
                             "exit_code": exit_code,
                             "parent_tool_name": "command_execution",
                             "item_id": item.get("id"),
+                        },
+                    ))
+                    step_idx += 1
+
+            elif item_type == "mcp_tool_call":
+                # Named like the function Codex offers to the model, which is
+                # also Claude Code's name for the same tool.
+                tool_name = f"mcp__{_coerce_text(item.get('server', ''))}__{_coerce_text(item.get('tool', ''))}"
+                item_id = _coerce_text(item.get("id") or "")
+                if not item_id or item_id not in mcp_call_ids:
+                    mcp_call_ids.add(item_id)
+                    last_tool_name = tool_name
+                    steps.append(TrajectoryStep(
+                        step_index=step_idx,
+                        timestamp_ms=ts_ms,
+                        step_type="tool_call",
+                        content=tool_name,
+                        metadata={
+                            "tool_name": tool_name,
+                            "key_args": {},
+                            "tool_call_id": item_id,
+                            "mcp_server": item.get("server"),
+                            "mcp_tool": item.get("tool"),
+                        },
+                    ))
+                    step_idx += 1
+                if etype == "item.completed":
+                    result_text, result_meta = _mcp_result(item)
+                    steps.append(TrajectoryStep(
+                        step_index=step_idx,
+                        timestamp_ms=ts_ms,
+                        step_type="tool_result",
+                        content=result_text,
+                        metadata={
+                            "tool_call_id": item_id,
+                            "output_length": len(result_text),
+                            "parent_tool_name": tool_name,
+                            **result_meta,
                         },
                     ))
                     step_idx += 1

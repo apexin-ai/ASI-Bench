@@ -8,12 +8,13 @@ outside `tasks/`, have `status: test`, and are only discovered with
 
 Each task directory adds `e2e_check.json`, read by
 `scripts/mcp/e2e/verify_run.py`, which checks the run artefacts (Claude Code
-stream-json, or the normalised trajectory) for what the scorer cannot see:
+stream-json, Codex `exec --json` JSONL, or the normalised trajectory) for what
+the scorer cannot see:
 
 | Check | Meaning |
 |---|---|
-| `mcp_connected` | the MCP server reported `connected` and every required tool was offered to the agent |
-| `tool_called` | the agent called every required `mcp__<server>__<tool>` |
+| `mcp_connected` | the MCP server reported `connected` and every required tool was offered to the agent; Codex has no such event, so there every required tool must have returned a result (WARN otherwise) |
+| `tool_called` | the agent called every required `mcp__<server>__<tool>` (Codex `mcp_tool_call` items are reported under the same name) |
 | `tool_correct` | per required tool, a successful call returned the expected result (value, JSON field, or an image of the expected media type); WARN if the inputs were not the reference inputs verbatim, or if the result type is not observable in older artefacts |
 | `tool_chain` | only when configured: a call's inputs equal the result of an earlier call (e.g. the plot was drawn from the scan output, not retyped data) |
 | `answer_from_tool` | each configured output-file value equals a value a tool returned and matches the reference |
@@ -30,6 +31,18 @@ and the MCP init status from the stream, and fills tool results from
 trajectory; the Claude extractor records `content_types` and
 `image_media_types` in the tool_result metadata so that a returned PNG stays
 observable.
+
+Codex (`codex exec --json`, checked with codex-cli 0.159.2) reports each MCP
+call as an `mcp_tool_call` item with `server`, `tool`, `arguments` and, on
+`item.completed`, `result.content` (MCP blocks; images carry `mimeType`) or
+`error`. These items are not user events, so the persisted JSONL keeps inputs
+and results and the verifier needs no trajectory; the Codex extractor still
+records the calls (`tool_call_id`, `content_types`, `image_media_types`, no
+image data) so that the trajectory alone proves calls and results. The JSONL
+has no list of connected servers or offered tools. Codex also calls its own
+`list_mcp_resources` / `list_mcp_resource_templates` under the server's name;
+they show up in the tool sequence and never count as a required tool. Shell
+use is taken from `command_execution` items.
 
 `e2e_check.json` schema 2 lists `calls` (each with `tool`, optional
 `inputs_from_reference`, optional `inputs_from_call` for chaining, and a
@@ -155,6 +168,24 @@ uv run asibench score --repo seed31415 --results-dir ~/e2e/out-claude \
 python3 scripts/mcp/e2e/verify_run.py --results-dir ~/e2e/out-claude \
   --instances-dir ~/e2e/instances --tasks-dir examples/mcp-e2e-tasks
 ```
+
+Codex CLI uses the same instances, scorer and verifier; only step 2 differs:
+
+```sh
+uv run asibench run --agent codex_cli \
+  --agent-config '{"model": "gpt-5.6-sol", "effort": "medium"}' \
+  --mcp-config ~/mcp/pyscf.mcp.json \
+  --tasks mcp_e2e.pyscf_rhf_energy,mcp_e2e.pyscf_bond_stretch --include-test \
+  --tasks-dir examples/mcp-e2e-tasks --instances-dir ~/e2e/instances \
+  --prompt-levels b1,b2,b3,b4 --sandbox none --timeout 900 --output-dir ~/e2e/out-codex
+```
+
+With a custom gateway, keep `config.toml` (the `model_providers` entry) and
+`auth.json` in a dedicated directory without other MCP servers, export
+`CODEX_HOME` to it **and** pass it as `"codex_home": "/abs/path"` in
+`--agent-config`: each run gets an isolated home that takes `auth.json` from
+`$CODEX_HOME` but `config.toml` only from `codex_home`, so without the latter
+the provider settings are dropped and Codex calls the default endpoint.
 
 `--sandbox os` is intentionally rejected with `--mcp-config`; host runs have
 no filesystem isolation, so use a dedicated unprivileged user. The agent can
