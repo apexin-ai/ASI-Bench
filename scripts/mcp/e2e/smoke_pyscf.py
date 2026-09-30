@@ -39,6 +39,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+from smoke_common import Caller, Report  # noqa: E402
 from stdio_client import MCPError, StdioMCP, text_of  # noqa: E402
 
 H2 = "H 0 0 0; H 0 0 0.74"
@@ -236,46 +237,6 @@ def reference_pes_scan() -> list[float]:
 # --------------------------------------------------------------------------
 # Checks
 # --------------------------------------------------------------------------
-
-class Report:
-    def __init__(self) -> None:
-        self.checks: list[dict] = []
-
-    def add(self, level: str, name: str, status: str, detail: str = "", **data) -> None:
-        self.checks.append({"level": level, "name": name, "status": status, "detail": detail, **data})
-        print(f"[{status:<4}] {level} {name}" + (f" — {detail}" if detail else ""), flush=True)
-
-    @property
-    def failed(self) -> bool:
-        return any(c["status"] == "FAIL" for c in self.checks)
-
-
-class Caller:
-    """tools/call wrapper: records FAILs for transport/tool errors and stdout lines per tool."""
-
-    def __init__(self, client: StdioMCP, report: Report) -> None:
-        self.client = client
-        self.report = report
-        self.stdout_by_tool: Counter = Counter()
-
-    def __call__(self, check: str, tool: str, arguments: dict, *, allow_error: bool = False) -> dict | None:
-        before = len(self.client.non_json_stdout)
-        try:
-            resp = self.client.call_tool(tool, arguments)
-        except MCPError as exc:
-            self.report.add("L1", check, "FAIL", str(exc))
-            return None
-        finally:
-            self.stdout_by_tool[tool] += len(self.client.non_json_stdout) - before
-        if "error" in resp:
-            self.report.add("L1", check, "FAIL", f"JSON-RPC error: {resp['error']}")
-            return None
-        result = resp["result"]
-        if result.get("isError") and not allow_error:
-            self.report.add("L1", check, "FAIL", f"tool error: {text_of(result)[:300]}")
-            return None
-        return result
-
 
 def check_energy(call: Caller, report: Report, label: str, atom: str, basis: str) -> None:
     name = f"pyscf_rhf_energy[{label}/{basis}]"

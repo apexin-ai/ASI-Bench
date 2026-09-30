@@ -592,6 +592,14 @@ parsing, rotation- and permutation-invariant distance comparison, PNG header
 checks, per-tool stdout attribution, the PASS/WARN/FAIL split for invalid input
 (isError vs in-band error vs accepted), the plot and visualize checks against a
 stub client, and that every manifest tool is called by the smoke.
+It also checks the manifest's launch `env`, `uv_sync_args` and `{checkout}`
+placeholder validation (the arxiv config keeps its CLI flags literal and turns
+the ToolUniverse result cache off), and the network-free parts of
+`smoke_arxiv.py`: arXiv ID/URL splitting (incl. old-style IDs), Atom parsing
+and whitespace normalisation, record comparison, the snippet window/limit/cap
+reference, in-band error classification, the search, OR-precedence and
+snippet checks against a stub client with a stubbed reference, and that the
+server environment is minimal (no operator secrets, proxies passed through).
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
@@ -600,6 +608,12 @@ then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke_pyscf.py --config
 PySCF, RDKit and geomeTRIC run in the smoke process; expected outcome on the
 pinned revision is `PASS` with 0 FAIL and 7–8 WARN (upstream defects listed in
 `scripts/mcp/e2e/README.md`; the benzene symmetry probe is intermittent).
+For arxiv: `python3 scripts/mcp/e2e/setup.py arxiv`, then
+`~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke_arxiv.py --config
+~/mcp/arxiv.mcp.json` (needs access to export.arxiv.org and arxiv.org, ~90 s).
+Expected outcome on the pinned revision: `PASS` with 0 FAIL and 8 WARN (OR +
+date precedence, three in-band errors plus a missing-paper one, `truncated`
+flag, old-style ID, workspace-dependent tool filter).
 
 MCP E2E fake tasks and run verifier (offline, no MCP server or PySCF):
 

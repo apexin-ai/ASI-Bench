@@ -121,11 +121,13 @@
   SHA-256；只对显式指定的干净副本应用，不捆绑 CAD 软件、不自动更改本机凭据配置。
   patched stdio 冒烟通过不得升级为真实 CAD 业务认证；复测需临时 HOME 与端口保护。
 - MCP E2E 安装/冒烟脚本位于 `scripts/mcp/e2e/`：`manifest.json` 绑定 40 位
-  revision 与各 server 自己的 Python 版本（忽略调用方 `UV_PYTHON`），只 clone
-  不 vendor 上游；smoke 用 server 自身 venv 在进程外独立计算参考值，L0/L1 分级，
+  revision 与各 server 自己的 Python 版本（忽略调用方 `UV_PYTHON`），可声明 launch
+  `env`、额外 `uv_sync_args` 与 `{checkout}` 路径占位；只 clone 不 vendor 上游；
+  smoke 用 server 自身 venv 在进程外独立计算参考值，L0/L1 分级，
   smoke 必须覆盖 manifest 列出的全部工具：数值错误为 FAIL，上游缺陷（in-band 错误、
-  忽略参数、误导性返回、间歇性错误、stdout 非 JSON 行）记为 WARN。直连 smoke 通过
-  不等于 agent E2E 通过。
+  忽略参数、误导性返回、间歇性错误、stdout 非 JSON 行）记为 WARN。联网 server
+  （arxiv）的参考值须在同一次 smoke 中直连原始 API/PDF 获取，只用封闭历史日期窗口，
+  且 launch env 必须关闭 ToolUniverse 结果缓存。直连 smoke 通过不等于 agent E2E 通过。
 - MCP E2E fake task 仅放 `examples/mcp-e2e-tasks/`（`status: test`，不进 `tasks/`），
   以 `--params '{"seed":31415}'` 生成以复用本地评分；参考值只在 `generate --sandbox task`
   的隔离环境中计算，agent 以 `--sandbox none` 运行。scorer 只比对输出与 reference；
