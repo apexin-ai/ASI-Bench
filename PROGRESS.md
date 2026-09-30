@@ -979,5 +979,10 @@
 - Verification: 41 seeds × 2 unseeded upstream runs agree with the reference
   within 1.4e-7 Ha; a simulated run from real server outputs passes all checks
   with full score; offline tests in `tests/test_mcp_e2e_bond_stretch.py`.
-  Agent run on AWS pending.
-- Implementation commit: pending.
+  AWS Linux amd64, `claude-opus-5-5`, seed 31415, B1–B4 ×3: local score
+  1200/1200 and verifier 12/12 PASS on every check, including the image result
+  of the plot call (so the extractor metadata matches Claude Code's format).
+  macOS full suite: only the two known environment failures plus the timing
+  sensitive `test_parallel_local_scoring_is_bounded_isolated_and_ordered`
+  (untouched code path).
+- Implementation commit: `39745b3`.

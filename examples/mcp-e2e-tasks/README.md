@@ -75,12 +75,20 @@ also wrong for Codex).
 
 ### `mcp_e2e.pyscf_bond_stretch`
 
-Not yet run with an agent. Offline: a simulated run built from the real
-server's scan and plot results passes all verifier checks, and the scorer gives
-full credit (max |ΔE| 5.6e-10 Ha). Open question for the first run: how Claude
-Code represents an MCP image in its stream (the extractor accepts both
-`source.media_type` and `mimeType`); if it is not recorded, `tool_correct`
-shows a WARN for the plot call rather than a PASS.
+2026-09-30, AWS Linux amd64, Claude Code, `claude-opus-5-5`, seed 31415
+(hydrogen cyanide, C–H 0.994–1.534 Å, 8 points), `--retries 3` per level:
+
+| Level | Local score | Verified PASS | Notes |
+|---|---|---|---|
+| B1 | 3 × 100 | 3/3 | |
+| B2 | 3 × 100 | 3/3 | |
+| B3 | 3 × 100 | 3/3 | both tools found without being named |
+| B4 | 3 × 100 | 3/3 | |
+
+Every run called the scan tool with the reference inputs, passed its result
+unchanged to the plot tool (`tool_chain`), received a PNG (`tool_correct` on
+the image, from the trajectory's `image_media_types`) and copied the scan
+values into `result.json`. No bypass or suspicious commands were flagged.
 
 ### `mcp_e2e.pyscf_rhf_energy`
 
