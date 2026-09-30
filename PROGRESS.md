@@ -986,3 +986,35 @@
   sensitive `test_parallel_local_scoring_is_bounded_isolated_and_ordered`
   (untouched code path).
 - Implementation commit: `39745b3`.
+
+## 2026-09-30: MCP E2E evidence for Codex CLI
+
+- Problem: the pyscf MCP E2E tasks were only proven with Claude Code. With
+  `codex_cli` the run and score already worked, but nothing could show that
+  the answer came from the MCP tool: `verify_run.py` parsed only Claude
+  stream-json, and the Codex trajectory extractor ignored `mcp_tool_call`
+  items, so MCP calls were missing from the trajectory as well.
+- Resolution: `verify_run.py` parses `codex exec --json` (`mcp_tool_call` items
+  named `mcp__<server>__<tool>`, `command_execution` as shell evidence). Codex
+  emits no list of connected servers or offered tools, so `mcp_connected` is
+  PASS only when every required tool returned a result and WARN otherwise. The
+  Codex extractor records MCP calls and results with `tool_call_id`,
+  `content_types` and `image_media_types`, without image data.
+- Lesson: probe the real event stream before writing a parser. A direct
+  `codex exec --json` run against the MCP server settled the item schema, the
+  image block shape, and that Codex adds its own `list_mcp_resources*` calls
+  under the server name (they must not count as tool calls). It also showed
+  that the expected problems (server stdout prints, default MCP timeouts) do
+  not occur, so no framework change was made for them.
+- Lesson: with a custom gateway, the isolated Codex home copies `auth.json`
+  from `$CODEX_HOME` but `config.toml` only from the `codex_home` agent-config
+  key; pass both or the provider settings are silently dropped.
+- Lesson: `AGENTS.md` must stay byte-identical to `CLAUDE.md`
+  (`tests/test_ci_workflow.py`); copy it after every `CLAUDE.md` edit. The
+  targeted tests did not include that file and the full suite caught it.
+- Verification: `tests/test_mcp_e2e_codex.py` (16 offline tests on event shapes
+  from real runs). AWS Linux amd64, codex-cli 0.159.2, seed 31415, both tasks,
+  B1–B4 ×1: local score 800/800 and verifier 8/8 PASS on every check, after a
+  B1-only pass with the same result. macOS full suite: only the two known
+  environment failures once `AGENTS.md` was synchronised.
+- Implementation commit: `7455855`.

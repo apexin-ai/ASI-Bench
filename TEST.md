@@ -622,7 +622,24 @@ image results observable (`content_types`, `image_media_types`), a genuine
 scan → plot run passing every check, and failures for a missing plot call, a
 plot drawn from retyped data (`tool_chain`), a plot without an image, answers
 not copied from the tool, plus WARN-only handling of older trajectories and
-schema-1 normalisation. The live agent run (generate → run → score → verify) is documented in
+schema-1 normalisation.
+
+`tests/test_mcp_e2e_codex.py` covers Codex CLI evidence offline, with event
+shapes taken from real `codex exec --json` runs (codex-cli 0.159.2): the Codex
+extractor recording `mcp_tool_call` items (call id, server/tool, text results,
+image media type without image data, failed and unfinished calls), tool
+arguments and results surviving run persistence, genuine single-tool and
+scan → plot runs passing every check, Codex's own resource-listing calls not
+counting as tool calls, direct backend use in a `command_execution`, failed MCP
+calls, answers not copied from the tool, reformatted inputs (WARN), a broken
+chain, a plot without an image, JSON-string arguments, and trajectory-only
+evidence.
+
+```bash
+uv run --frozen pytest tests/test_mcp_e2e_codex.py -q
+```
+
+The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`. Verifier fixtures are persisted through the
 real run redaction and Claude trajectory extractor, so tool results are only
 recoverable from the trajectory, as in real runs.

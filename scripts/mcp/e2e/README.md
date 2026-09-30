@@ -25,7 +25,8 @@ upstream licenses apply.
 - `smoke_<id>.py` — per-server L0/L1 checks; writes a JSON report with versions,
   revision, every check and the server's stderr tail.
 - `verify_run.py` — L2 verifier for agent runs of `examples/mcp-e2e-tasks`:
-  reads Claude Code stream-json (or the trajectory) and the persisted outputs
+  reads Claude Code stream-json or Codex `exec --json` JSONL (or the
+  trajectory) and the persisted outputs
   and checks connection, every required tool call and its result (including
   image results), chained inputs between calls, answer provenance and bypass.
 
@@ -80,7 +81,8 @@ Implications for agent runs:
 
 - PySCF, geomeTRIC and upstream `print` calls write to **stdout**, i.e. into the
   stdio transport. Claude Code 2.1.284 tolerated this in the
-  `mcp_e2e.pyscf_rhf_energy` runs; stricter clients may not.
+  `mcp_e2e.pyscf_rhf_energy` runs, and so did codex-cli 0.159.2 (single energy,
+  bond scan and plot calls, default MCP timeouts); stricter clients may not.
 - `generate_pyscf_geom_input` → `pyscf_rhf_energy` is fragile for
   high-symmetry molecules (benzene, sometimes methane/ethane); fake tasks must
   not depend on that chain for such molecules.
