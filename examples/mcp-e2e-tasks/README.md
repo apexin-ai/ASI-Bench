@@ -86,6 +86,25 @@ also wrong for Codex).
 
 ## Results
 
+### Codex CLI (both tasks)
+
+2026-09-30, AWS Linux amd64, codex-cli 0.159.2, `gpt-5.6-sol` through a
+custom gateway (`codex_home`), effort `medium`, seed 31415, one run per level:
+
+| Task | Level | Local score | Verified PASS | Notes |
+|---|---|---|---|---|
+| `mcp_e2e.pyscf_rhf_energy` | B1–B4 | 4 × 100 | 4/4 | tool found without being named at B3/B4 |
+| `mcp_e2e.pyscf_bond_stretch` | B1–B4 | 4 × 100 | 4/4 | both tools found without being named at B3/B4 |
+
+All eight runs passed every verifier check with no WARN, from the persisted
+Codex JSONL alone: required tools returned results (`mcp_connected`), the plot
+call received the scan output unchanged (`tool_chain`) and returned an
+`image/png` block, and the answers equal the tool-returned values. An earlier
+B1 pass of both tasks gave the same result. The server's stdout prints and
+Codex's default MCP timeouts caused no problems. This is one run per level
+(the Claude Code rounds below used three), so it shows the path works, not a
+pass rate.
+
 ### `mcp_e2e.pyscf_bond_stretch`
 
 2026-09-30, AWS Linux amd64, Claude Code, `claude-opus-5-5`, seed 31415
