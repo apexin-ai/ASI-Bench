@@ -931,3 +931,58 @@
   (red before the fix, green after); confirmed on AWS with `--retries 3`/`5`
   producing one result per attempt.
 - Implementation commit: `0e43cdd`.
+
+## 2026-09-29: pyscf MCP smoke covers all seven tools (L1)
+
+- Problem: the pyscf smoke checked only `pyscf_rhf_energy` values and the atom
+  labels of one `generate_pyscf_geom_input` call; five tools were never called,
+  so upstream defects were unknown before designing further fake tasks.
+- Resolution: `smoke_pyscf.py` now calls every manifest tool and compares
+  against references computed in the smoke process (seeded RDKit + UFF,
+  PySCF RHF, PySCF + geomeTRIC). Unseeded server geometries are compared with
+  rotation/permutation-invariant distances and energies; only rigid molecules
+  are used. Wrong values FAIL; upstream defects are WARN: in-band errors
+  (`isError=false`), ignored `basis` in the bond scan, missing optimized energy,
+  intermittent `PointGroupSymmetryError` when chaining geometry → RHF for
+  benzene, visualize writing into the server cwd while returning a hard-coded
+  path, and stdout pollution now attributed per tool.
+- Lesson: probe every tool over stdio before designing agent tasks; the tool
+  docstrings promised fields (`optimized_energy`) and behaviour (`basis`) that
+  the code does not deliver.
+- Verification: smoke 19 PASS / 8 WARN / 0 FAIL on Linux aarch64 and on AWS
+  Linux amd64 (identical values);
+  `tests/test_mcp_e2e_scripts.py` adds PySCF-free tests (parsers, invariants,
+  PNG header, WARN/FAIL classification, stub-client plot/visualize, every
+  manifest tool called). Full suite on macOS / Python 3.13: only the two known
+  environment failures that also occur on unmodified main
+  (`test_mimo_accepts_all_four_modes` needs Linux for `linux_ns`,
+  `test_kimi_host_env_uses_host_path` assumes a temporary path layout).
+- Implementation commit: `77f0929`.
+
+## 2026-09-30: L2 pyscf bond-stretch task with a two-tool chain and an image result
+
+- Problem: L2 evidence covered one tool returning one number. Multi-step tool
+  use and image results were untested, and the verifier could only check a
+  single tool with a scalar answer. The Claude trajectory extractor dropped
+  non-text tool_result blocks, and the persisted stream redacts user events, so
+  an image returned by an MCP tool was invisible in the run artefacts.
+- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/pyscf_bond_stretch` (scan with
+  `run_bond_stretch_calculation_mcp`, then plot the returned data with
+  `plot_energy_scan_image_mcp`; reference from seeded RDKit + UFF and PySCF,
+  rigid molecules only). `verify_run.py` schema 2 checks every required call,
+  JSON-field and image results, `tool_chain` (plot inputs equal the scan
+  output) and several answers; schema 1 specs are normalised. The Claude
+  extractor records `content_types` and `image_media_types` in tool_result
+  metadata without copying image data.
+- Lesson: check what the persisted artefacts can show before designing a
+  verifier check; a correct but unobservable result looks like a failure.
+- Verification: 41 seeds × 2 unseeded upstream runs agree with the reference
+  within 1.4e-7 Ha; a simulated run from real server outputs passes all checks
+  with full score; offline tests in `tests/test_mcp_e2e_bond_stretch.py`.
+  AWS Linux amd64, `claude-opus-5-5`, seed 31415, B1–B4 ×3: local score
+  1200/1200 and verifier 12/12 PASS on every check, including the image result
+  of the plot call (so the extractor metadata matches Claude Code's format).
+  macOS full suite: only the two known environment failures plus the timing
+  sensitive `test_parallel_local_scoring_is_bounded_isolated_and_ordered`
+  (untouched code path).
+- Implementation commit: `39745b3`.

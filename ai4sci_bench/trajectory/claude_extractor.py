@@ -110,28 +110,47 @@ def extract_from_jsonl(jsonl_text: str, instance_id: str = "") -> Trajectory:
                     continue
                 if block.get("type") == "tool_result":
                     inner = block.get("content", "")
+                    # Non-text blocks (e.g. MCP images) are not copied into the
+                    # trajectory, but their presence and media type are recorded
+                    # so that a returned image stays observable.
+                    content_types: list[str] = []
+                    image_media_types: list[str] = []
                     if isinstance(inner, list):
                         parts = []
                         for item in inner:
-                            if isinstance(item, dict) and item.get("type") == "text":
+                            if not isinstance(item, dict):
+                                continue
+                            item_type = str(item.get("type", ""))
+                            content_types.append(item_type)
+                            if item_type == "text":
                                 parts.append(str(item.get("text", "")))
+                            elif item_type == "image":
+                                source = item.get("source") if isinstance(item.get("source"), dict) else {}
+                                image_media_types.append(str(
+                                    source.get("media_type") or item.get("media_type") or item.get("mimeType") or ""
+                                ))
                         text = "\n".join(parts)
                     else:
                         text = str(inner)
+                        content_types.append("text")
                     is_error = bool(block.get("is_error"))
                     result_tool_call_id = block.get("tool_use_id", "")
                     parent_tool = tool_id_to_name.get(result_tool_call_id, "")
+                    metadata = {
+                        "tool_call_id": result_tool_call_id,
+                        "is_error": is_error,
+                        "output_length": len(text),
+                        "parent_tool_name": parent_tool,
+                        "content_types": content_types,
+                    }
+                    if image_media_types:
+                        metadata["image_media_types"] = image_media_types
                     steps.append(TrajectoryStep(
                         step_index=step_idx,
                         timestamp_ms=ts_ms,
                         step_type="tool_result",
                         content=text,
-                        metadata={
-                            "tool_call_id": result_tool_call_id,
-                            "is_error": is_error,
-                            "output_length": len(text),
-                            "parent_tool_name": parent_tool,
-                        },
+                        metadata=metadata,
                     ))
                     step_idx += 1
 

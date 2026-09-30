@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "server": "pyscf",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "calls": [
+    {
+      "name": "scan",
+      "tool": "run_bond_stretch_calculation_mcp",
+      "inputs_from_reference": {
+        "smiles_string": "smiles",
+        "atom1_idx": "atom1_idx",
+        "atom2_idx": "atom2_idx",
+        "start_dist": "start_dist",
+        "end_dist": "end_dist",
+        "num_points": "num_points"
+      },
+      "result": {"format": "json", "key": "energies", "reference_key": "energies_hartree", "abs_tol": 1e-5}
+    },
+    {
+      "name": "plot",
+      "tool": "plot_energy_scan_image_mcp",
+      "inputs_from_call": {"call": "scan", "map": {"bond_lengths": "bond_lengths", "energies": "energies"}},
+      "result": {"format": "image", "media_type": "image/png"}
+    }
+  ],
+  "answers": [
+    {"prediction_key": "energies_hartree", "from_call": "scan", "result_key": "energies",
+     "reference_key": "energies_hartree", "abs_tol": 1e-5},
+    {"prediction_key": "bond_lengths", "from_call": "scan", "result_key": "bond_lengths",
+     "reference_key": "bond_lengths", "abs_tol": 1e-6}
+  ],
+  "bypass_patterns": [
+    "(import|from)\\s+(pyscf|psi4|rdkit)\\b",
+    "\\b(pip|pip3|uv|uvx|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b[^\\n]*\\b(pyscf|psi4|rdkit)\\b",
+    "\\buv\\s+run\\b[^\\n]*--with\\b[^\\n]*\\b(pyscf|psi4|rdkit)\\b",
+    "\\buvx\\b[^\\n]*\\b(pyscf|psi4|rdkit)\\b"
+  ],
+  "suspicious_patterns": [
+    "\\bpyscf\\b",
+    "\\bmatplotlib\\b",
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ]
+}

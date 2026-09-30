@@ -1,0 +1,40 @@
+task_id: mcp_e2e.pyscf_bond_stretch
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    - scorer: pyscf_e2e_scan_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  scoring:
+    - scorer: pyscf_e2e_scan_energies
+      weight: 80
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        # Max |E_pred - E_ref| over the grid, in Hartree. The server builds its
+        # geometry from an unseeded conformer, so agreement is ~1e-7, not 1e-12.
+        full_score_tol: 1.0e-5
+        zero_score_tol: 1.0e-3
+        grid_tol: 1.0e-6
+    - scorer: pyscf_e2e_scan_minimum
+      weight: 20
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        length_tol: 1.0e-6
+        energy_tol: 1.0e-5
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 300
