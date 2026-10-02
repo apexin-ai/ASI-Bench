@@ -653,6 +653,26 @@ evidence.
 uv run --frozen pytest tests/test_mcp_e2e_codex.py -q
 ```
 
+`tests/test_mcp_e2e_arxiv.py` covers `mcp_e2e.arxiv_search_snippets` and the
+non-numeric verifier checks offline (no MCP server, no network): deterministic
+case selection over all curated cases, no `OR` in curated queries (the tool's
+date clause has no parentheses), the selection tie rule, snippet counting with
+the tool's semantics and cap, Atom parsing, B1-only tool naming and the ban on
+web tools/HTTP in every prompt; the scorers (ID normalisation, order, pick,
+per-term credit, submission vs evaluator failures); and `verify_run.py` with
+named extractors: a genuine Claude run and a Codex run pass every check,
+snippets by `pdf_url` and per-term calls pass (inputs WARN), a paper not
+returned by the search breaks the chain, the default per-term cap gives wrong
+counts, answers must equal tool-returned values, in-band tool errors are not
+results, `WebFetch` of arxiv.org and shell HTTP/arXiv libraries are bypass
+(FAIL) while web search and writing the answer with Python are not, Codex
+`web_search` items are recorded (WARN), and extra server tools (the
+ToolUniverse workspace trap) WARN in `mcp_connected`.
+
+```bash
+uv run --frozen pytest tests/test_mcp_e2e_arxiv.py -q
+```
+
 The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`. Verifier fixtures are persisted through the
 real run redaction and Claude trajectory extractor, so tool results are only

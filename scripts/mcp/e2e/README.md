@@ -39,8 +39,10 @@ Verified 2026-09-29: the original pyscf smoke (`pyscf_rhf_energy` +
 aarch64. The all-tools smoke below passed on both with identical values
 (19 PASS, 8 WARN, 0 FAIL, ~4 s).
 
-The arxiv smoke passed on Linux aarch64 on 2026-09-30 (16 PASS, 8 WARN, 0 FAIL,
-~85 s including the 3 s arXiv request spacing); AWS amd64 pending.
+The arxiv smoke passed on 2026-09-30 on Linux aarch64 and AWS Linux amd64
+(16 PASS, 8 WARN, 0 FAIL, ~85 s including the 3 s arXiv request spacing). The
+smoke process may print a harmless pydub "Couldn't find ffmpeg" warning when it
+imports MarkItDown for the reference.
 
 ## Run (Linux, as the unprivileged E2E user)
 
@@ -157,6 +159,9 @@ Implications for agent runs:
   date windows, parenthesise OR groups, pin a single-version paper, and must
   not score abstracts or `updated` (they change when authors post a new
   version).
-- The agent's shell has network under `--sandbox none` (Claude runs without
-  WebSearch/WebFetch in restricted mode and Codex with `web_search` disabled,
-  but `curl` still works); `no_bypass` patterns must cover direct arXiv access.
+- `--mcp-config` forces search mode, so Claude Code has `WebSearch`/`WebFetch`
+  and Codex keeps `web_search`; the host shell has network access too. The L2
+  task's `e2e_check.json` therefore flags web tools and direct arXiv access.
+
+L2 coverage: `ArXiv_search_papers` → `ArXiv_get_pdf_snippets`
+(`mcp_e2e.arxiv_search_snippets`, both tools, chained).

@@ -1018,3 +1018,55 @@
   B1-only pass with the same result. macOS full suite: only the two known
   environment failures once `AGENTS.md` was synchronised.
 - Implementation commit: `7455855`.
+
+## 2026-09-30: arxiv (ToolUniverse) MCP smoke (L1)
+
+- Problem: the second MCP E2E server, ToolUniverse's arXiv tools, needs live
+  network data and a 700 MB general-purpose server; the L0 survey had shown
+  only `initialize` and `tools/list`.
+- Resolution: manifest entry `arxiv` (Python 3.12, `uv sync --no-dev`) with a
+  launch `env`; `setup.py` now supports launch `env`, extra `uv_sync_args` and a
+  `{checkout}` placeholder so non-path CLI flags stay literal.
+  `smoke_arxiv.py` compares five searches field by field with raw arXiv API
+  queries and the snippet tool with snippets cut from the same PDF version,
+  converted with the same MarkItDown; all queries use closed 2011 windows.
+  Shared report/call helpers moved to `smoke_common.py`.
+- Lesson: a `./.tooluniverse` directory in the server cwd makes ToolUniverse
+  load its default profile and ignore `--include-tools`, exposing 2718 tools;
+  the default result cache (forever, `~/.tooluniverse/cache.sqlite`) creates
+  that directory whenever cwd is `$HOME` and would also hide real calls. The
+  launch env disables the cache; `TOOLUNIVERSE_HOME`/`--workspace` must not be
+  used. FastMCP 3 ignores the catalog's `FASTMCP_NO_BANNER`.
+- Lesson: other upstream defects (WARN): an `OR` query with a date range loses
+  the date filter (missing parentheses), `truncated` stays false when the cap
+  drops matches, old-style IDs containing `v` break, errors are in-band.
+- Verification: 16 PASS / 8 WARN / 0 FAIL on Linux aarch64 (twice) and AWS
+  Linux amd64 (same WARNs); offline tests in `tests/test_mcp_e2e_scripts.py`.
+- Implementation commit: `c0fc58f`.
+
+## 2026-10-02: L2 arxiv search → snippets task and non-numeric verifier checks
+
+- Problem: the verifier compared only numbers, and the pyscf tasks never had
+  an alternative data source. For arXiv the agent has one: `--mcp-config`
+  forces search mode, so Claude Code gets `WebSearch`/`WebFetch`, Codex keeps
+  `web_search`, and the host shell has network access.
+- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/arxiv_search_snippets`: search a
+  closed date window, pick the paper with the most authors, fetch snippets for
+  two terms from its PDF, report IDs, the pick and per-term snippet counts.
+  Counts, not snippet text, are scored because MarkItDown garbles two-column
+  PDFs. The reference comes from the raw arXiv API and MarkItDown/pdfminer/
+  pdfplumber pinned to the server's lockfile, in `generate --sandbox task`.
+  `verify_run.py` gained named extractors (`arxiv_ids`, `term_counts`) with
+  `match` = equal/subset/member, member chaining (the snippet call must use a
+  paper the search returned, by `arxiv_id` or `pdf_url`), merged answers over
+  per-term calls, `bypass_tools`/`suspicious_tools` for non-MCP tool calls
+  (WebFetch of arxiv.org FAILs, web search WARNs; Codex `web_search` items are
+  now parsed), and `server_tools` (WARN when the server offers more tools, i.e.
+  the ToolUniverse workspace trap).
+- Lesson: check which built-in tools a harness gets in the mode MCP forces;
+  "restricted" assumptions do not hold for `--mcp-config` runs.
+- Verification: `tests/test_mcp_e2e_arxiv.py` (33 offline tests); the MCP tool
+  returned exactly the reference counts and IDs for three of the five cases;
+  `asibench generate --sandbox task` + an oracle `--agent-cmd` run scored
+  100/100 while `verify_run.py` failed it for lack of MCP evidence.
+  AWS agent runs and the implementation commit ID are added with the results.

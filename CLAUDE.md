@@ -133,7 +133,11 @@
   的隔离环境中计算，agent 以 `--sandbox none` 运行。scorer 只比对输出与 reference；
   是否真实调用 MCP 工具、答案是否来自工具及是否绕过 MCP 由 `scripts/mcp/e2e/verify_run.py`
   依据 `e2e_check.json`（schema 2：多工具 `calls`、`inputs_from_call` 串联、
-  `image` 结果、`answers`；schema 1 自动归一化）读取 run 产物判定，框架评分契约不变。
+  `image` 结果、`answers`；schema 1 自动归一化；非数值结果用命名 `extract`
+  与 `match` equal/subset/member，`bypass_tools`/`suspicious_tools` 检查 WebFetch 等
+  非 MCP 工具，`server_tools` 多出工具记 WARN）读取 run 产物判定，框架评分契约不变。
+  `--mcp-config` 强制 search mode，Claude 有 WebSearch/WebFetch、Codex 有 web_search，
+  联网类 fake task 必须把它们纳入 bypass 检查。
   持久化 stream-json 会脱敏 user 事件（含 tool_result），工具返回值须从同 tool_call_id
   的 trajectory 补齐；Claude/Codex trajectory 不保存图片内容，只在 tool_result metadata 记录
   `content_types` / `image_media_types`。Codex 证据来自 `exec --json` 的 `mcp_tool_call`
