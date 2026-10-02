@@ -291,11 +291,16 @@
     "category": "quantum-chemistry",
     "source": "https://github.com/Keith9922/chemaster",
     "server": {
-      "command": "/path/to/chemaster/.venv/bin/chemaster-mcp",
+      "command": "/path/to/chemaster/.venv/bin/python",
       "args": [
-        "calc_psi4"
+        "-m",
+        "chemaster.mcp.calc_psi4.server"
       ],
-      "cwd": "/path/to/chemaster"
+      "cwd": "/path/to/chemaster",
+      "env": {
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "/path/to/chemaster"
+      }
     }
   },
   "pyscf": {

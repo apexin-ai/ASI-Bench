@@ -621,6 +621,22 @@ convergence, the square-lattice shell → order mapping, that every smoke grid
 avoids Rayleigh anomalies, the spectrum shape/grid checks, and that stubbed
 servers answering from the references PASS while a TE/TM swap or a Li-rule
 grating FAILs; defect probes WARN only when a misuse is accepted.
+For psi4 it checks the `conda-explicit` install mode (fresh `micromamba create
+--no-rc --prefix .venv --file <lock>` with the package cache under
+`<root>/.micromamba` and conda/mamba variables dropped; an old conda prefix is
+replaced, a non-conda `.venv` is refused; missing micromamba or a platform
+without a lock is an error), the committed locks (header matches the manifest,
+every spec present, conda-forge `<platform>`/`noarch` URLs with `#sha256:`;
+stale, foreign, md5-only or wrong-channel locks rejected), `setup.py --lock`
+from `micromamba --dry-run --json` output (and that `--lock` is refused for
+non-conda servers), malformed `conda` fields, a bare `{checkout}` in launch
+`env`, and the psi4-free parts of `smoke_psi4.py`: geometry parsing (psi4
+`charge multiplicity` header, XYZ, bare lines), the frequency classification
+(signed match PASS, imaginary sign dropped WARN, anything else FAIL), the
+tri-state correct/defect/FAIL helper, excited-state comparison, the
+`optimize_excited_state` verdicts against a stubbed reference (a real S1
+minimum PASS, the ground-state minimum WARN, other energies FAIL) and that a
+valid request answered with `ok:false` is a FAIL.
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
@@ -650,6 +666,15 @@ Expected outcome on the pinned revision: `PASS` with 0 FAIL and 7 WARN
 (swapped incidence/substrate, inner incidence layer, unknown layer material,
 θ = 90° and 120°, negative thickness, duplicate layer names); a locally built
 `libS4.so` adds an eighth WARN for the binary's SHA-256.
+For psi4 (Linux x86-64 or aarch64, `micromamba` on `PATH`):
+`python3 scripts/mcp/e2e/setup.py psi4`, then `~/mcp/psi4/.venv/bin/python
+scripts/mcp/e2e/smoke_psi4.py --config ~/mcp/psi4.mcp.json` (no network,
+~20 s). Expected outcome on the pinned revision: `PASS` with 0 FAIL and 11 WARN
+(null `single_point` fields, in-band invalid multiplicity, `optimize`
+`n_iterations` 0, zero IR intensities, ignored `temperature_K`, saddle-point
+imaginary mode returned as real, `n_states` split between spins,
+`optimize_excited_state` returning the ground-state minimum and the starting
+geometry's excitation energy, stdout lines, `timer.dat` in the cwd).
 
 `tests/test_mcp_e2e_jsbsim.py` covers `mcp_e2e.jsbsim_engine_run` and the
 verify_run extensions it needs, without JSBSim: deterministic, varied seeded

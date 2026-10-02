@@ -900,3 +900,295 @@ def test_s4_server_env_is_minimal_and_applies_config_env(tmp_path, monkeypatch):
                         tmp_path / "home", tmp_path / "tmp")
     assert env["PYTHONPATH"] == "/m/s4/src" and env["PATH"].startswith("/m/s4/.venv/bin:")
     assert "OPENAI_API_KEY" not in env
+
+
+# --- psi4: conda-explicit install mode ---------------------------------------
+
+def _psi4_manifest(tmp_path, mutate):
+    document = json.loads((BUNDLE / "manifest.json").read_text())
+    mutate(next(e for e in document["servers"] if e["id"] == "psi4"))
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(document))
+    return path
+
+
+def test_psi4_config_runs_module_from_checkout(tmp_path):
+    entry = setup.load_manifest()["psi4"]
+    dest = tmp_path / "psi4"
+    path = tmp_path / "psi4.mcp.json"
+    path.write_text(json.dumps(setup.render_config(entry, dest)))
+    server = load_mcp_config(path)["psi4"]
+    assert server["command"] == str(dest / ".venv/bin/python")
+    assert server["args"] == ["-m", "chemaster.mcp.calc_psi4.server"]
+    assert server["env"] == {"OMP_NUM_THREADS": "1", "PYTHONPATH": str(dest)}   # bare {checkout} allowed
+    assert entry["install"] == "conda-explicit" and "requirements" not in entry
+
+
+@pytest.mark.parametrize("plat", sorted(setup.load_manifest()["psi4"]["conda"]["locks"]))
+def test_committed_conda_locks_match_manifest(plat):
+    entry = setup.load_manifest()["psi4"]
+    lock = setup.read_conda_lock(entry, plat)
+    urls = [line for line in lock.read_text().splitlines() if line.startswith("https://")]
+    names = {u.rsplit("/", 1)[1].rsplit("-", 2)[0] for u in urls}
+    assert {"python", "psi4", "dftd3-python", "mcp", "pint", "scipy"} <= names
+    for spec in entry["conda"]["specs"]:
+        name, version = spec.split("=")
+        assert any(f"/{name}-{version}-" in u for u in urls), spec
+    assert len(urls) == len(set(urls))
+
+
+def test_conda_platform_mapping():
+    assert setup.conda_platform("Linux", "x86_64") == "linux-64"
+    assert setup.conda_platform("Linux", "aarch64") == "linux-aarch64"
+    assert setup.conda_platform("Darwin", "arm64") == "osx-arm64"
+    with pytest.raises(setup.SetupError, match="no conda platform"):
+        setup.conda_platform("Windows", "AMD64")
+
+
+def _lock_bundle(tmp_path, entry, plat, lines=None, header=None):
+    path = tmp_path / entry["conda"]["locks"][plat]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    url = (f"https://conda.anaconda.org/conda-forge/{plat}/psi4-1.11-py312_1.conda#sha256:" + "a" * 64)
+    body = lines if lines is not None else ["@EXPLICIT", url]
+    path.write_text("\n".join([*(header if header is not None else setup.lock_header(entry, plat)), *body]) + "\n")
+    return tmp_path
+
+
+@pytest.mark.parametrize("kind,match", [
+    ("stale_specs", "stale or foreign"),
+    ("other_platform", "stale or foreign"),
+    ("no_explicit", "@EXPLICIT"),
+    ("md5_only", "sha256"),
+    ("other_channel", "sha256"),
+    ("other_subdir", "sha256"),
+    ("missing_platform", "no conda lock"),
+])
+def test_read_conda_lock_rejects_stale_or_foreign_locks(tmp_path, kind, match):
+    entry = json.loads(json.dumps(setup.load_manifest()["psi4"]))
+    plat = "linux-64"
+    header = lines = None
+    good = f"https://conda.anaconda.org/conda-forge/{plat}/psi4-1.11-py312_1.conda"
+    if kind == "stale_specs":
+        header = [h.replace("psi4=1.11", "psi4=1.10") for h in setup.lock_header(entry, plat)]
+    elif kind == "other_platform":
+        header = setup.lock_header(entry, "linux-aarch64")
+    elif kind == "no_explicit":
+        lines = [good + "#sha256:" + "a" * 64]
+    elif kind == "md5_only":
+        lines = ["@EXPLICIT", good + "#" + "b" * 32]
+    elif kind == "other_channel":
+        lines = ["@EXPLICIT", good.replace("conda-forge", "psi4") + "#sha256:" + "a" * 64]
+    elif kind == "other_subdir":
+        lines = ["@EXPLICIT", good.replace(plat, "linux-aarch64") + "#sha256:" + "a" * 64]
+    bundle = _lock_bundle(tmp_path, entry, plat, lines, header)
+    if kind == "missing_platform":
+        plat = "osx-arm64"
+    with pytest.raises(setup.SetupError, match=match):
+        setup.read_conda_lock(entry, plat, bundle)
+    if kind == "stale_specs":
+        _lock_bundle(tmp_path, entry, plat)
+        setup.read_conda_lock(entry, plat, tmp_path)       # noarch/plat sha256 URLs with matching header
+
+
+@pytest.mark.parametrize("mutate,match", [
+    (lambda e: e.pop("conda"), "exactly"),
+    (lambda e: e["conda"].update(extra=1), "exactly"),
+    (lambda e: e["conda"].update(channel="https://x"), "channel"),
+    (lambda e: e["conda"].update(specs=["psi4>=1.11", "python=3.12.14"]), "exact"),
+    (lambda e: e["conda"].update(specs=["psi4=1.11"]), "pin python"),
+    (lambda e: e["conda"].update(specs=["python=3.11.9", "psi4=1.11"]), "pin python"),
+    (lambda e: e["conda"].update(locks={"win-64": "locks/x.txt"}), "platforms"),
+    (lambda e: e["conda"].update(locks={"linux-64": "/abs/x.txt"}), "relative"),
+    (lambda e: e["conda"].update(locks={"linux-64": "../x.txt"}), "relative"),
+    (lambda e: e.update(requirements=["mcp==1.0"]), "only apply"),
+    (lambda e: e.update(uv_sync_args=["--no-dev"]), "uv_sync_args"),
+    (lambda e: e.update(install="uv-sync-frozen"), "conda only applies"),
+    (lambda e: e["launch"]["env"].update(PYTHONPATH="{checkout}x"), "prefix"),
+])
+def test_manifest_rejects_bad_conda_fields(tmp_path, mutate, match):
+    with pytest.raises(setup.SetupError, match=match):
+        setup.load_manifest(_psi4_manifest(tmp_path, mutate))
+
+
+def test_conda_install_creates_fresh_prefix_from_lock(tmp_path, monkeypatch):
+    entry = setup.load_manifest()["psi4"]
+    dest = tmp_path / "root" / "psi4"
+    old = dest / ".venv"
+    (old / "conda-meta").mkdir(parents=True)
+    (old / "stale").write_text("x")
+    commands = []
+
+    def fake_run(cmd, cwd=None, env=None):
+        commands.append((cmd, env))
+        if cmd[1:2] == ["create"]:
+            assert not old.exists(), "previous prefix must be removed first"
+            assert env["MAMBA_ROOT_PREFIX"] == str(tmp_path / "root" / ".micromamba")
+            assert "CONDA_PREFIX" not in env and "PYTHONPATH" not in env
+        return entry["python"] if cmd[-1].startswith("import sys") else ""
+
+    monkeypatch.setenv("CONDA_PREFIX", "/opt/conda")
+    monkeypatch.setenv("MAMBA_ROOT_PREFIX", "/elsewhere")
+    monkeypatch.setattr(setup, "run", fake_run)
+    monkeypatch.setattr(setup.shutil, "which", lambda name: f"/usr/local/bin/{name}" if name == "micromamba" else None)
+    monkeypatch.setattr(setup, "conda_platform", lambda *a: "linux-aarch64")
+    python = setup.build_env(entry, dest)
+    assert python == dest / ".venv/bin/python"
+    create = commands[0][0]
+    assert create == ["/usr/local/bin/micromamba", "create", "--yes", "--no-rc", "--prefix", str(dest / ".venv"),
+                      "--file", str(BUNDLE / "locks/psi4-linux-aarch64.txt")]
+    assert not any("uv" in c[0][0] for c in commands)       # uv is not needed for conda-explicit
+
+
+def test_conda_install_refuses_foreign_prefix_and_missing_micromamba(tmp_path, monkeypatch):
+    entry = setup.load_manifest()["psi4"]
+    monkeypatch.setattr(setup, "conda_platform", lambda *a: "linux-64")
+    monkeypatch.setattr(setup.shutil, "which", lambda name: None)
+    with pytest.raises(setup.SetupError, match="micromamba not found"):
+        setup.build_env(entry, tmp_path)
+    monkeypatch.setattr(setup.shutil, "which", lambda name: "/bin/micromamba")
+    (tmp_path / ".venv").mkdir()                  # e.g. a uv venv: never delete it
+    with pytest.raises(setup.SetupError, match="not a conda prefix"):
+        setup.build_env(entry, tmp_path)
+    assert (tmp_path / ".venv").is_dir()
+    monkeypatch.setattr(setup, "conda_platform", lambda *a: "osx-arm64")
+    with pytest.raises(setup.SetupError, match="no conda lock for platform osx-arm64"):
+        setup.build_env(entry, tmp_path)
+
+
+def test_write_conda_locks_from_dry_run_json(tmp_path, monkeypatch):
+    entry = setup.load_manifest()["psi4"]
+    seen = []
+
+    def fake_run(cmd, cwd=None, env=None):
+        if cmd[-1] == "--version":
+            return "2.9.0"
+        seen.append((cmd, env))
+        plat = cmd[cmd.index("--platform") + 1]
+        pkgs = [{"url": f"https://conda.anaconda.org/conda-forge/{sub}/{n}.conda", "sha256": c * 64}
+                for n, sub, c in (("zlib-1.3-h0_0", plat, "1"), ("mcp-1.28.1-pyhd8ed1ab_0", "noarch", "2"))]
+        return json.dumps({"actions": {"LINK": pkgs}})
+
+    monkeypatch.setattr(setup, "run", fake_run)
+    monkeypatch.setattr(setup.shutil, "which", lambda name: "/bin/micromamba")
+    written = setup.write_conda_locks(entry, tmp_path / "root", bundle=tmp_path)
+    assert sorted(p.name for p in written) == ["psi4-linux-64.txt", "psi4-linux-aarch64.txt"]
+    for cmd, env in seen:
+        assert {"--dry-run", "--json", "--override-channels", "--no-rc"} <= set(cmd)
+        assert cmd[-len(entry["conda"]["specs"]):] == entry["conda"]["specs"]
+        assert env["CONDA_OVERRIDE_GLIBC"] == setup.LOCK_GLIBC
+    text = (tmp_path / "locks/psi4-linux-64.txt").read_text()
+    assert text.splitlines()[-2:] == [
+        "https://conda.anaconda.org/conda-forge/linux-64/zlib-1.3-h0_0.conda#sha256:" + "1" * 64,
+        "https://conda.anaconda.org/conda-forge/noarch/mcp-1.28.1-pyhd8ed1ab_0.conda#sha256:" + "2" * 64,
+    ]
+    assert "@EXPLICIT" in text
+    assert setup.read_conda_lock(entry, "linux-64", tmp_path)
+
+
+def test_lock_flag_only_applies_to_conda_servers(tmp_path, monkeypatch):
+    monkeypatch.setattr(setup, "ensure_checkout", lambda *a: pytest.fail("--lock must not clone"))
+    assert setup.main(["pyscf", "--lock", "--root", str(tmp_path)]) == 1
+
+
+# --- smoke_psi4: helpers and psi4-free checks --------------------------------
+
+p4 = _load("smoke_psi4")
+
+
+def test_psi4_parse_geometry_accepts_psi4_xyz_and_bare_lines():
+    psi4_out = "0 1\n O    0.0  0.0  0.07\n H    0.0  0.75 -0.56\n H    0.0 -0.75 -0.56\n"
+    xyz = "3\nwater\nO 0 0 0.07\nH 0 0.75 -0.56\nH 0 -0.75 -0.56"
+    assert p4.parse_geometry(psi4_out) == p4.parse_geometry(xyz)
+    assert [s for s, _ in p4.parse_geometry(p4.H2O_START)] == ["O", "H", "H"]
+    with pytest.raises(ValueError):
+        p4.parse_geometry("0 1\n")
+
+
+def test_psi4_classify_frequencies():
+    ref = [-1081.6, 1866.4, 1866.4, 4023.5, 4363.4, 4363.4]
+    assert p4.classify_frequencies(ref, ref, 1)[0] == "PASS"
+    dropped_i = [abs(f) for f in ref]
+    status, detail = p4.classify_frequencies(dropped_i, ref, 0)
+    assert status == "WARN" and "-1081.6" in detail
+    assert p4.classify_frequencies(ref, ref, 0)[0] == "FAIL"                 # right values, wrong count
+    assert p4.classify_frequencies([f + 5 for f in dropped_i], ref, 0)[0] == "FAIL"
+    minimum = [2170.28, 4139.70, 4390.74]
+    assert p4.classify_frequencies(minimum, minimum, 0)[0] == "PASS"
+    assert p4.classify_frequencies(minimum[:2], minimum, 0)[0] == "FAIL"
+
+
+def test_psi4_classify_alternative_and_value_of():
+    assert p4.classify_alternative(1.0, 1.0, 2.0, 1e-6) == "PASS"
+    assert p4.classify_alternative(2.0, 1.0, 2.0, 1e-6) == "WARN"
+    assert p4.classify_alternative(3.0, 1.0, 2.0, 1e-6) == "FAIL"
+    assert p4.classify_alternative(None, 1.0, 2.0, 1e-6) == "FAIL"
+    assert p4.value_of({"value": -1.5, "unit": "Hartree"}) == -1.5
+    assert p4.value_of(0.3) == 0.3 and p4.value_of(None) is None and p4.value_of(True) is None
+
+
+def test_psi4_compare_states():
+    server = [{"excitation_energy": {"value": 7.0001, "unit": "eV"}, "oscillator_strength": 0.0157},
+              {"excitation_energy": {"value": 9.2, "unit": "eV"}, "oscillator_strength": 0.0}]
+    de, df = p4.compare_states(server, [(7.0, 0.0157), (9.2, 0.0)])
+    assert de == pytest.approx(1e-4) and df == 0.0
+    assert p4.compare_states([{"excitation_energy": None, "oscillator_strength": 0.1}], [(1.0, 0.1)])[0] == math.inf
+
+
+def _p4json(obj):
+    return {"result": {"content": [{"type": "text", "text": json.dumps(obj)}], "structuredContent": obj,
+                       "isError": False}}
+
+
+class _FakeRef:
+    """Psi4Ref stand-in with fixed reference numbers."""
+
+    def __init__(self, ground_minimum=-75.3231):
+        self.ground_minimum = ground_minimum
+
+    def excited_total(self, atoms, *args):
+        return -75.3231, -74.9473
+
+    def excited_gradient_norm(self, *args):
+        return 1e-4
+
+    def optimize(self, *args, **kwargs):
+        return self.ground_minimum, p4.parse_geometry(_WATER)
+
+
+_WATER = "O 0 0 0.076\nH 0 0.771 -0.603\nH 0 -0.771 -0.603"
+
+
+@pytest.mark.parametrize("energy,exc,ground_min,expected", [
+    (-74.9473, 10.2264, -75.3231, ("PASS", None)),                        # a real S1 minimum
+    (-75.3231, 11.0565, -75.3231, ("WARN", "WARN")),                      # upstream: ground-state minimum
+    (-75.3231, 10.2264, -75.0, ("FAIL", None)),                           # E(S0) but not the S0 minimum
+    (-70.0, 10.2264, -75.3231, ("FAIL", None)),
+])
+def test_psi4_excited_state_opt_classification(energy, exc, ground_min, expected):
+    result = {"ok": True, "result": {"final_total_energy": {"value": energy, "unit": "Hartree"},
+                                     "excitation_energy_at_opt": {"value": exc, "unit": "eV"},
+                                     "optimized_geometry_xyz": "0 1\n" + _WATER, "converged": True}}
+    report = p4.Report()
+    call = p4.Caller(_StubClient({"optimize_excited_state": _p4json(result)}), report)
+    p4.check_excited_state_opt(call, report, _FakeRef(ground_min), p4.parse_geometry(_WATER))
+    statuses = _statuses(report)
+    main = next(v for k, v in statuses.items() if not k.endswith("[excitation_energy_at_opt]"))
+    side = next((v for k, v in statuses.items() if k.endswith("[excitation_energy_at_opt]")), None)
+    assert (main, side) == expected
+    assert call.client.calls[0][1]["memory_gb"] == 1
+
+
+def test_psi4_tool_payload_fails_on_in_band_error_for_valid_requests():
+    report = p4.Report()
+    bad = {"ok": False, "error_code": "PSI4_INTERNAL_ERROR", "details": "No module named 'psi4'"}
+    call = p4.Caller(_StubClient({"single_point": _p4json(bad)}), report)
+    assert p4.tool_payload(call, report, "sp", "single_point", {}) is None
+    assert _statuses(report) == {"sp": "FAIL"} and "psi4" in report.checks[0]["detail"]
+
+
+def test_psi4_server_env_is_minimal_and_applies_config_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
+    env = p4.server_env({"command": "/m/psi4/.venv/bin/python", "env": {"PYTHONPATH": "/m/psi4"}},
+                        tmp_path / "home", tmp_path / "tmp")
+    assert env["PYTHONPATH"] == "/m/psi4" and env["TMPDIR"] == str(tmp_path / "tmp")
+    assert "ANTHROPIC_API_KEY" not in env

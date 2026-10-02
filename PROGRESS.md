@@ -1220,3 +1220,38 @@
 - Implementation commits: `29ba5a5` (task, verifier `select`), `7b78b11`
   (structured-output unwrapping).
 
+## 2026-10-02: psi4 (ChemMaster calc_psi4) MCP smoke (L1) and conda-explicit install
+
+- Problem: the catalog's psi4 server (`Keith9922/chemaster`, `chemaster-mcp
+  calc_psi4`) imports psi4 lazily, so the L0 survey passed although every
+  `tools/call` would fail with `No module named 'psi4'`. psi4 has no PyPI wheel
+  (and ChemMaster is not on PyPI), so neither uv install mode can provide it.
+- Resolution: install mode `conda-explicit`: manifest `conda` (`channel`,
+  exact `specs`, per-platform `locks`) and committed `@EXPLICIT` locks with
+  SHA-256 for linux-64 and linux-aarch64, installed by `micromamba create
+  --file` without a solver; `setup.py <id> --lock` regenerates them. Manifest
+  entry `psi4` (psi4 1.11, dftd3-python 1.6.0, mcp 1.28.1, Python 3.12.14) runs
+  the checkout with `python -m chemaster.mcp.calc_psi4.server` and
+  `PYTHONPATH={checkout}` (a bare `{checkout}` is now a valid launch `env`
+  value). `smoke_psi4.py` calls all five tools and compares with psi4 run in
+  the smoke process through wavefunctions, `psi4.variable` and
+  `tdscf_excitations` rather than the server's log parsers.
+- Lesson: when a smoke deliberately probes a known upstream defect, classify
+  tri-state — PASS for the correct answer, WARN only when the output matches
+  the recognised defect exactly, FAIL for anything else — so a changed
+  upstream cannot hide behind a WARN. Here: the planar-NH3 saddle's
+  1081.6i cm⁻¹ mode comes back as +1081.6 with `n_imaginary` 0, and
+  `optimize_excited_state` returns the ground-state minimum (psi4's
+  finite-difference TDSCF optimisation ignores `FOLLOW_ROOT`); checks at true
+  minima PASS.
+- Lesson: psi4 1.11 has no `psi4.core.get_active_wavefunction`; upstream's
+  `conftest.py` monkeypatches it, so its tests never saw that
+  `n_basis_functions`, `n_iterations`, `homo_lumo_gap` and `dipole` are always
+  null and frequencies always come from the log parser (IR intensities zero).
+- Lesson: conda-forge's `mcp` lags PyPI (1.28.1 is the newest 1.x); pinning it
+  in conda avoids mixing pip-installed pydantic into the conda prefix.
+- Verification: Linux aarch64: 14 PASS / 11 WARN / 0 FAIL, ~20 s, four runs
+  with identical verdicts; tampering with one lock SHA-256 makes micromamba
+  abort. Offline tests in `tests/test_mcp_e2e_scripts.py`. AWS amd64 smoke
+  pending.
+- Implementation commit: pending.

@@ -8,7 +8,10 @@ Stdlib only. For the server ``<id>`` listed in ``manifest.json`` this:
 2. builds an isolated virtualenv with ``uv`` using the manifest's Python
    version (``UV_PYTHON`` from the caller's shell is ignored on purpose):
    ``uv sync --frozen`` against the upstream lockfile, or, for upstreams without
-   one, ``uv pip install`` of exact manifest pins with ``--exclude-newer``;
+   one, ``uv pip install`` of exact manifest pins with ``--exclude-newer``; or,
+   for servers that need conda-only packages (psi4), a ``micromamba`` prefix
+   created from a committed per-platform ``@EXPLICIT`` lock (exact package
+   URLs + SHA-256, no solver at install time);
 3. writes a portable ``<root>/<id>.mcp.json`` for ``asibench run --mcp-config``
    (``{checkout}`` in launch args / env values becomes the absolute checkout).
 
@@ -26,11 +29,17 @@ Usage::
     python3 scripts/mcp/e2e/setup.py arxiv [--root ~/mcp]
     python3 scripts/mcp/e2e/setup.py jsbsim [--root ~/mcp]
     python3 scripts/mcp/e2e/setup.py s4 [--root ~/mcp]
+    python3 scripts/mcp/e2e/setup.py psi4 [--root ~/mcp]
+
+Conda locks are regenerated (maintainers only, needs network) with::
+
+    python3 scripts/mcp/e2e/setup.py psi4 --lock [--root ~/mcp]
 """
 from __future__ import annotations
 
 import argparse
 import ctypes
+import datetime as dt
 import json
 import os
 from pathlib import Path
@@ -47,11 +56,26 @@ CHECKOUT = "{checkout}"
 # uv-sync-frozen: upstream ships pyproject.toml + uv.lock -> `uv sync --frozen`.
 # uv-pip-pinned:  upstream has no lockfile -> fresh venv + `uv pip install` of the
 #                 manifest's exact `name==version` pins, resolved with --exclude-newer.
-INSTALL_MODES = ("uv-sync-frozen", "uv-pip-pinned")
+# conda-explicit: conda-only dependencies -> `micromamba create --file <lock>` from a
+#                 committed @EXPLICIT lock for the host's conda platform.
+INSTALL_MODES = ("uv-sync-frozen", "uv-pip-pinned", "conda-explicit")
 PIN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9._,-]+\])?==[A-Za-z0-9][A-Za-z0-9.+!_-]*")
 TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 # Optional per-server host checks for upstreams that vendor prebuilt native code.
 HOST_REQUIREMENT_KEYS = ("machine", "cpu_flags", "shared_libraries")
+# conda-explicit: exact `name=version` specs, solved once per platform into a lock.
+CONDA_SPEC_RE = re.compile(r"[a-z0-9][a-z0-9._-]*=[A-Za-z0-9][A-Za-z0-9._+]*")
+CONDA_KEYS = ("channel", "specs", "locks")
+CONDA_PLATFORMS = {("Linux", "x86_64"): "linux-64", ("Linux", "aarch64"): "linux-aarch64",
+                   ("Darwin", "arm64"): "osx-arm64", ("Darwin", "x86_64"): "osx-64"}
+CONDA_URL_RE = re.compile(r"https://conda\.anaconda\.org/(?P<channel>[a-z0-9-]+)/(?P<subdir>[a-z0-9-]+)/"
+                          r"[A-Za-z0-9._+-]+\.(?:conda|tar\.bz2)#sha256:[0-9a-f]{64}")
+# Solver view of the target hosts when locking (micromamba cannot detect glibc of
+# a foreign platform). 2.28 is conda-forge's Linux baseline.
+LOCK_GLIBC = "2.28"
+# Environment variables that would redirect or reconfigure the installers.
+_INSTALLER_ENV_DROP = ("UV_PYTHON", "VIRTUAL_ENV", "PYTHONPATH", "CONDA_PREFIX", "CONDA_DEFAULT_ENV",
+                       "CONDA_PKGS_DIRS", "CONDA_ENVS_PATH", "CONDARC", "MAMBARC", "MAMBA_ROOT_PREFIX")
 
 
 class SetupError(RuntimeError):
@@ -63,6 +87,13 @@ def _check_install_fields(sid: str, entry: dict) -> None:
     if not isinstance(sync_args, list) or not all(isinstance(a, str) and a.startswith("--") for a in sync_args) \
             or any(a.split("=", 1)[0] in {"--python", "--frozen"} for a in sync_args):
         raise SetupError(f"{sid}: uv_sync_args must be extra --flags (not --python/--frozen)")
+    conda = entry["install"] == "conda-explicit"
+    if not conda and "conda" in entry:
+        raise SetupError(f"{sid}: conda only applies to install conda-explicit")
+    if conda:
+        if sync_args:
+            raise SetupError(f"{sid}: uv_sync_args do not apply to install conda-explicit")
+        _check_conda_fields(sid, entry)
     pinned = entry["install"] == "uv-pip-pinned"
     if not pinned:
         if "requirements" in entry or "exclude_newer" in entry:
@@ -77,6 +108,69 @@ def _check_install_fields(sid: str, entry: dict) -> None:
     if not isinstance(entry.get("exclude_newer"), str) or not TIMESTAMP_RE.fullmatch(entry["exclude_newer"]):
         raise SetupError(f"{sid}: uv-pip-pinned needs exclude_newer as YYYY-MM-DDTHH:MM:SSZ "
                          "(fixes the transitive resolution)")
+
+
+def _check_conda_fields(sid: str, entry: dict) -> None:
+    conda = entry.get("conda")
+    if not isinstance(conda, dict) or set(conda) != set(CONDA_KEYS):
+        raise SetupError(f"{sid}: conda-explicit needs conda with exactly {', '.join(CONDA_KEYS)}")
+    if not isinstance(conda["channel"], str) or not re.fullmatch(r"[a-z0-9-]+", conda["channel"]):
+        raise SetupError(f"{sid}: conda.channel must be a channel name such as conda-forge")
+    specs = conda["specs"]
+    if not isinstance(specs, list) or not specs or not all(isinstance(x, str) and CONDA_SPEC_RE.fullmatch(x)
+                                                           for x in specs):
+        raise SetupError(f"{sid}: conda.specs must be exact 'name=version' specs")
+    if f"python={entry['python']}" not in specs and not any(x.startswith(f"python={entry['python']}.")
+                                                             for x in specs):
+        raise SetupError(f"{sid}: conda.specs must pin python to the manifest version {entry['python']}")
+    locks = conda["locks"]
+    if not isinstance(locks, dict) or not locks or set(locks) - set(CONDA_PLATFORMS.values()) \
+            or not all(isinstance(v, str) and not Path(v).is_absolute() and ".." not in Path(v).parts
+                       for v in locks.values()):
+        raise SetupError(f"{sid}: conda.locks must map conda platforms "
+                         f"({', '.join(sorted(CONDA_PLATFORMS.values()))}) to relative lock paths")
+
+
+def conda_platform(system: str | None = None, machine: str | None = None) -> str:
+    key = (system or platform.system(), machine or platform.machine())
+    if key not in CONDA_PLATFORMS:
+        raise SetupError(f"no conda platform for {key[0]}/{key[1]}")
+    return CONDA_PLATFORMS[key]
+
+
+def lock_header(entry: dict, conda_plat: str) -> list[str]:
+    conda = entry["conda"]
+    return [f"# server: {entry['id']}", f"# platform: {conda_plat}", f"# channel: {conda['channel']}",
+            f"# specs: {' '.join(conda['specs'])}"]
+
+
+def read_conda_lock(entry: dict, conda_plat: str, bundle: Path | None = None) -> Path:
+    """Return the lock for ``conda_plat`` after checking it matches the manifest exactly."""
+    bundle = bundle or HERE
+    locks = entry["conda"]["locks"]
+    if conda_plat not in locks:
+        raise SetupError(f"{entry['id']}: no conda lock for platform {conda_plat} "
+                         f"(available: {', '.join(sorted(locks))})")
+    path = bundle / locks[conda_plat]
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise SetupError(f"{entry['id']}: cannot read conda lock {path}: {exc}") from None
+    comments = [line for line in lines if line.startswith("#")]
+    missing = [h for h in lock_header(entry, conda_plat) if h not in comments]
+    if missing:
+        raise SetupError(f"{entry['id']}: {path.name} is stale or foreign (header lacks {missing}); "
+                         f"regenerate with: setup.py {entry['id']} --lock")
+    body = [line for line in lines if line.strip() and not line.startswith("#")]
+    if not body or body[0] != "@EXPLICIT" or len(body) < 2:
+        raise SetupError(f"{entry['id']}: {path.name} is not a conda @EXPLICIT lock")
+    for line in body[1:]:
+        match = CONDA_URL_RE.fullmatch(line)
+        if not match or match["channel"] != entry["conda"]["channel"] \
+                or match["subdir"] not in {conda_plat, "noarch"}:
+            raise SetupError(f"{entry['id']}: {path.name}: not a {entry['conda']['channel']} "
+                             f"{conda_plat}/noarch URL with #sha256: {line[:160]!r}")
+    return path
 
 
 def _check_host_requirements(sid: str, entry: dict) -> None:
@@ -149,8 +243,8 @@ def load_manifest(path: Path = MANIFEST) -> dict[str, dict]:
             raise SetupError(f"{sid}: launch.env must map strings to strings")
         if any(Path(v).is_absolute() for v in env.values()):
             raise SetupError(f"{sid}: launch.env paths must use {CHECKOUT}/..., not absolute paths")
-        if any(CHECKOUT in v and not v.startswith(CHECKOUT + "/") for v in env.values()):
-            raise SetupError(f"{sid}: {CHECKOUT} may only prefix a path value in launch.env")
+        if any(CHECKOUT in v and v != CHECKOUT and not v.startswith(CHECKOUT + "/") for v in env.values()):
+            raise SetupError(f"{sid}: {CHECKOUT} may only be or prefix a path value in launch.env")
         _check_install_fields(sid, entry)
         _check_host_requirements(sid, entry)
         servers[sid] = entry
@@ -194,19 +288,85 @@ def ensure_checkout(entry: dict, dest: Path) -> None:
         raise SetupError(f"{dest} HEAD {head} != pinned {revision}")
 
 
+def _installer_env() -> dict:
+    return {k: v for k, v in os.environ.items() if k not in _INSTALLER_ENV_DROP}
+
+
+def _micromamba() -> str:
+    path = shutil.which("micromamba")
+    if path is None:
+        raise SetupError("micromamba not found on PATH; install the standalone binary first "
+                         "(https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html)")
+    return path
+
+
+def _mamba_env(dest: Path) -> dict:
+    env = _installer_env()
+    # Keep the package cache next to the checkouts, away from ~/micromamba and any base env.
+    env["MAMBA_ROOT_PREFIX"] = str(dest.parent / ".micromamba")
+    return env
+
+
+def build_conda_env(entry: dict, dest: Path, *, conda_plat: str | None = None) -> Path:
+    """Fresh micromamba prefix at <checkout>/.venv from the committed explicit lock."""
+    lock = read_conda_lock(entry, conda_plat or conda_platform())
+    micromamba = _micromamba()
+    prefix = dest / ".venv"
+    if prefix.exists() or prefix.is_symlink():
+        if prefix.is_symlink() or not (prefix / "conda-meta").is_dir():
+            raise SetupError(f"{prefix} exists but is not a conda prefix; remove it first")
+        print(f"+ rm -rf {prefix}", flush=True)
+        shutil.rmtree(prefix)       # never mix a previous environment into the locked one
+    run([micromamba, "create", "--yes", "--no-rc", "--prefix", str(prefix), "--file", str(lock)],
+        cwd=dest, env=_mamba_env(dest))
+    return prefix / "bin" / "python"
+
+
+def write_conda_locks(entry: dict, root: Path, bundle: Path | None = None) -> list[Path]:
+    """Solve the manifest specs once per locked platform and write @EXPLICIT locks (needs network)."""
+    micromamba = _micromamba()
+    conda = entry["conda"]
+    env = _mamba_env(root / entry["id"])
+    env["CONDA_OVERRIDE_GLIBC"] = LOCK_GLIBC
+    version = run([micromamba, "--version"], env=env)
+    written = []
+    for conda_plat, rel in sorted(conda["locks"].items()):
+        out = run([micromamba, "create", "--no-rc", "--dry-run", "--json", "--yes",
+                   "--prefix", str(root / f".lock-{entry['id']}-{conda_plat}"), "--platform", conda_plat,
+                   "--override-channels", "-c", conda["channel"], *conda["specs"]], env=env)
+        try:
+            packages = json.loads(out)["actions"]["LINK"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise SetupError(f"unexpected micromamba --json output for {conda_plat}: {exc}") from None
+        urls = sorted(f"{p['url']}#sha256:{p['sha256']}" for p in packages)
+        path = (bundle or HERE) / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        header = [f"# Generated by scripts/mcp/e2e/setup.py {entry['id']} --lock with micromamba {version}",
+                  f"# on {dt.datetime.now(dt.timezone.utc).date().isoformat()}; CONDA_OVERRIDE_GLIBC={LOCK_GLIBC}. "
+                  "Do not edit by hand.", *lock_header(entry, conda_plat)]
+        path.write_text("\n".join([*header, "@EXPLICIT", *urls]) + "\n", encoding="utf-8")
+        read_conda_lock(entry, conda_plat, bundle)
+        print(f"wrote {path} ({len(urls)} packages)")
+        written.append(path)
+    return written
+
+
 def build_env(entry: dict, dest: Path) -> Path:
-    if shutil.which("uv") is None:
-        raise SetupError("uv not found on PATH; install it first (https://docs.astral.sh/uv/)")
-    env = {k: v for k, v in os.environ.items() if k not in {"UV_PYTHON", "VIRTUAL_ENV", "PYTHONPATH"}}
-    python = dest / ".venv" / "bin" / "python"
-    if entry["install"] == "uv-pip-pinned":
-        # --clear: never mix a previous resolution into the pinned one.
-        run(["uv", "venv", "--clear", "--python", entry["python"], str(dest / ".venv")], cwd=dest, env=env)
-        run(["uv", "pip", "install", "--python", str(python), "--exclude-newer", entry["exclude_newer"],
-             *entry["requirements"]], cwd=dest, env=env)
+    if entry["install"] == "conda-explicit":
+        python = build_conda_env(entry, dest)
     else:
-        run(["uv", "sync", "--frozen", *entry.get("uv_sync_args", []), "--python", entry["python"]],
-            cwd=dest, env=env)
+        if shutil.which("uv") is None:
+            raise SetupError("uv not found on PATH; install it first (https://docs.astral.sh/uv/)")
+        env = _installer_env()
+        python = dest / ".venv" / "bin" / "python"
+        if entry["install"] == "uv-pip-pinned":
+            # --clear: never mix a previous resolution into the pinned one.
+            run(["uv", "venv", "--clear", "--python", entry["python"], str(dest / ".venv")], cwd=dest, env=env)
+            run(["uv", "pip", "install", "--python", str(python), "--exclude-newer", entry["exclude_newer"],
+                 *entry["requirements"]], cwd=dest, env=env)
+        else:
+            run(["uv", "sync", "--frozen", *entry.get("uv_sync_args", []), "--python", entry["python"]],
+                cwd=dest, env=env)
     version = run([str(python), "-c", "import sys; print('%d.%d' % sys.version_info[:2])"])
     if version != entry["python"]:
         raise SetupError(f"{entry['id']}: venv Python {version} != manifest {entry['python']}")
@@ -230,6 +390,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("server", help="manifest id, e.g. pyscf")
     parser.add_argument("--root", default=os.environ.get("MCP_E2E_ROOT", "~/mcp"),
                         help="install root (default: $MCP_E2E_ROOT or ~/mcp)")
+    parser.add_argument("--lock", action="store_true",
+                        help="conda-explicit only: re-solve conda.specs and rewrite the committed locks")
     args = parser.parse_args(argv)
 
     try:
@@ -239,6 +401,11 @@ def main(argv: list[str] | None = None) -> int:
         entry = servers[args.server]
         root = Path(args.root).expanduser().resolve()
         dest = root / entry["id"]
+        if args.lock:
+            if entry["install"] != "conda-explicit":
+                raise SetupError(f"--lock only applies to install conda-explicit, not {entry['install']}")
+            write_conda_locks(entry, root)
+            return 0
         check_host(entry)
         ensure_checkout(entry, dest)
         python = build_env(entry, dest)
