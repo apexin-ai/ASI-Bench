@@ -149,6 +149,25 @@ also wrong for Codex).
 
 ## Results
 
+### `mcp_e2e.jsbsim_engine_run` (Claude Code and Codex CLI)
+
+2026-10-02, AWS Linux amd64, seed 31415 (Chicago, 5500 ft, 159.85 ft/s,
+heading 285°, full throttle, 10 s), one run per level. Claude Code with
+`claude-opus-5-5`; Codex CLI with `gpt-5.6-sol` through the custom gateway
+(`codex_home`), effort `medium`:
+
+| Harness | Level | Local score | Verified PASS | Notes |
+|---|---|---|---|---|
+| Claude Code | B1–B4 | 4 × 100 | 4/4 | tools found without being named at B3/B4 |
+| Codex CLI | B1–B4 | 4 × 100 | 4/4 | tools found without being named at B3/B4 |
+
+All eight runs passed every verifier check: one session created and every
+`set_property`/`step` call used its `session_id` (`tool_chain`), the state was
+read through the MCP tools and the answers equal tool-returned values within
+the tolerances. With `JSBSIM_DEBUG=0` in the launch env neither client saw
+JSBSim's stdout chatter. One run per level shows the path works, not a pass
+rate.
+
 ### `mcp_e2e.arxiv_search_snippets` (Claude Code and Codex CLI)
 
 2026-10-02, AWS Linux amd64, seed 31415 (gravitational waves: 5 results,

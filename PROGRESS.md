@@ -1135,5 +1135,8 @@
   the real MCP server scored 100/100 with `asibench score`, and `verify_run.py`
   failed it for lack of agent evidence; a Claude stream built from those real
   server outputs passes all six checks. `tests/test_mcp_e2e_jsbsim.py` (offline).
-- Implementation commit: pending.
+  AWS Linux amd64, seed 31415, B1–B4 ×1 each for Claude Code
+  (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`): local score 400/400 per
+  harness and verifier 4/4 PASS per harness.
+- Implementation commit: `6015365`.
 
