@@ -53,7 +53,7 @@
     "\\b(curl|wget|aria2c|lynx|w3m|httpie|http|xh)\\b[^\\n]*arxiv\\.org",
     "\\b(requests|httpx|urllib|urlopen|aiohttp|http\\.client|feedparser)\\b[\\s\\S]{0,600}?arxiv\\.org",
     "(import|from)\\s+(arxiv|feedparser|markitdown|pdfminer|pdfplumber|fitz|pymupdf|pypdf|PyPDF2|tooluniverse)\\b",
-    "\\b(pip|pip3|uv|uvx|conda|mamba|micromamba)\\b[^\\n]*\\b(install|add|--with)\\b[^\\n]*\\b(arxiv|feedparser|markitdown|pdfminer|pdfplumber|pymupdf|pypdf|tooluniverse)\\b",
+    "\\b(pip|pip3|uv|uvx|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\b(arxiv|feedparser|markitdown|pdfminer|pdfplumber|pymupdf|pypdf|tooluniverse)\\b",
     "\\bpdftotext\\b"
   ],
   "suspicious_patterns": [

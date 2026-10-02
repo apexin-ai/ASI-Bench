@@ -62,7 +62,16 @@ one of the values extracted from the source call; an answer with
 `"merge_calls": true` merges the extracted values of all calls first.
 Optional `server_tools` lists the tools the server must offer (WARN if it
 offers more), `bypass_tools` / `suspicious_tools` map non-MCP tool names to a
-regex over the call input (FAIL / WARN).
+regex over the call input (FAIL / WARN); `suspicious_tools` also works for MCP
+tools by their `mcp__<server>__<tool>` name (e.g. a tool the task forbids).
+
+A call spec with `"optional": true` is judged only if the agent called it.
+Optional specs that share a `"group"` form one requirement: at least one member
+must be called (`tool_called`) and the best member counts for `tool_correct`,
+e.g. reading the final state with either `get_telemetry` or `get_property`. A
+numeric answer can take its value from several calls with `from_calls`
+(`[{"call": ..., "result_key": ...}, ...]`). `inputs_from_call` values that
+are not numbers, such as a `session_id`, must be identical strings.
 
 ## Tasks
 
@@ -71,6 +80,7 @@ regex over the call input (FAIL / WARN).
 | `mcp_e2e.pyscf_rhf_energy` | `pyscf` (`scripts/mcp/e2e/manifest.json`) | `pyscf_rhf_energy` | PySCF RHF computed in `generate_gt.py` |
 | `mcp_e2e.pyscf_bond_stretch` | `pyscf` | `run_bond_stretch_calculation_mcp` → `plot_energy_scan_image_mcp` | seeded RDKit + UFF geometry, rigid stretch, PySCF RHF/STO-3G in `generate_gt.py` |
 | `mcp_e2e.arxiv_search_snippets` | `arxiv` | `ArXiv_search_papers` → `ArXiv_get_pdf_snippets` | raw arXiv API query and the PDF converted with MarkItDown (server lockfile versions) in `generate_gt.py` |
+| `mcp_e2e.jsbsim_engine_run` | `jsbsim` | `create_session` → (`set_initial_conditions`) → `set_property` ×3 → `step` → `get_property` or `get_telemetry`, one `session_id` | JSBSim 1.3.1 flown directly in `generate_gt.py` with JSBSim's own initial-condition properties |
 
 `mcp_e2e.pyscf_rhf_energy`: a seed picks one of five small closed-shell
 molecules and STO-3G or 6-31G, and perturbs every coordinate by up to ±0.02 Å so
@@ -110,12 +120,53 @@ call used a paper the search returned (`arxiv_id` or `pdf_url`), and flags
 bypass; any web search or fetch call is a WARN. With `--mcp-config` the
 harnesses run in search mode, so these web tools are available to the agent.
 
+`mcp_e2e.jsbsim_engine_run`: a seed picks a short powered flight of the
+JSBSim `c172x` (Cessna 172): all seven initial conditions (3000–6000 ft, one of
+five locations, 150–185 ft/s calibrated, heading, pitch 0–3°, roll 0), the
+engine start (`propulsion/set-running = -1`), mixture 1.0 and a throttle of
+0.6–1.0, and a run time of 6, 8 or 10 s at the default dt of 1/60 s. The agent
+must create one session, set the initial conditions, apply the settings in
+order, step, and write `result.json` with altitude (`position/h-sl-ft`),
+calibrated airspeed (`velocities/vc-kts`), thrust
+(`propulsion/engine[0]/thrust-lbs`) and simulation time. Scoring: 35 altitude
+(full credit within 0.05 ft), 35 airspeed (0.01 kt), 20 thrust (0.05 lbf), 10
+time (1e-6 s), each zero at 10× its tolerance, log-linear in between. The
+server's ft/s→kt factor and the two decimals of `get_telemetry` stay below
+3.3e-4 ft over 300 seeds; applying the settings before the initial
+conditions, the wrong engine property or one second too many costs ≥ 0.33 ft
+(60 seeds). The prompts forbid `trim` and `execute_script` in domain terms
+(both are broken upstream; see `scripts/mcp/e2e/README.md`), and
+`verify_run.py` flags them for review. It also requires every `set_property`
+and `step` call to use the `session_id` that `create_session` returned
+(`tool_chain`), accepts the final state from either read tool, and treats
+`import jsbsim`, installing it, the `jsbsim` CLI or the server's own Python as
+bypass. No network is needed.
+
 Prompts must stay agent-neutral: name the MCP server and tool
 (`pyscf_rhf_energy` of the `pyscf` server), never a harness-specific name such
 as Claude Code's `mcp__pyscf__pyscf_rhf_energy` (see failure mode below; it is
 also wrong for Codex).
 
 ## Results
+
+### `mcp_e2e.jsbsim_engine_run` (Claude Code and Codex CLI)
+
+2026-10-02, AWS Linux amd64, seed 31415 (Chicago, 5500 ft, 159.85 ft/s,
+heading 285°, full throttle, 10 s), one run per level. Claude Code with
+`claude-opus-5-5`; Codex CLI with `gpt-5.6-sol` through the custom gateway
+(`codex_home`), effort `medium`:
+
+| Harness | Level | Local score | Verified PASS | Notes |
+|---|---|---|---|---|
+| Claude Code | B1–B4 | 4 × 100 | 4/4 | tools found without being named at B3/B4 |
+| Codex CLI | B1–B4 | 4 × 100 | 4/4 | tools found without being named at B3/B4 |
+
+All eight runs passed every verifier check: one session created and every
+`set_property`/`step` call used its `session_id` (`tool_chain`), the state was
+read through the MCP tools and the answers equal tool-returned values within
+the tolerances. With `JSBSIM_DEBUG=0` in the launch env neither client saw
+JSBSim's stdout chatter. One run per level shows the path works, not a pass
+rate.
 
 ### `mcp_e2e.arxiv_search_snippets` (Claude Code and Codex CLI)
 
@@ -280,6 +331,24 @@ uv run asibench run --agent claude_code_cli \
 Score and verify as in steps 3–4; for Codex use `--agent codex_cli` with the
 Codex `--agent-config` above.
 
+jsbsim task (needs `python3 scripts/mcp/e2e/setup.py jsbsim`; no network):
+
+```sh
+uv run asibench generate --task mcp_e2e.jsbsim_engine_run --params '{"seed": 31415}' \
+  --sandbox task --tasks-dir examples/mcp-e2e-tasks --output-dir ~/e2e/instances
+
+uv run asibench run --agent claude_code_cli \
+  --agent-config '{"model": "claude-opus-4-6", "permission_mode": "bypassPermissions"}' \
+  --mcp-config ~/mcp/jsbsim.mcp.json \
+  --tasks mcp_e2e.jsbsim_engine_run --include-test --tasks-dir examples/mcp-e2e-tasks \
+  --instances-dir ~/e2e/instances --prompt-levels b1,b2,b3,b4 \
+  --sandbox none --timeout 900 --output-dir ~/e2e/out-jsbsim-claude
+```
+
+Score and verify as in steps 3–4 (Codex as above). The server closes sessions
+idle for 300 s, so a run with very long pauses between tool calls loses its
+session.
+
 ## Adding a task
 
 Copy the pyscf task layout: `task_meta.yaml` (`status: test`), `task_eval.yaml`,
@@ -287,5 +356,6 @@ Copy the pyscf task layout: `task_meta.yaml` (`status: test`), `task_eval.yaml`,
 `prompt_b1..b4.md`, and `e2e_check.json` (schema 2: `calls` and `answers`,
 see `pyscf_bond_stretch`; schema 1 for a single tool with a scalar answer, see
 `pyscf_rhf_energy`; named extractors and web-tool bypass checks, see
-`arxiv_search_snippets`) plus bypass patterns. Add the server to
+`arxiv_search_snippets`; a stateful session chain with optional/grouped read
+calls and multi-source answers, see `jsbsim_engine_run`) plus bypass patterns. Add the server to
 `scripts/mcp/e2e/manifest.json` with a smoke test first.

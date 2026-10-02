@@ -1,0 +1,61 @@
+task_id: mcp_e2e.jsbsim_engine_run
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    - scorer: jsbsim_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  # Full credit within the tolerance, zero at 10x, log-linear in between.
+  # get_telemetry prints two decimals and the server converts ft/s -> kt with
+  # 0.592484 (<= 3.3e-4 ft over 300 seeds), both well inside full credit;
+  # procedure errors (settings before the initial conditions, a wrong engine
+  # property, one extra second) move altitude by >= 0.33 ft, airspeed or thrust
+  # by more, over 60 seeds.
+  scoring:
+    - scorer: jsbsim_e2e_value
+      weight: 35
+      config:
+        key: altitude_ft
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 0.05
+        zero_score_tol: 0.5
+    - scorer: jsbsim_e2e_value
+      weight: 35
+      config:
+        key: airspeed_kt
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 0.01
+        zero_score_tol: 0.1
+    - scorer: jsbsim_e2e_value
+      weight: 20
+      config:
+        key: thrust_lbs
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 0.05
+        zero_score_tol: 0.5
+    - scorer: jsbsim_e2e_value
+      weight: 10
+      config:
+        key: sim_time_s
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-5
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 300

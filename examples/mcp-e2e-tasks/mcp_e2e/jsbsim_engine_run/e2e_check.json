@@ -1,0 +1,90 @@
+{
+  "schema_version": 2,
+  "server": "jsbsim",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": ["close_session", "create_session", "execute_script", "get_property", "get_telemetry",
+                   "list_aircraft", "set_initial_conditions", "set_property", "step", "trim"],
+  "calls": [
+    {
+      "name": "create",
+      "tool": "create_session",
+      "inputs_from_reference": {"aircraft": "aircraft"},
+      "result": {"format": "json", "key": "dt", "reference_key": "dt_s", "abs_tol": 1e-12}
+    },
+    {
+      "name": "engine",
+      "tool": "set_property",
+      "inputs_from_reference": {"path": "setting0_path", "value": "setting0_value"},
+      "inputs_from_call": {"call": "create", "map": {"session_id": "session_id"}},
+      "result": {"format": "json", "key": "value", "reference_key": "setting0_value", "abs_tol": 0}
+    },
+    {
+      "name": "mixture",
+      "tool": "set_property",
+      "inputs_from_reference": {"path": "setting1_path", "value": "setting1_value"},
+      "result": {"format": "json", "key": "value", "reference_key": "setting1_value", "abs_tol": 0}
+    },
+    {
+      "name": "throttle",
+      "tool": "set_property",
+      "inputs_from_reference": {"path": "setting2_path", "value": "setting2_value"},
+      "result": {"format": "json", "key": "value", "reference_key": "setting2_value", "abs_tol": 0}
+    },
+    {
+      "name": "step",
+      "tool": "step",
+      "inputs_from_reference": {"seconds": "duration_s"},
+      "inputs_from_call": {"call": "create", "map": {"session_id": "session_id"}},
+      "result": {"format": "json", "key": "sim_time", "reference_key": "sim_time_s", "abs_tol": 1e-6}
+    },
+    {
+      "name": "telemetry",
+      "tool": "get_telemetry",
+      "optional": true,
+      "group": "read_state",
+      "inputs_from_call": {"call": "create", "map": {"session_id": "session_id"}},
+      "result": {"format": "json", "key": "alt_ft", "reference_key": "altitude_ft", "abs_tol": 0.05}
+    },
+    {
+      "name": "read_property",
+      "tool": "get_property",
+      "optional": true,
+      "group": "read_state",
+      "inputs_from_reference": {"path": "altitude_path"},
+      "inputs_from_call": {"call": "create", "map": {"session_id": "session_id"}},
+      "result": {"format": "json", "key": "value", "reference_key": "altitude_ft", "abs_tol": 0.05}
+    }
+  ],
+  "answers": [
+    {"prediction_key": "altitude_ft", "reference_key": "altitude_ft", "abs_tol": 0.05,
+     "from_calls": [{"call": "read_property", "result_key": "value"}, {"call": "telemetry", "result_key": "alt_ft"}]},
+    {"prediction_key": "airspeed_kt", "reference_key": "airspeed_kt", "abs_tol": 0.01,
+     "from_calls": [{"call": "read_property", "result_key": "value"},
+                    {"call": "telemetry", "result_key": "airspeed_kt"}]},
+    {"prediction_key": "thrust_lbs", "reference_key": "thrust_lbs", "abs_tol": 0.05,
+     "from_calls": [{"call": "read_property", "result_key": "value"},
+                    {"call": "telemetry", "result_key": "thrust_lbs"}]},
+    {"prediction_key": "sim_time_s", "reference_key": "sim_time_s", "abs_tol": 1e-6,
+     "from_calls": [{"call": "step", "result_key": "sim_time"}, {"call": "read_property", "result_key": "value"},
+                    {"call": "telemetry", "result_key": "t"}]}
+  ],
+  "suspicious_tools": {
+    "mcp__jsbsim__trim": "",
+    "mcp__jsbsim__execute_script": ""
+  },
+  "bypass_patterns": [
+    "(import|from)\\s+jsbsim\\b",
+    "\\b(pip|pip3|uv|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\bjsbsim\\b",
+    "\\buvx\\b[^\\n]*\\bjsbsim\\b",
+    "(^|[\\s;&|/])jsbsim\\s+(--\\w|\\S+\\.xml)",
+    "jsbsim[^\\s'\"]*/\\.venv/bin/python"
+  ],
+  "suspicious_patterns": [
+    "\\bjsbsim\\b",
+    "\\bJSBSim\\b",
+    "jsbsim_data|aircraft/c172",
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ]
+}

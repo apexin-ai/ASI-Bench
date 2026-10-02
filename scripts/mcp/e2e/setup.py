@@ -6,8 +6,11 @@ Stdlib only. For the server ``<id>`` listed in ``manifest.json`` this:
 1. clones the upstream repository into ``<root>/<id>`` (or reuses an existing
    clean checkout) and detaches at the pinned revision;
 2. builds an isolated virtualenv with ``uv`` using the manifest's Python
-   version (``UV_PYTHON`` from the caller's shell is ignored on purpose);
-3. writes a portable ``<root>/<id>.mcp.json`` for ``asibench run --mcp-config``.
+   version (``UV_PYTHON`` from the caller's shell is ignored on purpose):
+   ``uv sync --frozen`` against the upstream lockfile, or, for upstreams without
+   one, ``uv pip install`` of exact manifest pins with ``--exclude-newer``;
+3. writes a portable ``<root>/<id>.mcp.json`` for ``asibench run --mcp-config``
+   (``{checkout}`` in launch args / env values becomes the absolute checkout).
 
 It never installs anything into the ASI-Bench environment, never touches
 operator credentials and never runs business tool calls; use the matching
@@ -17,6 +20,7 @@ Usage::
 
     python3 scripts/mcp/e2e/setup.py pyscf [--root ~/mcp]
     python3 scripts/mcp/e2e/setup.py arxiv [--root ~/mcp]
+    python3 scripts/mcp/e2e/setup.py jsbsim [--root ~/mcp]
 """
 from __future__ import annotations
 
@@ -24,18 +28,46 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 
 HERE = Path(__file__).resolve().parent
 MANIFEST = HERE / "manifest.json"
-# Placeholder in launch args for the absolute checkout path, e.g. "{checkout}/main.py".
+# Placeholder in launch args / env values for the absolute checkout path, e.g. "{checkout}/main.py".
 CHECKOUT = "{checkout}"
+# uv-sync-frozen: upstream ships pyproject.toml + uv.lock -> `uv sync --frozen`.
+# uv-pip-pinned:  upstream has no lockfile -> fresh venv + `uv pip install` of the
+#                 manifest's exact `name==version` pins, resolved with --exclude-newer.
+INSTALL_MODES = ("uv-sync-frozen", "uv-pip-pinned")
+PIN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9._,-]+\])?==[A-Za-z0-9][A-Za-z0-9.+!_-]*")
+TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 
 
 class SetupError(RuntimeError):
     pass
+
+
+def _check_install_fields(sid: str, entry: dict) -> None:
+    sync_args = entry.get("uv_sync_args", [])
+    if not isinstance(sync_args, list) or not all(isinstance(a, str) and a.startswith("--") for a in sync_args) \
+            or any(a.split("=", 1)[0] in {"--python", "--frozen"} for a in sync_args):
+        raise SetupError(f"{sid}: uv_sync_args must be extra --flags (not --python/--frozen)")
+    pinned = entry["install"] == "uv-pip-pinned"
+    if not pinned:
+        if "requirements" in entry or "exclude_newer" in entry:
+            raise SetupError(f"{sid}: requirements/exclude_newer only apply to install uv-pip-pinned")
+        return
+    if sync_args:
+        raise SetupError(f"{sid}: uv_sync_args do not apply to install uv-pip-pinned")
+    requirements = entry.get("requirements")
+    if not isinstance(requirements, list) or not requirements \
+            or not all(isinstance(r, str) and PIN_RE.fullmatch(r) for r in requirements):
+        raise SetupError(f"{sid}: uv-pip-pinned needs requirements as exact 'name==version' pins")
+    if not isinstance(entry.get("exclude_newer"), str) or not TIMESTAMP_RE.fullmatch(entry["exclude_newer"]):
+        raise SetupError(f"{sid}: uv-pip-pinned needs exclude_newer as YYYY-MM-DDTHH:MM:SSZ "
+                         "(fixes the transitive resolution)")
 
 
 def load_manifest(path: Path = MANIFEST) -> dict[str, dict]:
@@ -49,7 +81,7 @@ def load_manifest(path: Path = MANIFEST) -> dict[str, dict]:
             raise SetupError(f"Duplicate manifest id: {sid}")
         if len(entry["revision"]) != 40:
             raise SetupError(f"{sid}: revision must be a full 40-char commit SHA")
-        if entry["install"] != "uv-sync-frozen":
+        if entry["install"] not in INSTALL_MODES:
             raise SetupError(f"{sid}: unsupported install mode {entry['install']!r}")
         launch = entry["launch"]
         if Path(launch["command"]).is_absolute() or any(Path(a).is_absolute() for a in launch["args"]):
@@ -59,10 +91,11 @@ def load_manifest(path: Path = MANIFEST) -> dict[str, dict]:
         env = launch.get("env", {})
         if not isinstance(env, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
             raise SetupError(f"{sid}: launch.env must map strings to strings")
-        sync_args = entry.get("uv_sync_args", [])
-        if not isinstance(sync_args, list) or not all(isinstance(a, str) and a.startswith("--") for a in sync_args) \
-                or any(a.split("=", 1)[0] in {"--python", "--frozen"} for a in sync_args):
-            raise SetupError(f"{sid}: uv_sync_args must be extra --flags (not --python/--frozen)")
+        if any(Path(v).is_absolute() for v in env.values()):
+            raise SetupError(f"{sid}: launch.env paths must use {CHECKOUT}/..., not absolute paths")
+        if any(CHECKOUT in v and not v.startswith(CHECKOUT + "/") for v in env.values()):
+            raise SetupError(f"{sid}: {CHECKOUT} may only prefix a path value in launch.env")
+        _check_install_fields(sid, entry)
         servers[sid] = entry
     return servers
 
@@ -108,8 +141,15 @@ def build_env(entry: dict, dest: Path) -> Path:
     if shutil.which("uv") is None:
         raise SetupError("uv not found on PATH; install it first (https://docs.astral.sh/uv/)")
     env = {k: v for k, v in os.environ.items() if k not in {"UV_PYTHON", "VIRTUAL_ENV", "PYTHONPATH"}}
-    run(["uv", "sync", "--frozen", *entry.get("uv_sync_args", []), "--python", entry["python"]], cwd=dest, env=env)
     python = dest / ".venv" / "bin" / "python"
+    if entry["install"] == "uv-pip-pinned":
+        # --clear: never mix a previous resolution into the pinned one.
+        run(["uv", "venv", "--clear", "--python", entry["python"], str(dest / ".venv")], cwd=dest, env=env)
+        run(["uv", "pip", "install", "--python", str(python), "--exclude-newer", entry["exclude_newer"],
+             *entry["requirements"]], cwd=dest, env=env)
+    else:
+        run(["uv", "sync", "--frozen", *entry.get("uv_sync_args", []), "--python", entry["python"]],
+            cwd=dest, env=env)
     version = run([str(python), "-c", "import sys; print('%d.%d' % sys.version_info[:2])"])
     if version != entry["python"]:
         raise SetupError(f"{entry['id']}: venv Python {version} != manifest {entry['python']}")
@@ -124,7 +164,7 @@ def render_config(entry: dict, dest: Path) -> dict:
         "cwd": str(dest),
     }
     if launch.get("env"):
-        server["env"] = dict(launch["env"])
+        server["env"] = {k: v.replace(CHECKOUT, str(dest)) for k, v in launch["env"].items()}
     return {"mcpServers": {entry["id"]: server}}
 
 

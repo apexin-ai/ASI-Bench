@@ -1073,3 +1073,70 @@
   (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`): local score 400/400 per
   harness and verifier 8/8 PASS on every check, no WARN (no web tool use).
 - Implementation commit: `1d1e6bc`.
+
+## 2026-10-02: jsbsim MCP smoke (L1) and pinned pip installs
+
+- Problem: `flyintothesky/jsbsim-mcp` has no `pyproject.toml` or lockfile
+  (only a ranged `requirements.txt` that also pulls the web dashboard), so
+  `uv sync --frozen` could not install it; its data root comes from the
+  misspelt `JBSIM_ROOT` or the cwd, and JSBSim prints ~1100 lines to stdout
+  (the JSON-RPC channel) per `create_session`.
+- Resolution: `setup.py` install mode `uv-pip-pinned` (`uv venv --clear` +
+  `uv pip install --exclude-newer <timestamp>` of exact `==` pins only) and
+  `{checkout}` in launch `env` values; manifest entry `jsbsim` (Python 3.12,
+  `jsbsim==1.3.1`, `mcp==1.30.0`, `pydantic==2.13.5`) with
+  `JBSIM_ROOT={checkout}/jsbsim_data` and `JSBSIM_DEBUG=0`. `smoke_jsbsim.py`
+  calls all 10 tools and compares them with a separate `FGFDMExec` driven
+  through JSBSim's own property names in the smoke process; `execute_script`
+  runs in its own server, and two short-lived servers show what breaks
+  without each launch env key.
+- Lesson: upstream defects (WARN): 20 of 33 `get_telemetry` fields read
+  properties that do not exist (pitch/roll/heading, lat/lon, rpm, ...) and are
+  always 0, because `get_property_value` returns 0.0 for unknown paths;
+  `trim` is a home-made loop that ignores `mode`, forces throttle 0.7 and
+  returns `ok: true` without trimming, although jsbsim 1.3.1 exports
+  `do_trim`; `execute_script` reloads a model into the live session and
+  segfaults the server at a varying point; `set_initial_conditions` zeroes
+  omitted keys; a session without initial conditions integrates to NaN.
+- Lesson: a crash probe must not use the FAIL-on-error call wrapper; any step
+  of it can be the one that dies. Telemetry tolerances must be absolute
+  (half the printed decimal + slack), not scaled by the value — a unit test
+  caught 0.08 ft of accidental slack on altitude.
+- Verification: 17 PASS / 17 WARN / 0 FAIL on Linux aarch64 (five runs) and
+  AWS Linux amd64; a reference offset by 0.5 ft makes both state checks FAIL;
+  offline tests in `tests/test_mcp_e2e_scripts.py`.
+- Implementation commit: `747409d`.
+
+## 2026-10-02: L2 jsbsim engine-run task, optional/grouped verifier calls
+
+- Problem: the jsbsim server is stateful: every call after `create_session`
+  carries a `session_id`, and the final state can be read with two different
+  tools (`get_property` or `get_telemetry`). `verify_run.py` could only chain
+  numbers and required every listed tool.
+- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/jsbsim_engine_run`: a seeded
+  powered c172x flight (seven initial conditions, engine start, mixture,
+  throttle, 6–10 s); the agent reports altitude, calibrated airspeed, thrust
+  and simulation time. The reference flies the scenario with jsbsim 1.3.1
+  directly in `generate --sandbox task` using the wheel's c172x data (identical
+  to the server's). `verify_run.py` gained `optional` + `group` call specs
+  (one-of requirements), multi-source numeric answers (`from_calls`) and exact
+  string comparison for chained non-numeric inputs (`session_id`);
+  `suspicious_tools` flags the forbidden `trim`/`execute_script` MCP tools.
+- Lesson: `\b(install|add|--with)\b` never matches `--with` (no word boundary
+  between a space and `-`), so `uv run --with <pkg>` slipped past the arxiv
+  bypass pattern too; both patterns now use `(\binstall\b|\badd\b|--with\b)`
+  and the arxiv tests cover it.
+- Lesson: score tolerances were set from measured margins: the server's
+  0.592484 kt factor and two-decimal telemetry stay below 3.3e-4 ft over 300
+  seeds, while procedure errors (settings before initial conditions, wrong
+  engine property, one extra second) cost >= 0.33 ft over 60 seeds.
+- Verification: `asibench generate --sandbox task` (VM, aarch64) reproduced the
+  direct reference bit for bit; an oracle `--agent-cmd` that follows B1 through
+  the real MCP server scored 100/100 with `asibench score`, and `verify_run.py`
+  failed it for lack of agent evidence; a Claude stream built from those real
+  server outputs passes all six checks. `tests/test_mcp_e2e_jsbsim.py` (offline).
+  AWS Linux amd64, seed 31415, B1–B4 ×1 each for Claude Code
+  (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`): local score 400/400 per
+  harness and verifier 4/4 PASS per harness.
+- Implementation commit: `6015365`.
+
