@@ -145,7 +145,8 @@
   `--mcp-config` 强制 search mode，Claude 有 WebSearch/WebFetch、Codex 有 web_search，
   联网类 fake task 必须把它们纳入 bypass 检查。
   持久化 stream-json 会脱敏 user 事件（含 tool_result），工具返回值须从同 tool_call_id
-  的 trajectory 补齐；Claude/Codex trajectory 不保存图片内容，只在 tool_result metadata 记录
+  的 trajectory 补齐；Claude 对带 outputSchema 的 FastMCP 工具展示 `structuredContent`
+  `{"result": ...}`，verifier 须先解包；Claude/Codex trajectory 不保存图片内容，只在 tool_result metadata 记录
   `content_types` / `image_media_types`。Codex 证据来自 `exec --json` 的 `mcp_tool_call`
   item（统一命名为 `mcp__<server>__<tool>`，输入与结果在持久化 JSONL 中保留）；Codex 无
   server/tool 列表事件，`mcp_connected` 只能由必需工具的成功返回证明，否则为 WARN；

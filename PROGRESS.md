@@ -1200,6 +1200,13 @@
   input mismatch.
 - Lesson: in the shared VM `/tmp/e2e` belonged to another session's user; use
   a scratch directory under the session home.
+- Lesson: the first AWS Claude run scored 400/400 but every verifier
+  `tool_correct`/`answer_from_tool` failed, even for `check_engine_sanity`.
+  Both s4 tools have return annotations, so FastMCP declares an `outputSchema`
+  and sends `structuredContent = {"result": <str or content blocks>}`; Claude
+  Code passes that object instead of the text block. `verify_run.py` now
+  unwraps it everywhere it parses a result. The offline streams had used the
+  text block only; build test streams from what the client really shows.
 - Verification: `tests/test_mcp_e2e_s4.py` (34 offline tests); over 61 seeds
   the server (S4 built from source, Linux aarch64) matched the reference to
   ≤ 1.1e-12. `asibench generate --sandbox task` + an oracle `--agent-cmd` that

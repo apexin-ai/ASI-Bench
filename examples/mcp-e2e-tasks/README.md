@@ -32,6 +32,12 @@ trajectory; the Claude extractor records `content_types` and
 `image_media_types` in the tool_result metadata so that a returned PNG stays
 observable.
 
+FastMCP tools with a return annotation declare an `outputSchema` and return
+`structuredContent = {"result": ...}` next to the text block; Claude Code puts
+that structured object, not the text, into the tool result (seen with the s4
+server, mcp 1.30.0). The verifier unwraps it: a string inside is parsed as
+JSON, a list of content blocks is reduced to its text first.
+
 Codex (`codex exec --json`, checked with codex-cli 0.159.2) reports each MCP
 call as an `mcp_tool_call` item with `server`, `tool`, `arguments` and, on
 `item.completed`, `result.content` (MCP blocks; images carry `mimeType`) or

@@ -364,17 +364,49 @@ def _same_link(given, source) -> bool:
     return str(given).strip() != "" and str(given).strip() == str(source).strip()
 
 
+def _unwrap_structured(data):
+    """Undo FastMCP's structured-output wrapper.
+
+    A FastMCP tool with a return annotation declares an ``outputSchema`` and
+    returns ``structuredContent = {"result": <value>}``; clients that show the
+    structured content (Claude Code does) put that object in the tool result
+    instead of the text block. ``<value>`` is the original string, or for a tool
+    returning content blocks a list of ``{"type": "text", "text": ...}`` blocks.
+    Anything else is returned unchanged.
+    """
+    if not (isinstance(data, dict) and set(data) == {"result"}):
+        return data
+    inner = data["result"]
+    if isinstance(inner, list) and inner and all(isinstance(b, dict) and "type" in b for b in inner):
+        inner = "\n".join(str(b.get("text", "")) for b in inner if b.get("type") == "text")
+    if isinstance(inner, str):
+        try:
+            return json.loads(inner)
+        except json.JSONDecodeError:
+            return inner
+    return inner
+
+
+def _parsed_result(call: dict):
+    """The call's result text parsed as JSON (structured-output wrapper removed), or None."""
+    try:
+        return _unwrap_structured(json.loads(call.get("result_text") or ""))
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
 def _result_value(call: dict, key: str | None):
     """Numeric value of a text result, or of field `key` of a JSON-object result."""
     text = call.get("result_text")
     if text is None:
         return None
     if key is None:
-        return _values(text)
-    try:
-        data = json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        return None
+        value = _values(text)
+        if value is None:
+            unwrapped = _parsed_result(call)
+            value = _values(unwrapped) if isinstance(unwrapped, (str, int, float, list)) else None
+        return value
+    data = _parsed_result(call)
     return _values(data.get(key)) if isinstance(data, dict) else None
 
 
@@ -410,10 +442,7 @@ def _source_value(call: dict, source: dict, reference: dict):
 
 
 def _json_result(call: dict) -> dict | None:
-    try:
-        data = json.loads(call.get("result_text") or "")
-    except (json.JSONDecodeError, TypeError):
-        return None
+    data = _parsed_result(call)
     return data if isinstance(data, dict) else None
 
 
@@ -478,9 +507,8 @@ EXTRACTORS = {
 def _extracted(call: dict, name: str):
     """Canonical extracted value of a call's JSON result, or None."""
     extract, canon = EXTRACTORS[name]
-    try:
-        data = json.loads(call.get("result_text") or "")
-    except (json.JSONDecodeError, TypeError):
+    data = _parsed_result(call)
+    if data is None:
         return None
     raw = extract(data)
     return None if raw is None else canon(raw)

@@ -230,7 +230,17 @@ def _b1_calls(reference, sanity=False, orders=None, **overrides):
     return calls
 
 
-def _stream(calls, extra=()):
+def _structured(tool, payload):
+    """The tool result as Claude Code shows it: the server's FastMCP ``structuredContent``
+    (``{"result": ...}``, observed with mcp 1.30.0) instead of the text block. check_engine_sanity
+    returns a str; simulate_stack_spectrum returns content blocks."""
+    text = json.dumps(payload)
+    if tool == "check_engine_sanity":
+        return json.dumps({"result": text})
+    return json.dumps({"result": [{"type": "text", "text": text, "annotations": None, "_meta": None}]})
+
+
+def _stream(calls, extra=(), structured=True):
     tools = ["Bash", "Read", "Write", "WebFetch", "WebSearch",
              f"mcp__{SERVER}__check_engine_sanity", f"mcp__{SERVER}__simulate_stack_spectrum"]
     events = [{"type": "system", "subtype": "init", "mcp_servers": [{"name": SERVER, "status": "connected"}],
@@ -245,7 +255,8 @@ def _stream(calls, extra=()):
     for k, (name, args) in enumerate(extra):
         events += event(f"x{k}", name, args, "ok")
     for k, (tool, args, payload) in enumerate(calls):
-        events += event(f"c{k}", f"mcp__{SERVER}__{tool}", args, json.dumps(payload))
+        events += event(f"c{k}", f"mcp__{SERVER}__{tool}", args,
+                        _structured(tool, payload) if structured else json.dumps(payload))
     events.append({"type": "result", "subtype": "success", "is_error": False, "num_turns": len(calls)})
     return "\n".join(json.dumps(e) for e in events) + "\n"
 
@@ -313,6 +324,23 @@ def test_genuine_b1_run_passes_every_check(tmp_path, reference):
     assert row["verdict"] == "PASS", row["checks"]
     assert set(_status(row).values()) == {"PASS"}
     assert row["checks"]["tool_correct"]["per_call"]["sanity"]["status"] == "SKIP"
+
+
+def test_plain_text_results_pass_too(tmp_path, reference):
+    row = _run(tmp_path, _stream(_b1_calls(reference, sanity=True), structured=False), reference, _good(reference))
+    assert row["verdict"] == "PASS" and set(_status(row).values()) == {"PASS"}
+
+
+def test_unwrap_structured_output():
+    payload = {"R": 0.3, "ok": True}
+    assert verify._unwrap_structured({"result": json.dumps(payload)}) == payload
+    blocks = [{"type": "text", "text": json.dumps(payload), "annotations": None}, {"type": "image", "data": "x"}]
+    assert verify._unwrap_structured({"result": blocks}) == payload
+    assert verify._unwrap_structured({"result": 1.5}) == 1.5
+    assert verify._unwrap_structured({"result": "not json"}) == "not json"
+    assert verify._unwrap_structured({"result": [{"url": "a"}]}) == [{"url": "a"}]   # not content blocks
+    assert verify._unwrap_structured({"result": 1, "other": 2}) == {"result": 1, "other": 2}
+    assert verify._result_value({"result_text": json.dumps({"result": "0.25"})}, None) == 0.25
 
 
 def test_sanity_call_is_judged_when_made(tmp_path, reference):
