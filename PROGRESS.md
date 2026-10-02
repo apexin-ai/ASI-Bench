@@ -1495,3 +1495,37 @@
   under test. A test that skips a pipeline step to dodge a crash is a bug
   report waiting to be filed.
 - Commit: `879dfc0`.
+
+## 2026-10-02: rdkit (tandemai rdkit-mcp-server) MCP smoke (L1)
+
+- Problem: the second candidate batch names tandemai's `rdkit-mcp-server`,
+  but the catalog's `rdkit` id already points at two ToolUniverse RDKit tools.
+  Upstream has no lockfile and declares `mcp>=1.23.0` without an upper bound:
+  a fresh install resolves mcp 2.x and `run_server.py` dies on import
+  (`mcp.server.fastmcp` was renamed). Its default transport is SSE.
+- Resolution: new catalog id `rdkit_tandem` (the ToolUniverse `rdkit` entry
+  is untouched); manifest entry `rdkit` at `3a7000a` (10 commits past tag
+  v0.2.3, which adds seedable ETKDGv3 embedding), `uv-pip-pinned` with
+  `mcp==1.30.0`, `rdkit==2025.3.1`, launch `run_server.py --transport stdio`.
+  `e2e_smoke/servers/rdkit.py` calls all 74 tools and compares with RDKit run
+  in the smoke process (bit-identical descriptors, pixel-identical PNGs,
+  coordinates to float32 precision) plus hand values (masses, valence
+  electrons, Ertl TPSA, ring counts); it ends with a coverage check that
+  every manifest tool was called.
+- Lesson: when the server is a thin wrapper around the reference library,
+  L1 tests the wrapper — argument pass-through, return type, serialisation —
+  so mutation-test the smoke: MolWt → ExactMolWt, rounded TPSA, ignored
+  `includeHs`, swapped image size, dropped `useRandomCoords`, disabled
+  pruning each FAIL. ETKDGv3 → ETKDGv2 did not, correctly: the tool sets
+  every documented parameter, which makes the two identical.
+- Lesson: an upstream defect that depends on scheduling order needs repeated
+  probes. `batch_map` collects results with `asyncio.as_completed`, so
+  `fail_fast` stops at the first error in completion order; a single call
+  PASSed or WARNed at random, 12 calls WARN reliably.
+- Lesson: RDKit pickles drop molecule properties by default, so every
+  `Set*Prop` tool (and `UpdatePropertyCache`, which is really
+  `SetUnsignedProp`) is a no-op once its result goes back through the pickle.
+- Verification: Linux aarch64, 125 PASS / 28 WARN / 0 FAIL, ~1 s, three runs
+  with the same verdicts; `tests/mcp_e2e` + `tests/test_mcp_config.py` 427
+  passed. AWS amd64 not yet run.
+- Commit: pending (to be filled in after erix commits).

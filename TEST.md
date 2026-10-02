@@ -672,7 +672,13 @@ convergence, shell → order mapping, grids clear of Rayleigh anomalies, stubbed
 servers PASS while a TE/TM swap or Li-rule grating FAILs, defect probes WARN
 only when a misuse is accepted; psi4 — geometry parsing, frequency
 classification (imaginary sign dropped WARN), excited-state verdicts against a
-stubbed reference, `ok:false` for a valid request FAILs.
+stubbed reference, `ok:false` for a valid request FAILs; rdkit — structured
+result unwrapping, nested-value deviation, three-state `classify`, file-path
+confinement, `batch_map` item unpacking and the `fail_fast` / default image
+name / `(*args, **kwargs)` / lost-property verdicts, tool tables covering the
+manifest without overlap, hand anchors, and stubbed servers: descriptor checks
+FAIL when an option is ignored, oxidation-number and invalid-input probes,
+the coverage check.
 
 `test_verify_spec.py` / `test_verify_values.py`: strict parsing (unknown,
 inapplicable and invalid keys, dangling and optional-from-required
@@ -743,6 +749,18 @@ scripts/mcp/e2e/smoke.py psi4 --config ~/mcp/psi4.mcp.json` (no network,
 imaginary mode returned as real, `n_states` split between spins,
 `optimize_excited_state` returning the ground-state minimum and the starting
 geometry's excitation energy, stdout lines, `timer.dat` in the cwd).
+For rdkit: `python3 scripts/mcp/e2e/setup.py rdkit`, then
+`~/mcp/rdkit/.venv/bin/python scripts/mcp/e2e/smoke.py rdkit --config
+~/mcp/rdkit.mcp.json` (no network, ~1 s, all 74 tools). Expected outcome on the
+pinned revision: `PASS` with 0 FAIL and 28 WARN (`strict` description,
+dropped invalid SMILES in `compute_descriptors`, four `(*args, **kwargs)`
+tools, `CalcOxidationNumbers`, ignored unknown argument, explicit hydrogens
+dropped, blind unpickling, one `EmbedParameters` default, SMILES-derived and
+unconfined SDF file names, three `MolsMatrixToGridImage` crashes, default PNG
+names, two `GetSubstructMatch` cases, six property tools plus the SDF
+follow-up, unordered `batch_map` results and `fail_fast`). Upstream
+mutations (MolWt → ExactMolWt, rounded TPSA, ignored `includeHs`, swapped
+image size, dropped `useRandomCoords`, disabled pruning) each FAIL.
 
 The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`.

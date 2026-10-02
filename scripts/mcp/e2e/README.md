@@ -76,6 +76,7 @@ re-implementing them.
 | `jsbsim` | `flyintothesky/jsbsim-mcp` | uv-pip-pinned, Py 3.12 | — | 17 / 17 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
 | `s4` | `prof-davifr/mcp-s4-rcwa` | uv-pip-pinned, Py 3.12 | x86-64 (AVX2/FMA/BMI2), `libblas3 liblapack3` | 41 / 7 / 0, amd64, 2026-10-02 |
 | `psi4` | `Keith9922/chemaster` (`calc_psi4`) | conda-explicit | `micromamba` on `PATH` | 14 / 11 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
+| `rdkit` | `tandemai-inc/rdkit-mcp-server` (catalog `rdkit_tandem`) | uv-pip-pinned, Py 3.12 | — | 125 / 28 / 0, aarch64, 2026-10-02 (amd64 not yet run) |
 
 Install the prerequisites before running `setup.py`:
 
@@ -155,3 +156,32 @@ known defects is in each smoke script.
   - IR intensities are 0.
   - `temperature_K` is ignored.
   - `optimize_excited_state` returns the ground-state minimum.
+
+**rdkit**
+
+- This is tandemai's server; catalog id `rdkit_tandem`. The catalog's `rdkit`
+  entry is a different server (two ToolUniverse RDKit tools).
+- Upstream has no lockfile and allows any `mcp>=1.23`; with mcp 2 the server
+  does not start. The manifest pins `mcp==1.30.0`. The default transport is
+  SSE, so the launch passes `--transport stdio`.
+- Molecules move between tools as base64 pickles (`p_mol`/`pmol`, hundreds of
+  characters). The agent has to copy them exactly. The server loads them with
+  `pickle.loads`, so it trusts the client completely.
+- Trustworthy (identical to RDKit): 45 SMILES descriptor tools,
+  `compute_descriptors`, scaffolds, `FragmentMol`, Tanimoto, `EmbedMolecule`
+  and `EmbedMultipleConfs` with `params.randomSeed`, 2D coordinates, SDF/PDB
+  I/O, PNG images.
+- Broken: `CalcFractionCSP3`, `CalcPBF`, `GetUSR`, `GetUSRScore` (no usable
+  signature) and `CalcOxidationNumbers` always fail. `GetSubstructMatch` only
+  works when the match has exactly one atom. The `Set*Prop` tools and
+  `UpdatePropertyCache` have no effect (properties are lost in the pickle).
+  `MolsMatrixToGridImage` crashes with `useSVG`, `returnPNG` or highlights.
+- Pitfalls:
+  - Without `randomSeed`, embedding is not reproducible. Explicit `[H]` atoms
+    are dropped and no tool adds hydrogens.
+  - `compute_descriptors` silently drops invalid SMILES. `batch_map` returns
+    results in completion order, `fail_fast` included.
+  - The default SDF/PDB file name is the SMILES, which breaks on `/`.
+    `filename` may contain `../`. Default PNG names have one-second
+    resolution.
+  - Unknown arguments are ignored.
