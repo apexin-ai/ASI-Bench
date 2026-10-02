@@ -8,9 +8,10 @@
 
 <p>
   <a href="https://asibench.apexin.ai/submit"><img src="https://img.shields.io/badge/Contribute_a_Task-Submit_Now-16A34A?style=for-the-badge&amp;logo=googledocs&amp;logoColor=white" alt="Contribute a Task"></a>&nbsp;
-  <a href="https://discord.gg/ARCCtXSjU"><img src="https://img.shields.io/badge/Discord-Join_Community-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="Join the ASI-Bench Discord"></a>&nbsp;
+  <a href="https://discord.gg/V3kHgqp4X9"><img src="https://img.shields.io/badge/Discord-Join_Community-5865F2?style=for-the-badge&amp;logo=discord&amp;logoColor=white" alt="Join the ASI-Bench Discord"></a>&nbsp;
   <a href="docs/assets/wechat-group-qr.svg"><img src="https://img.shields.io/badge/WeChat-Scan_QR-07C160?style=for-the-badge&amp;logo=wechat&amp;logoColor=white" alt="Join the ASI-Bench WeChat group"></a>
 </p>
+
 
 <p>
   <a href="https://asibench.apexin.ai/"><img src="https://img.shields.io/badge/Website-ASI--Bench-2563EB?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white" alt="Website"></a>&nbsp;
