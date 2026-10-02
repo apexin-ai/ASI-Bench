@@ -1,0 +1,51 @@
+{
+  "schema_version": 2,
+  "server": "psi4",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": ["frequency", "optimize", "optimize_excited_state", "single_point", "tddft"],
+  "calls": [
+    {
+      "name": "opt",
+      "tool": "optimize",
+      "inputs_from_reference": {"geometry_xyz": "geometry_xyz", "method": "method", "basis": "basis"},
+      "result": {"format": "json", "key": "result.final_energy.value", "reference_key": "final_energy_hartree",
+                 "abs_tol": 1e-6}
+    },
+    {
+      "name": "freq",
+      "tool": "frequency",
+      "inputs_from_reference": {"method": "method", "basis": "basis"},
+      "inputs_from_call": {"call": "opt", "map": {"geometry_xyz": "result.optimized_geometry_xyz"},
+                           "compare": "geometry", "abs_tol": 1e-4},
+      "result": {"format": "json", "key": "result.frequencies_cm_inv", "reference_key": "frequencies_cm_inv",
+                 "abs_tol": 1.0}
+    }
+  ],
+  "answers": [
+    {"prediction_key": "final_energy_hartree", "from_call": "opt", "result_key": "result.final_energy.value",
+     "reference_key": "final_energy_hartree", "abs_tol": 1e-6},
+    {"prediction_key": "frequencies_cm_inv", "from_call": "freq", "result_key": "result.frequencies_cm_inv",
+     "reference_key": "frequencies_cm_inv", "abs_tol": 1.0},
+    {"prediction_key": "zpe_hartree", "from_call": "freq", "result_key": "result.zpe.value",
+     "reference_key": "zpe_hartree", "abs_tol": 5e-6}
+  ],
+  "suspicious_tools": {
+    "mcp__psi4__optimize_excited_state": "",
+    "mcp__psi4__tddft": ""
+  },
+  "bypass_patterns": [
+    "(import|from)\\s+(psi4|pyscf|qcengine|qcelemental|optking|geometric)\\b",
+    "\\b(pip|pip3|uv|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\b(psi4|pyscf|qcengine|geometric)\\b",
+    "\\buvx\\b[^\\n]*\\b(psi4|pyscf)\\b",
+    "(^|[\\s;&|/])psi4\\s+(-\\w|\\S+\\.(dat|in|py))",
+    "(chemaster|psi4)[^\\s'\"]*/\\.venv/bin/python",
+    "chemaster\\.mcp\\.calc_psi4"
+  ],
+  "suspicious_patterns": [
+    "\\bpsi4\\b",
+    "\\bpyscf\\b",
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ]
+}

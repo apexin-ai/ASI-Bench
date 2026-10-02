@@ -126,10 +126,14 @@
   上游用 `uv-pip-pinned`（只允许 `==` 精确 pin，并以 `exclude_newer` 固定传递依赖）；
   vendor 预编译原生库的上游声明 `host_requirements`（machine/cpu_flags/shared_libraries），
   `setup.py` 在 clone 前只检查、不安装系统包；
+  conda-only 依赖（psi4）用 `conda-explicit`：manifest `conda` 精确 `name=version` specs，
+  按平台提交带 SHA-256 的 `@EXPLICIT` lock（header 与 manifest 不符即拒绝），
+  `micromamba create --file` 无求解安装，`setup.py <id> --lock` 重新生成；
   只 clone 不 vendor 上游；
   smoke 用 server 自身 venv 在进程外独立计算参考值，L0/L1 分级，
   smoke 必须覆盖 manifest 列出的全部工具：数值错误为 FAIL，上游缺陷（in-band 错误、
-  忽略参数、误导性返回、间歇性错误、stdout 非 JSON 行）记为 WARN。联网 server
+  忽略参数、误导性返回、间歇性错误、stdout 非 JSON 行）记为 WARN；探测已知数值缺陷
+  （如鞍点虚频丢符号）用三态：正确 PASS、精确符合已识别缺陷 WARN、其他 FAIL。联网 server
   （arxiv）的参考值须在同一次 smoke 中直连原始 API/PDF 获取，只用封闭历史日期窗口，
   且 launch env 必须关闭 ToolUniverse 结果缓存。直连 smoke 通过不等于 agent E2E 通过。
 - MCP E2E fake task 仅放 `examples/mcp-e2e-tasks/`（`status: test`，不进 `tasks/`），
@@ -140,7 +144,8 @@
   `image` 结果、`answers`（来源可用 `select` 取返回数组的元素）；schema 1 自动归一化；非数值结果用命名 `extract`
   与 `match` equal/subset/member，`bypass_tools`/`suspicious_tools` 检查 WebFetch 等
   非 MCP 工具，`server_tools` 多出工具记 WARN；`optional` + `group` 表示多选一的必需调用，
-  数值答案可用 `from_calls` 多来源，非数值串联值（如 `session_id`）按字符串精确比对）
+  数值答案可用 `from_calls` 多来源，非数值串联值（如 `session_id`）按字符串精确比对，
+  `"compare": "geometry"` 按原子行在 `abs_tol` Å 内比对；结果/答案 key 可用点路径取嵌套 JSON）
   读取 run 产物判定，框架评分契约不变。
   `--mcp-config` 强制 search mode，Claude 有 WebSearch/WebFetch、Codex 有 web_search，
   联网类 fake task 必须把它们纳入 bypass 检查。

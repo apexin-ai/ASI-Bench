@@ -21,18 +21,30 @@ upstream licenses apply.
   `uv-sync-frozen` uses the upstream lockfile (optional extra `uv_sync_args`);
   `uv-pip-pinned` is for upstreams without one and needs `requirements` (exact
   `name==version` pins only) and `exclude_newer` (a UTC timestamp that fixes
-  the transitive resolution). Servers that vendor prebuilt native code declare
-  `host_requirements` (`machine`, `cpu_flags`, loadable `shared_libraries`,
-  plus a human-readable `reason`).
+  the transitive resolution). `conda-explicit` is for servers that need
+  conda-only packages (psi4): `conda` holds the `channel`, exact
+  `name=version` `specs` (Python pinned to the manifest version) and one
+  committed `@EXPLICIT` lock per conda platform under `locks/` (every package
+  URL with its SHA-256; the lock header repeats server, platform, channel and
+  specs, and a lock that no longer matches the manifest is refused). Servers
+  that vendor prebuilt native code declare `host_requirements` (`machine`,
+  `cpu_flags`, loadable `shared_libraries`, plus a human-readable `reason`).
 - `setup.py` — stdlib only. Clones into `<root>/<id>` (`--filter=blob:none`),
   detaches at the pinned revision (refuses dirty checkouts or foreign remotes),
   builds `<root>/<id>/.venv` with the manifest's Python (ignoring the caller's
   `UV_PYTHON`) — `uv sync --frozen [uv_sync_args]`, or `uv venv --clear` +
-  `uv pip install --exclude-newer <exclude_newer> <pins>` — and writes
+  `uv pip install --exclude-newer <exclude_newer> <pins>`, or for
+  `conda-explicit` a fresh `micromamba create --no-rc --prefix <root>/<id>/.venv
+  --file locks/<id>-<platform>.txt` (no solver at install time; micromamba
+  verifies every SHA-256; package cache in `<root>/.micromamba`; `micromamba`
+  must be on `PATH`) — and writes
   `<root>/<id>.mcp.json` for `--mcp-config` (including the manifest's launch
   `env` with `{checkout}` resolved). `host_requirements` are checked before
   anything is cloned; system packages are never installed (that needs an
-  administrator).
+  administrator). `setup.py <id> --lock` (maintainers, needs network)
+  re-solves `conda.specs` with `micromamba create --dry-run --json` for every
+  locked platform (`CONDA_OVERRIDE_GLIBC=2.28`, conda-forge's Linux baseline)
+  and rewrites the locks.
 - `stdio_client.py` — stdlib-only JSON-RPC stdio client. It reads raw server
   stdout so non-JSON lines are **recorded**, not swallowed by an SDK.
 - `smoke_<id>.py` — per-server L0/L1 checks; writes a JSON report with versions,
@@ -65,6 +77,10 @@ The s4 smoke passed on AWS Linux amd64 with the pinned upstream `libS4.so` on
 against a locally built `libS4.so` with the same values (40 PASS, 8 WARN: the
 extra one is "not the upstream binary", four consecutive runs).
 
+The psi4 smoke passed on 2026-10-02 on Linux aarch64 (four consecutive runs)
+and AWS Linux amd64 with the linux-64 lock (14 PASS, 11 WARN, 0 FAIL, ~20 s,
+identical verdicts and values).
+
 ## Run (Linux, as the unprivileged E2E user)
 
 ```sh
@@ -89,12 +105,20 @@ python3 scripts/mcp/e2e/setup.py s4 --root ~/mcp
 ~/mcp/s4/.venv/bin/python scripts/mcp/e2e/smoke_s4.py \
   --config ~/mcp/s4.mcp.json --report ~/mcp/s4-smoke-report.json
 uv run asibench mcp check --config ~/mcp/s4.mcp.json
+
+# psi4 is conda-only: needs the standalone micromamba binary on PATH, e.g.
+#   mkdir -p ~/.local/bin && curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
+#     | tar -xj -C ~/.local bin/micromamba
+python3 scripts/mcp/e2e/setup.py psi4 --root ~/mcp
+~/mcp/psi4/.venv/bin/python scripts/mcp/e2e/smoke_psi4.py \
+  --config ~/mcp/psi4.mcp.json --report ~/mcp/psi4-smoke-report.json
+uv run asibench mcp check --config ~/mcp/psi4.mcp.json
 ```
 
 The smoke script must run with the server's own virtualenv so that its
 reference calculation can import the same scientific library. The server is
-launched from a temporary cwd/HOME (separate directories for arxiv; jsbsim
-also gets a temporary `TMPDIR`) with a
+launched from a temporary cwd/HOME (separate directories for arxiv; jsbsim,
+s4 and psi4 also get a temporary `TMPDIR`) with a
 minimal environment plus the config's `env`, and no operator credentials. Exit code is non-zero if any check FAILs; WARNs do not fail.
 
 ## Server notes
@@ -326,3 +350,48 @@ L2 coverage: `simulate_stack_spectrum` of a TM grating with a given harmonic
 count, answers taken from the returned spectrum (`mcp_e2e.s4_grating_spectrum`);
 `check_engine_sanity` is judged when an agent calls it, otherwise L1 only.
 
+### psi4 (`Keith9922/chemaster`, `calc_psi4`)
+
+The catalog's psi4 entry is not a psi4-project server but the `calc_psi4`
+FastMCP server of ChemMaster, a computational-chemistry agent with a dozen
+MCP servers. psi4 is imported lazily inside each tool, so a server without
+psi4 passes L0 (`initialize`, `tools/list`) and fails every call with
+`No module named 'psi4'`. psi4 is conda-only (no PyPI wheel; ChemMaster is not
+on PyPI either), hence install mode `conda-explicit`: Python 3.12.14, psi4 1.11,
+dftd3-python 1.6.0 (needed by the default method `B3LYP-D3(BJ)`), mcp 1.28.1
+(the newest 1.x on conda-forge), pint 0.26.1 and scipy 1.18.1 from
+conda-forge, locked for linux-64 (143 packages; psi4 pulls MKL/einsums) and
+linux-aarch64 (129). The server only needs those packages, so the checkout is
+not installed: launch `python -m chemaster.mcp.calc_psi4.server` with `env`
+`PYTHONPATH={checkout}` and `OMP_NUM_THREADS=1`. No network or credentials.
+
+References are computed in the smoke process by psi4 itself with the settings
+the tools document (density-fitted SCF, C1, RHF/UHF by multiplicity) but
+through a different path — wavefunction objects, `psi4.variable` and
+`tdscf_excitations` instead of the server's output-log parsers. During
+probing the HF/STO-3G water energy also matched PySCF with density fitting
+(`def2-universal-jkfit`) to 1e-10 Eh. Every call passes `memory_gb=1`,
+`n_threads=1` (the default 4 GB exceeds small VMs).
+
+| Tool | L1 check (FAIL if wrong) | Known WARN on the pinned revision |
+|---|---|---|
+| `single_point` | water HF/STO-3G, `B3LYP-D3(BJ)`/def2-SVP, MP2/cc-pVDZ and OH UHF/6-31G doublet energies vs psi4 (≤ 2e-7 Eh, observed ≤ 5e-9) | `n_basis_functions`, `n_iterations`, `homo_lumo_gap`, `dipole` are always `null`: they come from `psi4.core.get_active_wavefunction()`, which psi4 1.11 does not have (upstream's tests monkeypatch it), and the `AttributeError` is swallowed; a doublet closed-shell water is rejected in-band (`ok:false`, `INVALID_MULTIPLICITY`, `isError:false`) |
+| `optimize` | water HF/STO-3G (tight) from a distorted start: energy ≤ 1e-6 Eh and interatomic distances ≤ 1e-3 Å vs an independent psi4 optimisation, `converged` | `n_iterations` is always 0 (same cause) |
+| `frequency` — minimum | at the server's own minimum: signed frequencies (≤ 0.5 cm⁻¹, observed 5e-5), `n_imaginary` 0, ZPE and thermal E/H/G corrections (≤ 2e-6 Eh) vs psi4 | IR intensities are all zero (log-parser fallback) although psi4 gives 7.2/44.3/30.1 km/mol; `temperature_K` (and `pressure_atm`) are only echoed — the thermochemistry stays at 298.15 K |
+| `frequency` — saddle | planar NH₃ (D3h, first-order saddle, optimised in symmetry by the reference): PASS only if the imaginary mode is returned negative with `n_imaginary` 1 | the 1081.6i cm⁻¹ umbrella mode is returned as **+1081.6** with `n_imaginary` 0, no `IMAGINARY_FREQUENCY` warning, and a ZPE that counts it (0.0400 vs psi4 0.0376 Eh): the log parser drops the `i`; any other mismatch is FAIL |
+| `tddft` | water B3LYP/def2-SVP, TDA singlets+triplets and full TDDFT singlets: excitation energies (≤ 2e-3 eV) and oscillator strengths vs `tdscf_excitations`, ground-state energy, `delta_E_ST_eV` = E(T1) − E(S1) as documented | `n_states` is documented "per spin manifold" but psi4 splits it: `n_states=4` with triplets gives 2 singlets + 2 triplets |
+| `optimize_excited_state` | PASS only if `final_total_energy` equals E(S1) at the returned geometry and the S1 gradient there (central differences) is below 2e-3 Eh/Å | water S1 B3LYP/STO-3G returns the **ground-state minimum** (energy equal to an independent S0 optimisation; psi4's finite-difference TDSCF optimisation ignores `FOLLOW_ROOT`), and `excitation_energy_at_opt` is the starting geometry's value (11.06 vs 10.23 eV); recognised exactly → WARN, otherwise FAIL |
+| server | unknown tool is an error; process alive after all calls | psi4 prints `Memory set to …`, `Threads set to …`, `Optimizer: Optimization complete!` on stdout (non-JSON lines); psi4 writes `timer.dat` into the server cwd |
+
+Implications for agent runs:
+
+- Only energies, optimised geometries, frequencies at minima and TDDFT
+  excitations are trustworthy; treat `null` fields as missing, never compute
+  "imaginary frequency" conclusions from `n_imaginary`, and do not use
+  `optimize_excited_state` for excited-state geometries.
+- Agents should pass small `memory_gb` / `n_threads` on small hosts and expect
+  psi4 logs (`meta.output_path`) under the server's `TMPDIR`.
+
+L2 coverage: `optimize` → `frequency` at the returned geometry
+(`mcp_e2e.psi4_opt_freq`, reference computed with PySCF); `single_point`,
+`tddft` and `optimize_excited_state` are covered by the L1 smoke only.

@@ -1220,3 +1220,76 @@
 - Implementation commits: `29ba5a5` (task, verifier `select`), `7b78b11`
   (structured-output unwrapping).
 
+## 2026-10-02: psi4 (ChemMaster calc_psi4) MCP smoke (L1) and conda-explicit install
+
+- Problem: the catalog's psi4 server (`Keith9922/chemaster`, `chemaster-mcp
+  calc_psi4`) imports psi4 lazily, so the L0 survey passed although every
+  `tools/call` would fail with `No module named 'psi4'`. psi4 has no PyPI wheel
+  (and ChemMaster is not on PyPI), so neither uv install mode can provide it.
+- Resolution: install mode `conda-explicit`: manifest `conda` (`channel`,
+  exact `specs`, per-platform `locks`) and committed `@EXPLICIT` locks with
+  SHA-256 for linux-64 and linux-aarch64, installed by `micromamba create
+  --file` without a solver; `setup.py <id> --lock` regenerates them. Manifest
+  entry `psi4` (psi4 1.11, dftd3-python 1.6.0, mcp 1.28.1, Python 3.12.14) runs
+  the checkout with `python -m chemaster.mcp.calc_psi4.server` and
+  `PYTHONPATH={checkout}` (a bare `{checkout}` is now a valid launch `env`
+  value). `smoke_psi4.py` calls all five tools and compares with psi4 run in
+  the smoke process through wavefunctions, `psi4.variable` and
+  `tdscf_excitations` rather than the server's log parsers.
+- Lesson: when a smoke deliberately probes a known upstream defect, classify
+  tri-state — PASS for the correct answer, WARN only when the output matches
+  the recognised defect exactly, FAIL for anything else — so a changed
+  upstream cannot hide behind a WARN. Here: the planar-NH3 saddle's
+  1081.6i cm⁻¹ mode comes back as +1081.6 with `n_imaginary` 0, and
+  `optimize_excited_state` returns the ground-state minimum (psi4's
+  finite-difference TDSCF optimisation ignores `FOLLOW_ROOT`); checks at true
+  minima PASS.
+- Lesson: psi4 1.11 has no `psi4.core.get_active_wavefunction`; upstream's
+  `conftest.py` monkeypatches it, so its tests never saw that
+  `n_basis_functions`, `n_iterations`, `homo_lumo_gap` and `dipole` are always
+  null and frequencies always come from the log parser (IR intensities zero).
+- Lesson: conda-forge's `mcp` lags PyPI (1.28.1 is the newest 1.x); pinning it
+  in conda avoids mixing pip-installed pydantic into the conda prefix.
+- Verification: Linux aarch64: 14 PASS / 11 WARN / 0 FAIL, ~20 s, four runs
+  with identical verdicts; tampering with one lock SHA-256 makes micromamba
+  abort. Offline tests in `tests/test_mcp_e2e_scripts.py`. AWS Linux amd64
+  (linux-64 lock): 14 PASS / 11 WARN / 0 FAIL, the same verdicts and values.
+- Implementation commit: `7a9c5d9`.
+
+## 2026-10-02: L2 psi4 optimize → frequency task, geometry-valued tool chain
+
+- Problem: the L2 task must chain two psi4 tools through a value an agent
+  cannot recompute (the optimised geometry), and the reference must not come
+  from psi4 itself. The psi4 results are nested JSON (`result.zpe.value`) and
+  the chained value is a geometry string an agent may reformat, which
+  `verify_run.py` could only compare as identical strings of a flat key.
+- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/psi4_opt_freq`: seeded small
+  molecule, STO-3G or cc-pVDZ, ±0.04 Å distortion; `optimize` (RHF, tight),
+  then `frequency` at the returned geometry; answers energy, frequencies, ZPE.
+  Reference in `generate --sandbox task` with PySCF 2.14.0 + geomeTRIC 1.1.1:
+  DF-RHF with psi4's default JK fitting basis, tight minimum, analytic Hessian,
+  isotope masses. `verify_run.py` gained dotted result/answer keys (`_field`)
+  and `"compare": "geometry"` for `inputs_from_call` (atom lines within
+  `abs_tol` Å).
+- Lesson: to reproduce a density-fitted program in another one, match the
+  fitting basis, not just the orbital basis: psi4 uses `def2-universal-jkfit`
+  for STO-3G and `cc-pvdz-jkfit` for cc-pVDZ (both matched PySCF to ≤ 4e-9 Eh),
+  but for the Cartesian 6-31G it treats the fitting functions as Cartesian too
+  (1e-5 Eh off), so 6-31G is excluded. Frequencies also need the same masses:
+  PySCF's default average masses shift them by ~0.3 cm⁻¹ against psi4's
+  most-abundant isotopes.
+- Lesson: PySCF 2.9.0 (pinned by the pyscf tasks) fails in DF-RHF gradients
+  with numpy 2.5 (`einsum` contraction path unpacking); 2.14.0 works.
+- Lesson: when the VM cannot commit and another branch moves underneath,
+  develop on a scratch clone rebased with a throwaway identity and resolve
+  append-only conflicts (PROGRESS, README) by keeping both sides in order.
+- Verification: over 16 seeds the server matched the reference to ≤ 4e-9 Eh,
+  ≤ 0.11 cm⁻¹ and ≤ 4e-7 Eh; `asibench generate --sandbox task` + an oracle
+  `--agent-cmd` following B1 through the real server scored 100/100 and
+  `verify_run.py` failed it for lack of agent evidence; offline tests in
+  `tests/test_mcp_e2e_psi4.py` (Claude/Codex streams built from recorded
+  server outputs pass every check). AWS Linux amd64, seed 31415 (methane,
+  HF/STO-3G), B1–B4 ×1 each for Claude Code (`claude-opus-5-5`) and Codex CLI
+  (`gpt-5.6-sol`): local score 400/400 per harness and verifier 4/4 PASS per
+  harness.
+- Implementation commit: `f4c48de`.
