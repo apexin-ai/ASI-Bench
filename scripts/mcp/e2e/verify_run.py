@@ -21,12 +21,27 @@ per result:
                     the backend directly, and no listed non-MCP tool (e.g.
                     WebFetch) reached it (suspicious commands/tools are WARN)
 
-Per-task expectations come from ``e2e_check.json`` in the task directory.
-Schema 1 (one tool, one scalar) is normalised to schema 2 (``calls`` and
-``answers`` lists); see examples/mcp-e2e-tasks/README.md. Results are numeric
-by default; a call result, chain or answer with ``extract`` uses one of the
-named EXTRACTORS (e.g. arXiv IDs from a search result list, snippet counts per
-term) and compares canonical values with ``match`` = equal / subset / member.
+Per-task expectations come from ``e2e_check.json`` in the task directory
+(examples in examples/mcp-e2e-tasks/mcp_e2e/*/). Schema 1 (one tool, one
+scalar) is normalised to schema 2:
+
+  server, reference_file, prediction_file
+  calls     list of {name, tool, inputs_from_reference?, inputs_from_call?,
+            result, optional?, group?}; ``result.format`` is ``number``,
+            ``json`` + ``key``, or ``image`` + ``media_type``
+  answers   list of {prediction_key, from_call + result_key or from_calls,
+            reference_key, abs_tol}
+  server_tools                     tools the server must offer (extra = WARN)
+  bypass_patterns / suspicious_patterns
+                                   regexes over Bash commands and produced
+                                   source files; FAIL / WARN
+  bypass_tools / suspicious_tools  non-MCP (or forbidden MCP) tool name ->
+                                   regex over its input; FAIL / WARN
+
+Results are numeric by default; a call result, chain or answer with
+``extract`` uses one of the named EXTRACTORS (``arxiv_ids``, ``term_counts``)
+and compares canonical values with ``match`` = equal / subset / member; an
+answer with ``"merge_calls": true`` merges the values of all calls first.
 A call spec with ``"optional": true`` is only judged if called; optional specs
 sharing a ``"group"`` count as one requirement (at least one of them must be
 called and correct), e.g. reading a state with either of two tools. A numeric
@@ -36,8 +51,8 @@ another field, or ``where_key`` equal to a reference value, e.g. R at a given
 wavelength of a returned spectrum). Chained inputs that are not
 numbers (e.g. a ``session_id``) compare as exact strings, or with
 ``"compare": "geometry"`` as atom lists within ``abs_tol`` (Angstrom). Result
-and answer keys may be dotted paths into nested JSON (``result.zpe.value``).
-Stdlib only.
+and answer keys may be dotted paths into nested JSON (``result.zpe.value``);
+a literal key containing dots wins. Stdlib only.
 
 Usage::
 

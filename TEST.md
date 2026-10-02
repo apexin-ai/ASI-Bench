@@ -644,7 +644,7 @@ then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke_pyscf.py --config
 ~/mcp/pyscf.mcp.json`. It calls all seven tools and checks the results against
 PySCF, RDKit and geomeTRIC run in the smoke process; expected outcome on the
 pinned revision is `PASS` with 0 FAIL and 7–8 WARN (upstream defects listed in
-`scripts/mcp/e2e/README.md`; the benzene symmetry probe is intermittent).
+`scripts/mcp/e2e/smoke_pyscf.py`; the benzene symmetry probe is intermittent).
 For arxiv: `python3 scripts/mcp/e2e/setup.py arxiv`, then
 `~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke_arxiv.py --config
 ~/mcp/arxiv.mcp.json` (needs access to export.arxiv.org and arxiv.org, ~90 s).

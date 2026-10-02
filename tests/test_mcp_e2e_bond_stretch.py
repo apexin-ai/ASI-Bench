@@ -56,7 +56,7 @@ def test_cases_are_deterministic_and_within_ranges():
 
 def test_only_rigid_molecules_are_used():
     # Flexible molecules have several UFF minima, so the unseeded server geometry
-    # would not reproduce the reference (scripts/mcp/e2e/README.md).
+    # would not reproduce the reference (scripts/mcp/e2e/smoke_pyscf.py).
     assert {b[0] for b in generate_gt.BONDS} <= {"O", "N", "F", "C#N", "C=O", "CF"}
 
 

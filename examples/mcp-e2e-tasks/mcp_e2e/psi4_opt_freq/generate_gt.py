@@ -18,7 +18,7 @@ what the server's psi4 does:
   convention; PySCF's default average masses shift frequencies by ~0.3 cm⁻¹);
 * ZPE = ½ Σ ν with 1 cm⁻¹ = 4.556335252912e-6 Eh.
 
-Measured agreement with the pinned server (scripts/mcp/e2e/README.md):
+Measured agreement with the pinned server over 16 seeds:
 energies ≤ 4e-9 Eh, frequencies ≤ 0.12 cm⁻¹, ZPE ≤ 5e-7 Eh.
 
 Framework call: python generate_gt.py --output-dir <dir> --params '<json>'
