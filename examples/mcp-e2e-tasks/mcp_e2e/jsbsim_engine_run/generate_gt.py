@@ -12,7 +12,7 @@ The aircraft data comes from the jsbsim wheel (``jsbsim.get_default_root_dir()``
 for c172x its aircraft/engine/systems files are identical to the
 ``jsbsim_data/`` tree of the pinned server checkout, so nothing is vendored.
 JSBSim is deterministic: the server and this reference agree to ~1e-3 ft
-(the server converts ft/s to kt with 0.592484, see scripts/mcp/e2e/smoke_jsbsim.py).
+(the server converts ft/s to kt with 0.592484, see scripts/mcp/e2e/e2e_smoke/servers/jsbsim.py).
 
 Framework call: python generate_gt.py --output-dir <dir> --params '<json>'
 Needs jsbsim: generate with ``asibench generate --sandbox task``.

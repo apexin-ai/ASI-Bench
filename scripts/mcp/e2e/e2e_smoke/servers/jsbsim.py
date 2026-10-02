@@ -3,47 +3,40 @@
 Run with the server's own virtualenv so that the ``jsbsim`` Python module (the
 same JSBSim build the server uses) is importable for the references::
 
-    ~/mcp/jsbsim/.venv/bin/python scripts/mcp/e2e/smoke_jsbsim.py --config ~/mcp/jsbsim.mcp.json
+    ~/mcp/jsbsim/.venv/bin/python scripts/mcp/e2e/smoke.py jsbsim --config ~/mcp/jsbsim.mcp.json
 
 No network is needed. References are computed here, in this process, outside
 the server: a separate ``FGFDMExec`` is driven through the same scenario with
 JSBSim's own property names (``ic/*``, ``attitude/theta-deg`` ...) and an exact
 ft/s -> kt conversion, then compared with what the MCP tools return.
 
-Levels reported:
-  L0  initialize + tools/list (stable, matches manifest), launch environment
-  L1  real tools/call of all 10 tools: aircraft catalogue, initial conditions,
-      property writes/reads, stepping and telemetry against the reference;
-      repeatability (a second session reaching the same state through the
-      other initial-condition path and chunked steps); defect probes for trim,
-      execute_script, partial initial conditions and missing properties
+L1: real tools/call of all 10 tools: aircraft catalogue, initial conditions,
+property writes/reads, stepping and telemetry against the reference;
+repeatability (a second session reaching the same state through the other
+initial-condition path and chunked steps); defect probes for trim,
+execute_script, partial initial conditions and missing properties (the shared
+L0/L1 checks are in ``e2e_smoke/runner.py``).
 
 Upstream defects that do not make a correctly used tool wrong (in-band errors,
 ignored parameters, misleading results, fields read from non-existent
 properties, a crash in execute_script, stdout chatter) are WARN; wrong numbers
 for correct inputs are FAIL.
 
-The server runs from a temporary cwd, a temporary HOME and TMPDIR, with a
-minimal environment and no operator credentials. execute_script, which can
-crash the whole server, runs in a second server process; two more short-lived
-servers show why the launch env (JBSIM_ROOT, JSBSIM_DEBUG=0) is required.
+execute_script, which can crash the whole server, runs in a second server
+process; two more short-lived servers show why the launch env (JBSIM_ROOT,
+JSBSIM_DEBUG=0) is required.
 """
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import math
 import os
-import subprocess
-import sys
 import tempfile
-from collections import Counter
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-from smoke_common import Caller, MCPError, Report, StdioMCP, package_versions, text_of  # noqa: E402
+from ..client import MCPError, StdioMCP, text_of
+from ..runner import Caller, Report, Session, Smoke, check_rejected
 
 AIRCRAFT = "c172x"
 DT = 1.0 / 60.0
@@ -239,16 +232,7 @@ class Reference:
 
 def call_json(call: Caller, report: Report, check: str, tool: str, arguments: dict, *, allow_error=False):
     """tools/call + JSON decode; None (with a FAIL) on transport/tool/JSON errors."""
-    result = call(check, tool, arguments, allow_error=allow_error)
-    if result is None:
-        return None
-    if result.get("isError"):
-        return {"_isError": True, "_text": text_of(result)}
-    try:
-        return json.loads(text_of(result))
-    except json.JSONDecodeError:
-        report.add("L1", check, "FAIL", f"result is not JSON: {text_of(result)[:200]!r}")
-        return None
+    return call.json(check, tool, arguments, allow_error=allow_error)
 
 
 def get_value(call: Caller, report: Report, check: str, sid: str, path: str):
@@ -500,33 +484,22 @@ def check_trim(call: Caller, report: Report, ref: Reference) -> None:
                trim_results={m: r["payload"] for m, r in results.items()}, jsbsim_do_trim=jsb)
 
 
-def check_errors(call: Caller, report: Report, client: StdioMCP) -> None:
-    bad = call_json(call, report, "create_session[unknown aircraft]", "create_session",
-                    {"aircraft": "no_such_aircraft"}, allow_error=True)
-    if isinstance(bad, dict):
-        report.add("L1", "create_session[unknown aircraft]", "PASS" if bad.get("_isError") else "FAIL",
-                   "isError=true" if bad.get("_isError") else f"accepted: {str(bad)[:200]}")
+def check_errors(call: Caller, report: Report) -> None:
+    check_rejected(call, "create_session[unknown aircraft]", "create_session", {"aircraft": "no_such_aircraft"})
     for tool, arguments in (("step", {"seconds": 1.0}), ("get_telemetry", {}), ("trim", {})):
-        name = f"{tool}[unknown session]"
-        payload = call_json(call, report, name, tool, {"session_id": "nosuchsession", **arguments}, allow_error=True)
-        if not isinstance(payload, dict):
-            continue
-        if payload.get("_isError"):
-            report.add("L1", name, "PASS", "isError=true")
-        elif in_band_error(payload):
-            report.add("L1", name, "WARN", f"error returned in-band with isError=false: {in_band_error(payload)}")
-        else:
-            report.add("L1", name, "FAIL", f"accepted: {str(payload)[:200]}")
+        check_rejected(call, f"{tool}[unknown session]", tool, {"session_id": "nosuchsession", **arguments},
+                       in_band=_in_band)
+
+
+def _in_band(result: dict) -> str | None:
     try:
-        response = client.call_tool("__nonexistent__", {})
-        ok = "error" in response or response.get("result", {}).get("isError") is True
-        report.add("L1", "unknown tool is an error", "PASS" if ok else "FAIL", "" if ok else f"got {response}")
-    except MCPError as exc:
-        report.add("L1", "unknown tool is an error", "FAIL", str(exc))
+        return in_band_error(json.loads(text_of(result)))
+    except json.JSONDecodeError:
+        return None
 
 
-def run_l1(client: StdioMCP, report: Report, ref: Reference, root: Path) -> Caller:
-    call = Caller(client, report)
+def run_l1(session: Session) -> None:
+    call, report, ref, root = session.call, session.report, session.state["ref"], session.state["root"]
     check_list_aircraft(call, report, root)
     main = check_main_flight(call, report, ref, root)
     if main:
@@ -535,50 +508,49 @@ def run_l1(client: StdioMCP, report: Report, ref: Reference, root: Path) -> Call
         call_json(call, report, "close_session[main]", "close_session", {"session_id": main["sid"]})
     check_defaults_and_partial_ic(call, report)
     check_trim(call, report, ref)
-    check_errors(call, report, client)
-    return call
+    check_errors(call, report)
 
 
 # --------------------------------------------------------------------------
 # Extra server processes
 # --------------------------------------------------------------------------
 
-def check_execute_script(server: dict, env: dict, tmp: Path, report: Report, ref: Reference) -> None:
+def check_execute_script(session: Session) -> None:
     """execute_script in its own server: a stock script crashes the process."""
-    cwd = tmp / "script-cwd"
-    cwd.mkdir()
-    scratch = Path(env["TMPDIR"])
+    report, ref, scratch = session.report, session.state["ref"], session.scratch
     before = set(scratch.iterdir())
-    client = StdioMCP(server["command"], server["args"], cwd=cwd, env=env, stderr_path=tmp / "script.stderr.log")
+    with session.spawn("script-cwd") as client:
+        try:
+            _execute_script(client, report, ref, scratch, before)
+        except MCPError as exc:
+            report.add("L1", "execute_script", "FAIL", f"server failed before the crash probe: {exc}")
+
+
+def _execute_script(client: StdioMCP, report: Report, ref: Reference, scratch: Path, before: set) -> None:
     call = Caller(client, report)
-    try:
-        client.initialize()
-        sid = new_session(call, report, "create_session[script]", initial_conditions=dict(IC))
-        if sid is None:
-            return
-        t0 = get_value(call, report, "get_property[t before literal script]", sid, "simulation/sim-time-sec")
-        payload = call_json(call, report, "execute_script[<run> literal]", "execute_script",
-                            {"session_id": sid, "script": SCRIPT_LITERAL})
-        t1 = get_value(call, report, "get_property[t after literal script]", sid, "simulation/sim-time-sec")
-        loads = ref.loads_script(SCRIPT_LITERAL)
-        if isinstance(payload, dict):
-            if payload.get("ok") is True and not loads:
-                report.add("L1", "execute_script[<run> literal]", "WARN",
-                           f"ok=true ({payload.get('note')}) although JSBSim rejects this document "
-                           "(load_script returns False; the tool ignores the return value); "
-                           f"t {t0} -> {t1}: one ordinary frame, no script")
-            else:
-                report.add("L1", "execute_script[<run> literal]", "PASS" if payload.get("ok") == loads else "FAIL",
-                           f"ok={payload.get('ok')}, JSBSim load_script={loads}")
-        leaked = sorted(p.name for p in set(scratch.iterdir()) - before)
-        report.add("L1", "execute_script[temp file]", "WARN" if leaked else "PASS",
-                   f"literal scripts are written to $TMPDIR and never deleted: {leaked}" if leaked else "")
-        noise_before = len(client.non_json_stdout)
-        report.add("L1", f"execute_script[{SCRIPT_FILE}]", *stock_script_probe(client, sid, noise_before))
-    except MCPError as exc:
-        report.add("L1", "execute_script", "FAIL", f"server failed before the crash probe: {exc}")
-    finally:
-        client.close()
+    client.initialize()
+    sid = new_session(call, report, "create_session[script]", initial_conditions=dict(IC))
+    if sid is None:
+        return
+    t0 = get_value(call, report, "get_property[t before literal script]", sid, "simulation/sim-time-sec")
+    payload = call_json(call, report, "execute_script[<run> literal]", "execute_script",
+                        {"session_id": sid, "script": SCRIPT_LITERAL})
+    t1 = get_value(call, report, "get_property[t after literal script]", sid, "simulation/sim-time-sec")
+    loads = ref.loads_script(SCRIPT_LITERAL)
+    if isinstance(payload, dict):
+        if payload.get("ok") is True and not loads:
+            report.add("L1", "execute_script[<run> literal]", "WARN",
+                       f"ok=true ({payload.get('note')}) although JSBSim rejects this document "
+                       "(load_script returns False; the tool ignores the return value); "
+                       f"t {t0} -> {t1}: one ordinary frame, no script")
+        else:
+            report.add("L1", "execute_script[<run> literal]", "PASS" if payload.get("ok") == loads else "FAIL",
+                       f"ok={payload.get('ok')}, JSBSim load_script={loads}")
+    leaked = sorted(p.name for p in set(scratch.iterdir()) - before)
+    report.add("L1", "execute_script[temp file]", "WARN" if leaked else "PASS",
+               f"literal scripts are written to $TMPDIR and never deleted: {leaked}" if leaked else "")
+    noise_before = len(client.non_json_stdout)
+    report.add("L1", f"execute_script[{SCRIPT_FILE}]", *stock_script_probe(client, sid, noise_before))
 
 
 def stock_script_probe(client: StdioMCP, sid: str, noise_before: int) -> tuple[str, str]:
@@ -619,21 +591,17 @@ def stock_script_probe(client: StdioMCP, sid: str, noise_before: int) -> tuple[s
     return ("WARN" if notes else "PASS"), detail
 
 
-def probe_launch_env(server: dict, env: dict, tmp: Path, drop: str) -> tuple[str, str]:
+def probe_launch_env(session: Session, drop: str) -> tuple[str, str]:
     """A short-lived server without one launch env key: what goes wrong."""
-    cwd = tmp / f"no-{drop}"
-    cwd.mkdir()
-    reduced = {k: v for k, v in env.items() if k != drop}
-    client = StdioMCP(server["command"], server["args"], cwd=cwd, env=reduced, stderr_path=tmp / f"no-{drop}.log")
+    reduced = {k: v for k, v in session.env.items() if k != drop}
     try:
-        client.initialize()
-        response = client.call_tool("create_session", {"aircraft": AIRCRAFT})
-        result = response.get("result", {})
-        noise = len(client.non_json_stdout)
+        with session.spawn(f"no-{drop}", env=reduced) as client:
+            client.initialize()
+            response = client.call_tool("create_session", {"aircraft": AIRCRAFT})
+            result = response.get("result", {})
+            noise = len(client.non_json_stdout)
     except MCPError as exc:
         return "FAIL", f"server without {drop} failed: {exc}"
-    finally:
-        client.close()
     if drop == "JBSIM_ROOT":
         if result.get("isError"):
             return "WARN", (f"without JBSIM_ROOT the data root is looked up from the cwd and create_session "
@@ -645,111 +613,34 @@ def probe_launch_env(server: dict, env: dict, tmp: Path, drop: str) -> tuple[str
     return "PASS", "no stdout chatter without JSBSIM_DEBUG"
 
 
-def server_env(server: dict, home: Path, tmpdir: Path) -> dict:
-    venv_bin = str(Path(server["command"]).parent)
-    env = {"HOME": str(home), "TMPDIR": str(tmpdir), "PATH": f"{venv_bin}:/usr/bin:/bin",
-           "PYTHONNOUSERSITE": "1", "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8"}
-    env.update(server.get("env", {}))
-    return env
+# --------------------------------------------------------------------------
+# Declaration
+# --------------------------------------------------------------------------
+
+def prepare(session: Session) -> None:
+    root = Path(session.server.get("env", {}).get("JBSIM_ROOT", session.checkout / "jsbsim_data"))
+    session.state.update(root=root, ref=Reference(root))
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True, help="generated <root>/jsbsim.mcp.json")
-    parser.add_argument("--server", default="jsbsim")
-    parser.add_argument("--report", default="jsbsim-smoke-report.json")
+def after(session: Session) -> None:
+    check_execute_script(session)
+    if not session.args.skip_env_probes:
+        for key in REQUIRED_ENV_KEYS:
+            session.report.add("L0", f"server without {key}", *probe_launch_env(session, key))
+
+
+def _arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--skip-env-probes", action="store_true",
                         help="do not start the servers without JBSIM_ROOT / JSBSIM_DEBUG")
-    args = parser.parse_args(argv)
-
-    config = json.loads(Path(args.config).expanduser().read_text(encoding="utf-8"))
-    server = config["mcpServers"][args.server]
-    manifest = {e["id"]: e for e in json.loads((HERE / "manifest.json").read_text())["servers"]}
-    entry = manifest[args.server]
-    checkout = Path(server["cwd"])
-    try:
-        revision = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"],
-                                  capture_output=True, text=True, check=True).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        revision = None
-
-    report = Report()
-    if revision != entry["revision"]:
-        report.add("L0", "pinned revision", "FAIL", f"checkout at {revision}, manifest pins {entry['revision']}")
-    config_env = server.get("env", {})
-    root = Path(config_env.get("JBSIM_ROOT", checkout / "jsbsim_data"))
-    wrong = [k for k in REQUIRED_ENV_KEYS if k not in config_env]
-    if config_env.get("JSBSIM_DEBUG", "0") != "0" or root != checkout / "jsbsim_data":
-        wrong.append("values")
-    report.add("L0", "launch env in config", "FAIL" if wrong else "PASS",
-               f"config env must set JBSIM_ROOT={checkout / 'jsbsim_data'} and JSBSIM_DEBUG=0 ({wrong})"
-               if wrong else f"JBSIM_ROOT={root}")
-
-    call = None
-    stderr_tail = ""
-    with tempfile.TemporaryDirectory(prefix="mcp-e2e-jsbsim-") as tmp:
-        tmp_path = Path(tmp)
-        home, cwd, scratch = tmp_path / "home", tmp_path / "cwd", tmp_path / "tmpdir"
-        for d in (home, cwd, scratch):
-            d.mkdir()
-        env = server_env(server, home, scratch)
-        stderr_path = tmp_path / "server.stderr.log"
-        ref = Reference(root)
-        client = StdioMCP(server["command"], server["args"], cwd=cwd, env=env, stderr_path=stderr_path)
-        try:
-            try:
-                info = client.initialize()
-                report.add("L0", "initialize", "PASS",
-                           f"server={info.get('serverInfo')} protocol={info.get('protocolVersion')}")
-                names = sorted(t["name"] for t in client.list_tools())
-                expected = sorted(entry["expected_tools"])
-                report.add("L0", "tools/list", "PASS" if names == expected else "FAIL",
-                           f"{len(names)} tools" + ("" if names == expected else
-                                                    f"; expected {expected}, got {names}"))
-                again = sorted(t["name"] for t in client.list_tools())
-                report.add("L0", "tools/list stable", "PASS" if again == names else "FAIL")
-            except MCPError as exc:
-                report.add("L0", "handshake", "FAIL", str(exc))
-            else:
-                call = run_l1(client, report, ref, root)
-            alive = client.proc.poll() is None
-            report.add("L1", "server alive after calls", "PASS" if alive else "FAIL",
-                       "" if alive else f"exit code {client.proc.returncode}")
-        finally:
-            client.close()
-            stderr_tail = stderr_path.read_text(encoding="utf-8", errors="replace")[-4000:]
-
-        polluted = client.non_json_stdout
-        per_tool = {k: v for k, v in sorted(call.stdout_by_tool.items()) if v} if call else {}
-        report.add("L1", "stdout is pure JSON-RPC", "WARN" if polluted else "PASS",
-                   f"{len(polluted)} non-JSON line(s), per tool {per_tool}, e.g. {polluted[:3]}" if polluted else "",
-                   non_json_stdout=polluted[:50], non_json_stdout_by_tool=per_tool)
-        leftovers = sorted(p.name for p in cwd.iterdir())
-        report.add("L1", "server leaves cwd untouched", "WARN" if leftovers else "PASS",
-                   f"created {leftovers}" if leftovers else "")
-
-        check_execute_script(server, env, tmp_path, report, ref)
-        if not args.skip_env_probes:
-            for key in REQUIRED_ENV_KEYS:
-                status, detail = probe_launch_env(server, env, tmp_path, key)
-                report.add("L0", f"server without {key}", status, detail)
-
-    document = {
-        "server": args.server,
-        "repository": entry["repository"],
-        "revision": revision,
-        "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "environment": package_versions(("jsbsim", "mcp", "pydantic", "numpy")),
-        "scenario": {"aircraft": AIRCRAFT, "dt": DT, "initial_conditions": IC, "settings": SETTINGS, "run_s": RUN_S},
-        "result": "FAIL" if report.failed else "PASS",
-        "summary": dict(Counter(c["status"] for c in report.checks)),
-        "checks": report.checks,
-        "server_stderr_tail": stderr_tail,
-    }
-    Path(args.report).write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"\n{document['result']} {document['summary']}  report -> {Path(args.report).resolve()}")
-    return 1 if report.failed else 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+SMOKE = Smoke(
+    server="jsbsim",
+    run_l1=run_l1,
+    packages=("jsbsim", "mcp", "pydantic", "numpy"),
+    add_arguments=_arguments,
+    prepare=prepare,
+    after=after,
+    report_fields=lambda session: {"scenario": {"aircraft": AIRCRAFT, "dt": DT, "initial_conditions": IC,
+                                                "settings": SETTINGS, "run_s": RUN_S}},
+)

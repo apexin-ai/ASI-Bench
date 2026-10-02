@@ -31,8 +31,8 @@ mode is one :class:`Installer` subclass registered in :data:`INSTALLERS`; a new
 host check is one probe in :data:`HOST_PROBES`.
 
 It never installs anything into the ASI-Bench environment, never touches
-operator credentials and never runs business tool calls; use the matching
-``smoke_<id>.py`` afterwards.
+operator credentials and never runs business tool calls; run ``smoke.py <id>``
+afterwards.
 
 Usage::
 
@@ -428,14 +428,14 @@ def _check_install(sid: str, value, entry: dict) -> None:
 
 # Keys every entry may have (validators decide which are required); install modes add their own.
 COMMON_KEYS: dict[str, Validator] = {
-    "id": _check_string(re.compile(r"[a-z0-9][a-z0-9_-]*"), "id must be a lowercase name"),
+    # the id also names the smoke module e2e_smoke/servers/<id>.py
+    "id": _check_string(re.compile(r"[a-z][a-z0-9_]*"), "id must be a lowercase identifier"),
     "catalog_id": _check_string(None, "catalog_id must be a non-empty string"),
     "repository": _check_string(re.compile(r"https://\S+"), "repository must be an https URL"),
     "revision": _check_string(REVISION_RE, "revision must be a full 40-char commit SHA"),
     "python": _check_string(PYTHON_RE, "python must be a 3.x version such as 3.12"),
     "install": _check_install,
     "launch": _check_launch,
-    "smoke": _check_string(re.compile(r"smoke_[a-z0-9_]+\.py"), "smoke must name a smoke_<id>.py script"),
     "expected_tools": _check_expected_tools,
     "host_requirements": _check_host_requirements,
 }
@@ -549,9 +549,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\nOK  {entry['id']} @ {entry['revision'][:12]} -> {dest}")
     print(f"    MCP config: {config_path}")
-    if entry.get("smoke"):
-        print("    Next, run the direct tools/call smoke test:")
-        print(f"    {python} {HERE / entry['smoke']} --config {config_path}")
+    print("    Next, run the direct tools/call smoke test:")
+    print(f"    {python} {HERE / 'smoke.py'} {entry['id']} --config {config_path}")
     return 0
 
 

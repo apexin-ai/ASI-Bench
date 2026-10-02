@@ -3,7 +3,7 @@
 Run with the server's own virtualenv so that MarkItDown (the PDF converter the
 server uses) is importable for the independent snippet reference::
 
-    ~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke_arxiv.py --config ~/mcp/arxiv.mcp.json
+    ~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke.py arxiv --config ~/mcp/arxiv.mcp.json
 
 Needs network access to export.arxiv.org and arxiv.org (the server and the
 references both query the live public arXiv API; no key is needed). Queries
@@ -11,29 +11,22 @@ are restricted to closed historical date windows so that the result sets are
 stable, and every tool result is compared with a reference fetched here,
 outside the server process, at the same time.
 
-Levels reported:
-  L0  initialize + tools/list (stable, matches manifest), launch environment
-  L1  real tools/call of both tools; search results are compared field by
-      field with a raw arXiv API query built here; PDF snippets are compared
-      with snippets cut from the same PDF version downloaded and converted here
+L1: real tools/call of both tools; search results are compared field by
+field with a raw arXiv API query built here; PDF snippets are compared with
+snippets cut from the same PDF version downloaded and converted here (the
+shared L0/L1 checks, including the cache-off launch env from the manifest, are
+in ``e2e_smoke/runner.py``).
 
 Upstream defects that do not make a correctly used tool wrong (in-band errors,
 misleading flags, unparenthesised boolean queries combined with a date range,
 old-style IDs, workspace-dependent tool filtering) are WARN; wrong results
 for correct inputs are FAIL.
-
-The server runs from a temporary cwd and a separate temporary HOME with a
-minimal environment and no operator credentials.
 """
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
-import os
 import re
-import subprocess
-import sys
 import tempfile
 import time
 import urllib.error
@@ -41,11 +34,9 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections import Counter
-from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-from smoke_common import Caller, MCPError, Report, StdioMCP, package_versions, text_of  # noqa: E402
+from ..client import MCPError, text_of
+from ..runner import Caller, Report, Session, Smoke, check_rejected
 
 SEARCH = "ArXiv_search_papers"
 SNIPPETS = "ArXiv_get_pdf_snippets"
@@ -89,7 +80,6 @@ CAP_ARGS = {"terms": ["graphene", "conductance", "ribbon"], "window_chars": 400,
             "max_snippets_per_term": 10, "max_total_chars": 1000}
 OLD_STYLE_ID = ("solv-int/9901001", "Camassa")     # archive name contains a "v"
 MISSING_ID = "9999.99999"
-REQUIRED_ENV = {"TOOLUNIVERSE_CACHE_ENABLED": "false", "TOOLUNIVERSE_CACHE_PERSIST": "false"}
 
 
 # --------------------------------------------------------------------------
@@ -190,10 +180,6 @@ def expected_snippets(text: str, terms: list[str], window: int, max_per_term: in
     return snippets, dropped
 
 
-def parse_json_text(result: dict):
-    return json.loads(text_of(result))
-
-
 def in_band_error(payload) -> str | None:
     """The tool's error message if the JSON payload is an in-band error object."""
     if isinstance(payload, dict) and (payload.get("status") == "error" or "error" in payload):
@@ -265,16 +251,9 @@ def reference_pdf_text(arxiv_id: str, version: str) -> str:
 # --------------------------------------------------------------------------
 
 def call_json(call: Caller, report: Report, check: str, tool: str, arguments: dict):
-    """tools/call + JSON decode; None (with a FAIL) on transport/tool/JSON errors."""
+    """Throttled tools/call + JSON decode; None (with a FAIL) on transport/tool/JSON errors."""
     THROTTLE.wait()
-    result = call(check, tool, arguments)
-    if result is None:
-        return None
-    try:
-        return parse_json_text(result)
-    except json.JSONDecodeError:
-        report.add("L1", check, "FAIL", f"result is not JSON: {text_of(result)[:200]!r}")
-        return None
+    return call.json(check, tool, arguments)
 
 
 def check_search(call: Caller, report: Report, label: str, arguments: dict, search_query: str) -> list[dict] | None:
@@ -333,22 +312,15 @@ def check_unparenthesised_or(call: Caller, report: Report) -> None:
 
 def check_in_band_error(call: Caller, report: Report, tool: str, label: str, arguments: dict) -> None:
     """Invalid input should give isError=true; an error object in a normal result is a WARN."""
-    name = f"{tool}[{label}]"
     THROTTLE.wait()
-    result = call(name, tool, arguments, allow_error=True)
-    if result is None:
-        return
-    if result.get("isError"):
-        report.add("L1", name, "PASS", "isError=true")
-        return
+    check_rejected(call, f"{tool}[{label}]", tool, arguments, in_band=_in_band)
+
+
+def _in_band(result: dict) -> str | None:
     try:
-        message = in_band_error(parse_json_text(result))
+        return in_band_error(json.loads(text_of(result)))
     except json.JSONDecodeError:
-        message = None
-    if message:
-        report.add("L1", name, "WARN", f"error returned in-band with isError=false: {message[:160]}")
-    else:
-        report.add("L1", name, "FAIL", f"invalid input accepted: {text_of(result)[:200]!r}")
+        return None
 
 
 def compare_snippets(report: Report, name: str, payload, expected: list[dict], pdf_url: str) -> bool:
@@ -435,153 +407,56 @@ def check_old_style_id(call: Caller, report: Report) -> None:
                    f"contains a 'v' break: {str(payload)[:200]}")
 
 
-def check_workspace_filter(command: str, args: list[str], env: dict, tmp: Path, expected: list[str]) -> tuple:
+def check_workspace_filter(session: Session) -> None:
     """Start a second server whose cwd holds a ToolUniverse workspace (./.tooluniverse)."""
-    cwd = tmp / "ws-cwd"
-    (cwd / ".tooluniverse").mkdir(parents=True)
-    client = StdioMCP(command, args, cwd=cwd, env=env, stderr_path=tmp / "ws-server.stderr.log")
+    if session.args.skip_workspace_probe:
+        return
+    name, expected = "tool filter with a workspace in cwd", session.entry["expected_tools"]
     try:
-        client.initialize()
-        count = len(client.list_tools())
+        with session.spawn("ws-cwd", prepare_cwd=lambda cwd: (cwd / ".tooluniverse").mkdir()) as client:
+            client.initialize()
+            count = len(client.list_tools())
     except MCPError as exc:
-        return "FAIL", f"second server failed: {exc}"
-    finally:
-        client.close()
+        session.report.add("L0", name, "FAIL", f"second server failed: {exc}")
+        return
     if count == len(expected):
-        return "PASS", f"{count} tools"
-    return "WARN", (f"with ./.tooluniverse in the server cwd the default profile.yaml is seeded and loaded, "
-                    f"--include-tools is ignored and {count} tools are exposed; never create a ToolUniverse "
-                    "workspace in the MCP cwd (the checkout) and keep HOME != cwd")
+        session.report.add("L0", name, "PASS", f"{count} tools")
+    else:
+        session.report.add("L0", name, "WARN",
+                           f"with ./.tooluniverse in the server cwd the default profile.yaml is seeded and loaded, "
+                           f"--include-tools is ignored and {count} tools are exposed; never create a ToolUniverse "
+                           "workspace in the MCP cwd (the checkout) and keep HOME != cwd")
 
 
-def run_l1(client: StdioMCP, report: Report) -> Caller:
-    call = Caller(client, report)
-    first = None
-    for label, arguments, search_query in SEARCH_CASES:
-        got = check_search(call, report, label, arguments, search_query)
-        if first is None:
-            first = got
-    check_unparenthesised_or(call, report)
-    check_in_band_error(call, report, SEARCH, "empty query", {"query": ""})
-    check_in_band_error(call, report, SEARCH, "invalid sort_by", {"query": "ti:graphene", "sort_by": "citations"})
-    check_snippets(call, report, first)
-    check_old_style_id(call, report)
-    check_in_band_error(call, report, SNIPPETS, "empty terms", {"arxiv_id": "1103.0212", "terms": []})
-    check_in_band_error(call, report, SNIPPETS, "missing paper", {"arxiv_id": MISSING_ID, "terms": ["x"]})
+def run_l1(session: Session) -> None:
+    call, report = session.call, session.report
     try:
-        bad = client.call_tool("__nonexistent__", {})
-        ok = "error" in bad or bad.get("result", {}).get("isError") is True
-        report.add("L1", "unknown tool is an error", "PASS" if ok else "FAIL", "" if ok else f"got success: {bad}")
-    except MCPError as exc:
-        report.add("L1", "unknown tool is an error", "FAIL", str(exc))
-    return call
+        first = None
+        for label, arguments, search_query in SEARCH_CASES:
+            got = check_search(call, report, label, arguments, search_query)
+            if first is None:
+                first = got
+        check_unparenthesised_or(call, report)
+        check_in_band_error(call, report, SEARCH, "empty query", {"query": ""})
+        check_in_band_error(call, report, SEARCH, "invalid sort_by", {"query": "ti:graphene", "sort_by": "citations"})
+        check_snippets(call, report, first)
+        check_old_style_id(call, report)
+        check_in_band_error(call, report, SNIPPETS, "empty terms", {"arxiv_id": "1103.0212", "terms": []})
+        check_in_band_error(call, report, SNIPPETS, "missing paper", {"arxiv_id": MISSING_ID, "terms": ["x"]})
+    except RuntimeError as exc:  # reference download failed
+        report.add("L1", "reference", "FAIL", str(exc))
 
 
-def server_env(server: dict, home: Path) -> dict:
-    venv_bin = str(Path(server["command"]).parent)
-    env = {"HOME": str(home), "PATH": f"{venv_bin}:/usr/bin:/bin",
-           "PYTHONNOUSERSITE": "1", "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8"}
-    for key in ("http_proxy", "https_proxy", "no_proxy", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE"):
-        if os.environ.get(key):
-            env[key] = os.environ[key]
-    env.update(server.get("env", {}))
-    return env
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True, help="generated <root>/arxiv.mcp.json")
-    parser.add_argument("--server", default="arxiv")
-    parser.add_argument("--report", default="arxiv-smoke-report.json")
+def _arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--skip-workspace-probe", action="store_true",
                         help="do not start the second server that probes workspace-dependent tool filtering")
-    args = parser.parse_args(argv)
-
-    config = json.loads(Path(args.config).expanduser().read_text(encoding="utf-8"))
-    server = config["mcpServers"][args.server]
-    manifest = {e["id"]: e for e in json.loads((HERE / "manifest.json").read_text())["servers"]}
-    entry = manifest[args.server]
-    checkout = Path(server["cwd"])
-    try:
-        revision = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"],
-                                  capture_output=True, text=True, check=True).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        revision = None
-
-    report = Report()
-    if revision != entry["revision"]:
-        report.add("L0", "pinned revision", "FAIL", f"checkout at {revision}, manifest pins {entry['revision']}")
-    missing = {k: v for k, v in REQUIRED_ENV.items() if server.get("env", {}).get(k) != v}
-    report.add("L0", "result cache disabled in config", "FAIL" if missing else "PASS",
-               f"config env lacks {missing}: cached results would hide real calls and ~/.tooluniverse "
-               "would be created" if missing else "")
-
-    call = None
-    stderr_tail = ""
-    with tempfile.TemporaryDirectory(prefix="mcp-e2e-arxiv-") as tmp:
-        tmp_path = Path(tmp)
-        home, cwd = tmp_path / "home", tmp_path / "cwd"
-        home.mkdir()
-        cwd.mkdir()
-        env = server_env(server, home)
-        stderr_path = tmp_path / "server.stderr.log"
-        client = StdioMCP(server["command"], server["args"], cwd=cwd, env=env, stderr_path=stderr_path)
-        try:
-            try:
-                info = client.initialize()
-                report.add("L0", "initialize", "PASS",
-                           f"server={info.get('serverInfo')} protocol={info.get('protocolVersion')}")
-                tools = client.list_tools()
-                names = sorted(t["name"] for t in tools)
-                expected = sorted(entry["expected_tools"])
-                report.add("L0", "tools/list", "PASS" if names == expected else "FAIL",
-                           f"{len(names)} tools" + ("" if names == expected else
-                                                    f"; expected {expected}, got {names[:10]}"))
-                again = sorted(t["name"] for t in client.list_tools())
-                report.add("L0", "tools/list stable", "PASS" if again == names else "FAIL")
-            except MCPError as exc:
-                report.add("L0", "handshake", "FAIL", str(exc))
-            else:
-                try:
-                    call = run_l1(client, report)
-                except RuntimeError as exc:  # reference download failed
-                    report.add("L1", "reference", "FAIL", str(exc))
-            alive = client.proc.poll() is None
-            report.add("L1", "server alive after calls", "PASS" if alive else "FAIL",
-                       "" if alive else f"exit code {client.proc.returncode}")
-        finally:
-            client.close()
-            stderr_tail = stderr_path.read_text(encoding="utf-8", errors="replace")[-4000:]
-
-        polluted = client.non_json_stdout
-        per_tool = {k: v for k, v in sorted(call.stdout_by_tool.items()) if v} if call else {}
-        report.add("L1", "stdout is pure JSON-RPC", "WARN" if polluted else "PASS",
-                   f"{len(polluted)} non-JSON line(s), per tool {per_tool}, e.g. {polluted[:3]}" if polluted else "",
-                   non_json_stdout=polluted[:50], non_json_stdout_by_tool=per_tool)
-        leftovers = sorted(p.name for p in cwd.iterdir())
-        report.add("L1", "server leaves cwd untouched", "WARN" if leftovers else "PASS",
-                   f"created {leftovers}" if leftovers else "")
-        if not args.skip_workspace_probe:
-            status, detail = check_workspace_filter(server["command"], server["args"], env, tmp_path,
-                                                    entry["expected_tools"])
-            report.add("L0", "tool filter with a workspace in cwd", status, detail)
-
-    document = {
-        "server": args.server,
-        "repository": entry["repository"],
-        "revision": revision,
-        "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "environment": package_versions(("tooluniverse", "mcp", "fastmcp", "markitdown", "pdfminer.six",
-                                         "pdfplumber", "requests")),
-        "result": "FAIL" if report.failed else "PASS",
-        "summary": dict(Counter(c["status"] for c in report.checks)),
-        "checks": report.checks,
-        "server_stderr_tail": stderr_tail,
-    }
-    Path(args.report).write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"\n{document['result']} {document['summary']}  report -> {Path(args.report).resolve()}")
-    return 1 if report.failed else 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+SMOKE = Smoke(
+    server="arxiv",
+    run_l1=run_l1,
+    packages=("tooluniverse", "mcp", "fastmcp", "markitdown", "pdfminer.six", "pdfplumber", "requests"),
+    pass_proxies=True,
+    add_arguments=_arguments,
+    after=check_workspace_filter,
+)

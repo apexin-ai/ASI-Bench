@@ -1375,4 +1375,36 @@
   (`conda only applies` → `['conda'] only apply to install conda-explicit`);
   new tests cover unknown keys, disjoint field owners, and a stub installer
   registered without touching any other code.
+- Commit: `e24e8fc`.
+
+## 2026-10-02: MCP E2E chore — smoke scripts into `e2e_smoke/` with a shared runner
+
+- Problem: each `smoke_<id>.py` (590–770 lines) carried a ~90-line copy of
+  `main()` (config/manifest load, revision, temp dirs, handshake, tools/list,
+  alive, stdout purity, cwd leftovers, report) plus copies of `server_env`,
+  `quiet_fds`, distance/PNG helpers, four "call → JSON" wrappers, five variants
+  of "invalid input: isError PASS / in-band WARN / accepted FAIL", five copies of
+  "unknown tool is an error" and four hand-written
+  "launch env in config" checks. Every new server would copy all of it again.
+- Resolution: `scripts/mcp/e2e/smoke.py <id>` + package `e2e_smoke/`:
+  `runner.py` (one run; `Smoke` declaration with `run_l1` and optional
+  `prepare` / `after` / `extra_env` / `pass_proxies` / `expected_cwd_files` /
+  `add_arguments` / `report_fields`; `Session.spawn` for probe servers;
+  `Caller.json`, `json_result`, `check_rejected`, `check_unknown_tool`),
+  `client.py` (was `stdio_client.py`), `helpers.py`, `servers/<id>.py`. The
+  per-env checks are replaced by one generic L0 "config matches manifest"
+  (the `--config` entry must equal `setup.render_config`); the unknown-tool
+  check runs once in the runner. The manifest `smoke` field is gone (module =
+  id; ids must be identifiers). Package named `e2e_smoke`, not `smoke`, so it
+  cannot shadow `smoke.py`.
+- Verification: an AST comparison against the old scripts shows 95 per-server
+  functions unchanged; the changed ones are exactly the converted wrappers,
+  error checks, `run_l1` and probe servers. New end-to-end runner tests drive a
+  fake stdio server from a pinned scratch checkout through `runner.main`.
+  Not yet re-run against the real servers (needs the AWS host).
+- Behaviour changes to expect in the next real smoke reports: check
+  "config matches manifest" replaces "launch env in config" / "result cache
+  disabled in config"; pyscf now has its own HOME/cwd/TMPDIR (the visualize HTML
+  is a declared cwd artefact); arxiv now gets a TMPDIR; "unknown tool is an
+  error" runs after the server's own checks for all five servers.
 - Commit: (pending).

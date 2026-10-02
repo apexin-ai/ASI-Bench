@@ -1,5 +1,6 @@
 """Offline checks for the s4 grating-spectrum MCP E2E task and the verify_run answer `select`
 it needs (an element of a returned spectrum). No MCP server, no S4."""
+import importlib
 import importlib.util
 import json
 import sys
@@ -27,7 +28,7 @@ generate_gt = _load(TASK_DIR / "generate_gt.py", "mcp_e2e_s4_generate_gt")
 scorer = _load(TASK_DIR / "custom_scorer.py", "mcp_e2e_s4_custom_scorer")
 verify = _load(ROOT / "scripts/mcp/e2e/verify_run.py", "mcp_e2e_s4_verify_run")
 sys.path.insert(0, str(ROOT / "scripts/mcp/e2e"))
-smoke = _load(ROOT / "scripts/mcp/e2e/smoke_s4.py", "mcp_e2e_s4_smoke")
+smoke = importlib.import_module("e2e_smoke.servers.s4")
 
 
 @pytest.fixture(scope="module")

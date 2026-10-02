@@ -16,7 +16,8 @@ involved. Upstream code is cloned, never vendored; upstream licenses apply.
 |---|---|
 | `manifest.json` | per server: repository, 40-char revision, Python, install mode, launch command/env (`{checkout}` placeholder), expected tools |
 | `setup.py` | clone, pin, build `<root>/<id>/.venv`, write `<root>/<id>.mcp.json` (stdlib only) |
-| `smoke_<id>.py` | L0/L1 checks for one server, JSON report; `smoke_common.py` and `stdio_client.py` are shared |
+| `smoke.py` | L0/L1 smoke CLI: `smoke.py <id> --config …`, JSON report |
+| `e2e_smoke/` | `runner.py` (the shared run and generic checks), `client.py` (stdio client recording non-JSON stdout), `helpers.py`, and `servers/<id>.py` per server (references + server-specific checks, declared as `SMOKE`) |
 | `verify_run.py` | L2 verifier CLI for agent runs; implementation in `e2e_verify/` (spec, extractors, values, evidence, checks) |
 | `locks/` | committed conda `@EXPLICIT` locks (psi4) |
 
@@ -43,16 +44,28 @@ Linux, as an unprivileged E2E user:
 ```sh
 cd ~/ASI-Bench
 python3 scripts/mcp/e2e/setup.py <id> --root ~/mcp
-~/mcp/<id>/.venv/bin/python scripts/mcp/e2e/smoke_<id>.py \
+~/mcp/<id>/.venv/bin/python scripts/mcp/e2e/smoke.py <id> \
   --config ~/mcp/<id>.mcp.json --report ~/mcp/<id>-smoke-report.json
 uv run asibench mcp check --config ~/mcp/<id>.mcp.json
 ```
 
-Run the smoke script with the server's own venv: the reference needs the same
-scientific library. The server is started from a temporary cwd/HOME with a
-minimal environment and no credentials. FAIL means a wrong result and exits
-non-zero; WARN means an upstream defect that does not make correct use wrong.
-What each check does is in the `smoke_<id>.py` docstring and its messages.
+Run the smoke with the server's own venv: the reference needs the same
+scientific library. The server is started from a temporary cwd/HOME/TMPDIR
+with a minimal environment and no credentials. FAIL means a wrong result and
+exits non-zero; WARN means an upstream defect that does not make correct use
+wrong. Every server gets the shared checks of `e2e_smoke/runner.py` (pinned
+revision, config equals what `setup.py` renders, handshake and `tools/list`,
+unknown tool is an error, server alive, stdout is pure JSON-RPC, cwd
+untouched); its own checks are in the `e2e_smoke/servers/<id>.py` docstring
+and messages.
+
+A new server's smoke is one `e2e_smoke/servers/<id>.py` defining
+`SMOKE = Smoke(server=…, run_l1=…)`, plus optional hooks (`prepare` for extra
+L0 checks or reference objects, `after` for short-lived probe servers via
+`session.spawn`, `extra_env`, `pass_proxies`, `expected_cwd_files`,
+`add_arguments`, `report_fields`). Reuse `Caller.json`, `check_rejected`
+(isError PASS / in-band WARN / accepted FAIL) and `helpers.py` instead of
+re-implementing them.
 
 ## Servers
 

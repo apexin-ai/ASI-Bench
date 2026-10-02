@@ -605,6 +605,14 @@ Offline checks (no network, no upstream installs):
 uv run --frozen pytest tests/test_mcp_e2e_scripts.py -q
 ```
 
+The shared smoke runner is tested end to end against a fake stdio server
+from a pinned scratch checkout: the generic L0/L1 checks (config equals the
+rendered manifest, handshake, unknown tool, stdout attribution per tool, cwd
+leftovers minus declared artefacts) around the `prepare` / `run_l1` / `after`
+hooks, a config that differs from the manifest (FAIL), `check_rejected` and
+`json_result` classification, and that `smoke.py` resolves every manifest id
+to its `e2e_smoke/servers/<id>.py` declaration.
+
 Checks that `scripts/mcp/e2e/manifest.json` entries are pinned to 40-char
 revisions and match catalog sources, that `setup.py` rejects unknown keys and
 fields of another install mode (each `Installer` owns its fields; owners are
@@ -613,7 +621,7 @@ refuses `--lock` without other changes), that rendered `*.mcp.json` passes
 `load_mcp_config` with absolute paths, that absolute launch paths and foreign
 checkout remotes are rejected, and that the stdlib stdio client paginates
 `tools/list`, surfaces `isError`, and records non-JSON stdout lines. For
-`smoke_pyscf.py` it also covers the PySCF-free parts: atom-string/XYZ/float-list
+`e2e_smoke/servers/pyscf.py` it also covers the PySCF-free parts: atom-string/XYZ/float-list
 parsing, rotation- and permutation-invariant distance comparison, PNG header
 checks, per-tool stdout attribution, the PASS/WARN/FAIL split for invalid input
 (isError vs in-band error vs accepted), the plot and visualize checks against a
@@ -621,7 +629,7 @@ stub client, and that every manifest tool is called by the smoke.
 It also checks the manifest's launch `env`, `uv_sync_args` and `{checkout}`
 placeholder validation (the arxiv config keeps its CLI flags literal and turns
 the ToolUniverse result cache off), and the network-free parts of
-`smoke_arxiv.py`: arXiv ID/URL splitting (incl. old-style IDs), Atom parsing
+`e2e_smoke/servers/arxiv.py`: arXiv ID/URL splitting (incl. old-style IDs), Atom parsing
 and whitespace normalisation, record comparison, the snippet window/limit/cap
 reference, in-band error classification, the search, OR-precedence and
 snippet checks against a stub client with a stubbed reference, and that the
@@ -630,7 +638,7 @@ For jsbsim it checks the `uv-pip-pinned` install mode (fresh `uv venv
 --clear`, `uv pip install --exclude-newer` of exact pins, no `uv sync`; ranges,
 missing pins/timestamp and mode-mismatched fields are rejected), `{checkout}`
 in launch `env` values (absolute `JBSIM_ROOT`; absolute or non-prefix values
-rejected), and the JSBSim-free parts of `smoke_jsbsim.py`: frame rounding,
+rejected), and the JSBSim-free parts of `e2e_smoke/servers/jsbsim.py`: frame rounding,
 the `aircraft/<name>/<name>.xml` scan, in-band errors, telemetry comparison
 (printed-precision tolerance, dead fields reported with the real property),
 trim-mode digests, the missing-property/unknown-session/unknown-aircraft
@@ -640,7 +648,7 @@ For s4 it checks `host_requirements` (machine, CPU flags from
 `/proc/cpuinfo`, loadable shared libraries; every problem listed with the
 reason; malformed fields rejected; checked before cloning), the
 `python -m` + `PYTHONPATH={checkout}/src` launch, and the numpy-only references
-of `smoke_s4.py`: TMM against closed forms (Fresnel, Brewster, quarter-wave AR
+of `e2e_smoke/servers/s4.py`: TMM against closed forms (Fresnel, Brewster, quarter-wave AR
 coating and mirror), energy conservation and absorption, the 1D RCWA's uniform
 limit against the TMM, energy conservation with diffraction, Li vs Laurent
 convergence, the square-lattice shell → order mapping, that every smoke grid
@@ -656,7 +664,7 @@ every spec present, conda-forge `<platform>`/`noarch` URLs with `#sha256:`;
 stale, foreign, md5-only or wrong-channel locks rejected), `setup.py --lock`
 from `micromamba --dry-run --json` output (and that `--lock` is refused for
 non-conda servers), malformed `conda` fields, a bare `{checkout}` in launch
-`env`, and the psi4-free parts of `smoke_psi4.py`: geometry parsing (psi4
+`env`, and the psi4-free parts of `e2e_smoke/servers/psi4.py`: geometry parsing (psi4
 `charge multiplicity` header, XYZ, bare lines), the frequency classification
 (signed match PASS, imaginary sign dropped WARN, anything else FAIL), the
 tri-state correct/defect/FAIL helper, excited-state comparison, the
@@ -666,19 +674,19 @@ valid request answered with `ok:false` is a FAIL.
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
-then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke_pyscf.py --config
+then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke.py pyscf --config
 ~/mcp/pyscf.mcp.json`. It calls all seven tools and checks the results against
 PySCF, RDKit and geomeTRIC run in the smoke process; expected outcome on the
 pinned revision is `PASS` with 0 FAIL and 7–8 WARN (upstream defects listed in
-`scripts/mcp/e2e/smoke_pyscf.py`; the benzene symmetry probe is intermittent).
+`scripts/mcp/e2e/e2e_smoke/servers/pyscf.py`; the benzene symmetry probe is intermittent).
 For arxiv: `python3 scripts/mcp/e2e/setup.py arxiv`, then
-`~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke_arxiv.py --config
+`~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke.py arxiv --config
 ~/mcp/arxiv.mcp.json` (needs access to export.arxiv.org and arxiv.org, ~90 s).
 Expected outcome on the pinned revision: `PASS` with 0 FAIL and 8 WARN (OR +
 date precedence, three in-band errors plus a missing-paper one, `truncated`
 flag, old-style ID, workspace-dependent tool filter).
 For jsbsim: `python3 scripts/mcp/e2e/setup.py jsbsim`, then
-`~/mcp/jsbsim/.venv/bin/python scripts/mcp/e2e/smoke_jsbsim.py --config
+`~/mcp/jsbsim/.venv/bin/python scripts/mcp/e2e/smoke.py jsbsim --config
 ~/mcp/jsbsim.mcp.json` (no network, ~2 s). Expected outcome on the pinned
 revision: `PASS` with 0 FAIL and 17 WARN (dead telemetry fields, `cl` naming,
 missing property, no-IC session, zero step, partial IC, unknown IC key, trim,
@@ -687,14 +695,14 @@ error, `execute_script` literal + temp file + stock-script segfault, and the two
 launch-env probes).
 For s4 (Linux x86-64 with AVX2/FMA/BMI2 and `libblas3 liblapack3`):
 `python3 scripts/mcp/e2e/setup.py s4`, then `~/mcp/s4/.venv/bin/python
-scripts/mcp/e2e/smoke_s4.py --config ~/mcp/s4.mcp.json` (no network, ~10 s).
+scripts/mcp/e2e/smoke.py s4 --config ~/mcp/s4.mcp.json` (no network, ~10 s).
 Expected outcome on the pinned revision: `PASS` with 0 FAIL and 7 WARN
 (swapped incidence/substrate, inner incidence layer, unknown layer material,
 θ = 90° and 120°, negative thickness, duplicate layer names); a locally built
 `libS4.so` adds an eighth WARN for the binary's SHA-256.
 For psi4 (Linux x86-64 or aarch64, `micromamba` on `PATH`):
 `python3 scripts/mcp/e2e/setup.py psi4`, then `~/mcp/psi4/.venv/bin/python
-scripts/mcp/e2e/smoke_psi4.py --config ~/mcp/psi4.mcp.json` (no network,
+scripts/mcp/e2e/smoke.py psi4 --config ~/mcp/psi4.mcp.json` (no network,
 ~20 s). Expected outcome on the pinned revision: `PASS` with 0 FAIL and 11 WARN
 (null `single_point` fields, in-band invalid multiplicity, `optimize`
 `n_iterations` 0, zero IR intensities, ignored `temperature_K`, saddle-point

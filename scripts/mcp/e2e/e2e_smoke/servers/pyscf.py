@@ -3,44 +3,27 @@
 Run with the server's own virtualenv so PySCF, RDKit and geomeTRIC are
 importable for the independent reference calculations::
 
-    ~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke_pyscf.py --config ~/mcp/pyscf.mcp.json
+    ~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke.py pyscf --config ~/mcp/pyscf.mcp.json
 
-Levels reported:
-  L0  initialize + tools/list (stable, matches manifest)
-  L1  real tools/call of every tool, with results checked against values
-      computed here, outside the server process
+L1: real tools/call of every tool, with results checked against values
+computed here, outside the server process (the shared L0/L1 checks are in
+``e2e_smoke/runner.py``).
 
 Upstream defects that do not make a result wrong (in-band errors, ignored
 arguments, misleading return text, stdout pollution, intermittent symmetry
 errors) are reported as WARN; wrong values are FAIL.
-
-The server runs from a temporary cwd/HOME with a minimal environment and no
-operator credentials. Non-JSON lines on the server's stdout are reported as a
-WARN, attributed per tool: they corrupt the stdio transport for strict clients.
 """
 from __future__ import annotations
 
-import argparse
 import base64
 import binascii
-import contextlib
-import datetime as dt
-import importlib.metadata as md
 import json
 import math
-import os
-import platform
-import struct
-import subprocess
-import sys
-import tempfile
-from collections import Counter
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-from smoke_common import Caller, Report  # noqa: E402
-from stdio_client import MCPError, StdioMCP, text_of  # noqa: E402
+from ..client import text_of
+from ..helpers import Atoms, image_blocks, max_abs_diff, png_size, quiet_fds, sorted_distances
+from ..runner import Caller, Report, Session, Smoke, check_rejected
 
 H2 = "H 0 0 0; H 0 0 0.74"
 H2O = "O 0.000000 0.000000 0.117790; H 0.000000 0.755453 -0.471161; H 0.000000 -0.755453 -0.471161"
@@ -74,9 +57,6 @@ VISUALIZE_FILE = "optimized_geom_3d.html"
 # Pure helpers (stdlib only; unit-tested offline)
 # --------------------------------------------------------------------------
 
-Atoms = list[tuple[str, tuple[float, float, float]]]
-
-
 def parse_atom_string(text: str) -> Atoms:
     """Parse a PySCF atom string ("O x y z; H x y z" or newline separated)."""
     atoms: Atoms = []
@@ -108,21 +88,6 @@ def symbols(atoms: Atoms) -> list[str]:
     return [sym for sym, _ in atoms]
 
 
-def sorted_distances(atoms: Atoms) -> list[float]:
-    """All interatomic distances, sorted: invariant to rotation, translation and permutation."""
-    out = []
-    for i in range(len(atoms)):
-        for j in range(i + 1, len(atoms)):
-            out.append(math.dist(atoms[i][1], atoms[j][1]))
-    return sorted(out)
-
-
-def max_abs_diff(a: list[float], b: list[float]) -> float:
-    if len(a) != len(b):
-        return math.inf
-    return max((abs(x - y) for x, y in zip(a, b)), default=0.0)
-
-
 def parse_float_list(text: str) -> list[float]:
     value = json.loads(text)
     if not isinstance(value, list) or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
@@ -130,40 +95,9 @@ def parse_float_list(text: str) -> list[float]:
     return [float(v) for v in value]
 
 
-def png_size(data: bytes) -> tuple[int, int]:
-    """Width and height from a PNG IHDR chunk."""
-    if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
-        raise ValueError("not a PNG")
-    return struct.unpack(">II", data[16:24])
-
-
-def image_blocks(result: dict) -> list[dict]:
-    return [b for b in result.get("content", []) if b.get("type") == "image"]
-
-
 # --------------------------------------------------------------------------
 # Independent references (computed in this process, not by the server)
 # --------------------------------------------------------------------------
-
-@contextlib.contextmanager
-def quiet_fds():
-    """Silence fd 1/2 (geomeTRIC and PySCF log to the process streams directly)."""
-    sys.stdout.flush()
-    sys.stderr.flush()
-    saved = os.dup(1), os.dup(2)
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    try:
-        os.dup2(devnull, 1)
-        os.dup2(devnull, 2)
-        yield
-    finally:
-        sys.stdout.flush()
-        sys.stderr.flush()
-        os.dup2(saved[0], 1)
-        os.dup2(saved[1], 2)
-        for fd in (*saved, devnull):
-            os.close(fd)
-
 
 def rhf_energy(atom, basis: str, symmetry: bool) -> float:
     from pyscf import gto, scf
@@ -259,17 +193,8 @@ def check_energy(call: Caller, report: Report, label: str, atom: str, basis: str
 
 def check_in_band_error(call: Caller, report: Report, tool: str, arguments: dict, marker: str) -> None:
     """Invalid input should give isError=true; an error string in a normal result is a WARN."""
-    name = f"{tool}[invalid input]"
-    result = call(name, tool, arguments, allow_error=True)
-    if result is None:
-        return
-    text = text_of(result)
-    if result.get("isError"):
-        report.add("L1", name, "PASS", f"isError=true: {text[:120]!r}")
-    elif marker.lower() in text.lower():
-        report.add("L1", name, "WARN", f"error reported in-band with isError=false: {text[:160]!r}")
-    else:
-        report.add("L1", name, "FAIL", f"invalid input accepted: {text[:200]!r}")
+    check_rejected(call, f"{tool}[invalid input]", tool, arguments,
+                   in_band=lambda result: repr(text_of(result)) if marker.lower() in text_of(result).lower() else None)
 
 
 def check_geometry(call: Caller, report: Report) -> None:
@@ -473,13 +398,8 @@ def check_plot(call: Caller, report: Report) -> None:
                            f"image/png {size[0]}x{size[1]}" + ("" if size == PLOT_SIZE else f" (expected {PLOT_SIZE})"),
                            image_size=list(size))
     bad = f"{name}[mismatched lengths]"
-    result = call(bad, "plot_energy_scan_image_mcp", {"bond_lengths": lengths, "energies": energies[:2]},
-                  allow_error=True)
-    if result is not None:
-        if result.get("isError"):
-            report.add("L1", bad, "PASS", f"isError=true: {text_of(result)[:120]!r}")
-        else:
-            report.add("L1", bad, "WARN", "mismatched input lengths did not produce isError")
+    check_rejected(call, bad, "plot_energy_scan_image_mcp", {"bond_lengths": lengths, "energies": energies[:2]},
+                   on_accept=lambda result: ("WARN", "mismatched input lengths did not produce isError"))
 
 
 def check_visualize(call: Caller, report: Report, server_cwd: Path) -> None:
@@ -503,18 +423,8 @@ def check_visualize(call: Caller, report: Report, server_cwd: Path) -> None:
                    f"the result text names a different path: {text[:160]!r}")
 
 
-def versions() -> dict:
-    out = {"python": platform.python_version(), "platform": platform.platform()}
-    for pkg in ("pyscf", "rdkit", "geometric", "matplotlib", "mcp", "numpy"):
-        try:
-            out[pkg] = md.version(pkg)
-        except md.PackageNotFoundError:
-            out[pkg] = None
-    return out
-
-
-def run_l1(client: StdioMCP, report: Report, server_cwd: Path) -> Caller:
-    call = Caller(client, report)
+def run_l1(session: Session) -> None:
+    call, report = session.call, session.report
     check_energy(call, report, "H2@0.74", H2, "sto-3g")
     check_energy(call, report, "H2O", H2O, "sto-3g")
     check_energy(call, report, "H2O", H2O, "6-31g")
@@ -524,92 +434,13 @@ def run_l1(client: StdioMCP, report: Report, server_cwd: Path) -> Caller:
     check_optimize(call, report)
     check_scan_pes(call, report)
     check_plot(call, report)
-    check_visualize(call, report, server_cwd)
-    try:
-        bad = client.call_tool("__nonexistent__", {})
-        ok = "error" in bad or bad.get("result", {}).get("isError") is True
-        report.add("L1", "unknown tool is an error", "PASS" if ok else "FAIL",
-                   "" if ok else f"got success: {bad}")
-    except MCPError as exc:
-        report.add("L1", "unknown tool is an error", "FAIL", str(exc))
-    return call
+    check_visualize(call, report, session.cwd)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True, help="generated <root>/pyscf.mcp.json")
-    parser.add_argument("--server", default="pyscf")
-    parser.add_argument("--report", default="pyscf-smoke-report.json")
-    args = parser.parse_args(argv)
-
-    config = json.loads(Path(args.config).expanduser().read_text(encoding="utf-8"))
-    server = config["mcpServers"][args.server]
-    manifest = {e["id"]: e for e in json.loads((HERE / "manifest.json").read_text())["servers"]}
-    entry = manifest[args.server]
-    checkout = Path(server["cwd"])
-    try:
-        revision = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"],
-                                  capture_output=True, text=True, check=True).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        revision = None
-
-    report = Report()
-    if revision != entry["revision"]:
-        report.add("L0", "pinned revision", "FAIL", f"checkout at {revision}, manifest pins {entry['revision']}")
-
-    call = None
-    with tempfile.TemporaryDirectory(prefix="mcp-e2e-pyscf-") as tmp:
-        tmp_path = Path(tmp)
-        venv_bin = str(Path(server["command"]).parent)
-        env = {"HOME": str(tmp_path), "PATH": f"{venv_bin}:/usr/bin:/bin",
-               "PYTHONNOUSERSITE": "1", "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8", "MPLBACKEND": "Agg"}
-        stderr_path = tmp_path / "server.stderr.log"
-        client = StdioMCP(server["command"], server["args"], cwd=tmp_path, env=env, stderr_path=stderr_path)
-        try:
-            try:
-                info = client.initialize()
-                report.add("L0", "initialize", "PASS",
-                           f"server={info.get('serverInfo')} protocol={info.get('protocolVersion')}")
-                tools = client.list_tools()
-                names = sorted(t["name"] for t in tools)
-                expected = sorted(entry["expected_tools"])
-                report.add("L0", "tools/list", "PASS" if names == expected else "FAIL",
-                           f"{len(names)} tools" + ("" if names == expected else f"; expected {expected}, got {names}"))
-                again = sorted(t["name"] for t in client.list_tools())
-                report.add("L0", "tools/list stable", "PASS" if again == names else "FAIL")
-            except MCPError as exc:
-                report.add("L0", "handshake", "FAIL", str(exc))
-            else:
-                call = run_l1(client, report, tmp_path)
-            alive = client.proc.poll() is None
-            report.add("L1", "server alive after calls", "PASS" if alive else "FAIL",
-                       "" if alive else f"exit code {client.proc.returncode}")
-        finally:
-            client.close()
-            stderr_tail = stderr_path.read_text(encoding="utf-8", errors="replace")[-4000:]
-
-        polluted = client.non_json_stdout
-        per_tool = {k: v for k, v in sorted(call.stdout_by_tool.items()) if v} if call else {}
-        report.add("L1", "stdout is pure JSON-RPC", "WARN" if polluted else "PASS",
-                   (f"{len(polluted)} non-JSON line(s), per tool {per_tool}, e.g. {polluted[:3]}"
-                    if polluted else ""),
-                   non_json_stdout=polluted[:50], non_json_stdout_by_tool=per_tool)
-
-    document = {
-        "server": args.server,
-        "repository": entry["repository"],
-        "revision": revision,
-        "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "environment": versions(),
-        "result": "FAIL" if report.failed else "PASS",
-        "summary": dict(Counter(c["status"] for c in report.checks)),
-        "checks": report.checks,
-        "server_stderr_tail": stderr_tail,
-    }
-    Path(args.report).write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"\n{document['result']} {document['summary']}  report -> {Path(args.report).resolve()}")
-    return 1 if report.failed else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+SMOKE = Smoke(
+    server="pyscf",
+    run_l1=run_l1,
+    packages=("pyscf", "rdkit", "geometric", "matplotlib", "mcp", "numpy"),
+    extra_env={"MPLBACKEND": "Agg"},
+    expected_cwd_files=(VISUALIZE_FILE,),   # checked by check_visualize
+)

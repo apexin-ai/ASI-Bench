@@ -1,4 +1,5 @@
 """Offline checks for the opt-in MCP E2E setup/smoke scripts (no network, no upstream installs)."""
+import importlib
 import importlib.util
 import json
 import re
@@ -25,8 +26,13 @@ def _load(name):
 
 setup = _load("setup")
 sys.path.insert(0, str(BUNDLE))
-stdio_client = _load("stdio_client")
+stdio_client = importlib.import_module("e2e_smoke.client")
+runner = importlib.import_module("e2e_smoke.runner")
 verify = _load("verify_run")
+
+
+def _smoke(server):
+    return importlib.import_module(f"e2e_smoke.servers.{server}")
 
 E2E_TASKS = Path(__file__).resolve().parents[1] / "examples/mcp-e2e-tasks"
 _SPEC_FILES = sorted(E2E_TASKS.glob("mcp_e2e/*/e2e_check.json"))
@@ -55,7 +61,8 @@ def test_manifest_is_pinned_and_catalogued():
         assert len(entry["revision"]) == 40
         assert entry["catalog_id"] in catalog
         assert catalog[entry["catalog_id"]]["source"].rstrip("/") == entry["repository"].removesuffix(".git")
-        assert (BUNDLE / entry["smoke"]).is_file()
+        assert (BUNDLE / "e2e_smoke" / "servers" / f"{sid}.py").is_file()
+        assert _smoke(sid).SMOKE.server == sid
         assert entry["expected_tools"] == sorted(set(entry["expected_tools"]))
 
 
@@ -131,9 +138,9 @@ def test_stdio_client_paginates_and_records_stdout_pollution(tmp_path):
     assert client.non_json_stdout == ["library chatter on stdout"] * 2
 
 
-# --- smoke_pyscf helpers and PySCF-free checks -------------------------------
+# --- e2e_smoke/servers/pyscf.py helpers and PySCF-free checks -------------------------------
 
-smoke = _load("smoke_pyscf")
+smoke = _smoke("pyscf")
 
 
 def test_parse_atom_string_accepts_semicolons_and_newlines():
@@ -278,9 +285,10 @@ def test_check_visualize_separates_side_effect_from_returned_path(tmp_path):
 @pytest.mark.parametrize("server", sorted(setup.load_manifest()))
 def test_smoke_covers_every_manifest_tool(server):
     entry = setup.load_manifest()[server]
-    source = (BUNDLE / entry["smoke"]).read_text()
+    path = BUNDLE / "e2e_smoke" / "servers" / f"{server}.py"
+    source = path.read_text()
     for tool in entry["expected_tools"]:
-        assert f'"{tool}"' in source, f"{entry['smoke']} never calls {tool}"
+        assert f'"{tool}"' in source, f"{path.name} never calls {tool}"
 
 
 # --- manifest: env, uv sync flags, {checkout} placeholder --------------------
@@ -319,9 +327,9 @@ def test_manifest_rejects_bad_launch_fields(tmp_path, field, value, match):
         setup.load_manifest(bad)
 
 
-# --- smoke_arxiv helpers and network-free checks -----------------------------
+# --- e2e_smoke/servers/arxiv.py helpers and network-free checks -----------------------------
 
-arxiv = _load("smoke_arxiv")
+arxiv = _smoke("arxiv")
 arxiv.THROTTLE.gap = 0.0
 
 ATOM_FEED = """<?xml version="1.0" encoding="UTF-8"?>
@@ -462,8 +470,9 @@ def test_compare_snippets_requires_exact_reference_match():
 def test_arxiv_server_env_is_minimal_and_applies_config_env(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "secret")
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy:3128")
-    env = arxiv.server_env({"command": "/x/.venv/bin/tooluniverse-smcp-stdio",
-                            "env": {"TOOLUNIVERSE_CACHE_ENABLED": "false"}}, tmp_path)
+    env = runner.server_env({"command": "/x/.venv/bin/tooluniverse-smcp-stdio",
+                             "env": {"TOOLUNIVERSE_CACHE_ENABLED": "false"}}, tmp_path, tmp_path / "tmp",
+                            pass_proxies=arxiv.SMOKE.pass_proxies)
     assert env["HOME"] == str(tmp_path) and env["PATH"].startswith("/x/.venv/bin:")
     assert env["TOOLUNIVERSE_CACHE_ENABLED"] == "false" and env["HTTPS_PROXY"] == "http://proxy:3128"
     assert "OPENAI_API_KEY" not in env
@@ -537,9 +546,9 @@ def test_manifest_rejects_bad_pinned_install(tmp_path, changes, match):
         setup.load_manifest(_jsbsim_manifest(tmp_path, **changes))
 
 
-# --- smoke_jsbsim helpers and JSBSim-free checks -----------------------------
+# --- e2e_smoke/servers/jsbsim.py helpers and JSBSim-free checks -----------------------------
 
-jsb = _load("smoke_jsbsim")
+jsb = _smoke("jsbsim")
 
 
 def test_frames_for_rounds_and_never_returns_zero():
@@ -627,10 +636,9 @@ def test_jsbsim_missing_property_and_unknown_session_classification():
         "trim": _json({"ok": True, "mode": "longitudinal"}),
         "__nonexistent__": _text("Unknown tool", is_error=True),
     })
-    jsb.check_errors(jsb.Caller(client, report), report, client)
+    jsb.check_errors(jsb.Caller(client, report), report)
     assert _statuses(report) == {"create_session[unknown aircraft]": "PASS", "step[unknown session]": "WARN",
-                                 "get_telemetry[unknown session]": "PASS", "trim[unknown session]": "FAIL",
-                                 "unknown tool is an error": "PASS"}
+                                 "get_telemetry[unknown session]": "PASS", "trim[unknown session]": "FAIL"}
 
 
 def test_list_aircraft_compared_with_directory_scan(tmp_path):
@@ -682,9 +690,9 @@ def test_stock_script_probe_turns_crashes_into_warn():
 
 def test_jsbsim_server_env_is_minimal_and_applies_config_env(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
-    env = jsb.server_env({"command": "/m/jsbsim/.venv/bin/python",
-                          "env": {"JBSIM_ROOT": "/m/jsbsim/jsbsim_data", "JSBSIM_DEBUG": "0"}},
-                         tmp_path / "home", tmp_path / "tmp")
+    env = runner.server_env({"command": "/m/jsbsim/.venv/bin/python",
+                             "env": {"JBSIM_ROOT": "/m/jsbsim/jsbsim_data", "JSBSIM_DEBUG": "0"}},
+                            tmp_path / "home", tmp_path / "tmp", pass_proxies=jsb.SMOKE.pass_proxies)
     assert env["TMPDIR"] == str(tmp_path / "tmp") and env["PATH"].startswith("/m/jsbsim/.venv/bin:")
     assert env["JSBSIM_DEBUG"] == "0" and env["JBSIM_ROOT"] == "/m/jsbsim/jsbsim_data"
     assert "ANTHROPIC_API_KEY" not in env
@@ -765,9 +773,9 @@ def test_manifest_rejects_bad_host_requirements(tmp_path, value, match):
         setup.load_manifest(path)
 
 
-# --- smoke_s4: independent TMM / 1D RCWA references and checks ----------------
+# --- e2e_smoke/servers/s4.py: independent TMM / 1D RCWA references and checks ----------------
 
-s4 = _load("smoke_s4")
+s4 = _smoke("s4")
 
 
 def test_tmm_matches_closed_forms():
@@ -917,8 +925,8 @@ def test_s4_sanity_check_uses_exact_fresnel():
 def test_s4_server_env_is_minimal_and_applies_config_env(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "secret")
     monkeypatch.setenv("PYTHONPATH", "/somewhere/else")
-    env = s4.server_env({"command": "/m/s4/.venv/bin/python", "env": {"PYTHONPATH": "/m/s4/src"}},
-                        tmp_path / "home", tmp_path / "tmp")
+    env = runner.server_env({"command": "/m/s4/.venv/bin/python", "env": {"PYTHONPATH": "/m/s4/src"}},
+                            tmp_path / "home", tmp_path / "tmp")
     assert env["PYTHONPATH"] == "/m/s4/src" and env["PATH"].startswith("/m/s4/.venv/bin:")
     assert "OPENAI_API_KEY" not in env
 
@@ -1111,9 +1119,9 @@ def test_lock_flag_only_applies_to_conda_servers(tmp_path, monkeypatch):
     assert setup.main(["pyscf", "--lock", "--root", str(tmp_path)]) == 1
 
 
-# --- smoke_psi4: helpers and psi4-free checks --------------------------------
+# --- e2e_smoke/servers/psi4.py: helpers and psi4-free checks --------------------------------
 
-p4 = _load("smoke_psi4")
+p4 = _smoke("psi4")
 
 
 def test_psi4_parse_geometry_accepts_psi4_xyz_and_bare_lines():
@@ -1209,8 +1217,8 @@ def test_psi4_tool_payload_fails_on_in_band_error_for_valid_requests():
 
 def test_psi4_server_env_is_minimal_and_applies_config_env(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
-    env = p4.server_env({"command": "/m/psi4/.venv/bin/python", "env": {"PYTHONPATH": "/m/psi4"}},
-                        tmp_path / "home", tmp_path / "tmp")
+    env = runner.server_env({"command": "/m/psi4/.venv/bin/python", "env": {"PYTHONPATH": "/m/psi4"}},
+                            tmp_path / "home", tmp_path / "tmp")
     assert env["PYTHONPATH"] == "/m/psi4" and env["TMPDIR"] == str(tmp_path / "tmp")
     assert "ANTHROPIC_API_KEY" not in env
 
@@ -1373,7 +1381,8 @@ def _manifest_with(tmp_path, sid, mutate):
     ("pyscf", lambda e: e.update(revision="z" * 40), "40-char commit SHA"),
     ("pyscf", lambda e: e.update(python="3"), "3.x version"),
     ("pyscf", lambda e: e.update(expected_tools=["b", "a"]), "sorted"),
-    ("pyscf", lambda e: e.pop("smoke"), "smoke"),
+    ("pyscf", lambda e: e.update(smoke="smoke_pyscf.py"), r"unknown manifest key\(s\) \['smoke'\]"),
+    ("pyscf", lambda e: e.update(id="py-scf"), "lowercase identifier"),
     ("pyscf", lambda e: e["launch"].update(cwd="."), "launch must have command"),
     ("jsbsim", lambda e: e.update(conda={}), r"\['conda'\] only apply to install conda-explicit, not uv-pip-pinned"),
 ])
@@ -1421,3 +1430,123 @@ def test_a_new_install_mode_is_one_registered_installer(tmp_path, monkeypatch):
     with pytest.raises(setup.SetupError, match=r"\['demo_pins'\] only apply to install demo"):
         setup.load_manifest(_manifest_with(tmp_path, "pyscf", lambda e: e.update(demo_pins=["x==1"])))
     assert setup.main(["pyscf", "--lock", "--root", str(tmp_path)]) == 1   # no lock() for uv-sync-frozen
+
+
+# --- e2e_smoke runner: one shared run for every server --------------------------
+
+def _git_checkout(path):
+    path.mkdir()
+    for args in (["init", "-q"], ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty",
+                                  "-m", "pin"]):
+        subprocess.run(["git", "-C", str(path), *args], check=True)
+    return subprocess.run(["git", "-C", str(path), "rev-parse", "HEAD"], check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+def _demo_run(tmp_path, monkeypatch, smoke, *, edit_config=None, argv=()):
+    """Run runner.main for a manifest entry 'demo' served by FAKE_SERVER from a pinned checkout."""
+    checkout = tmp_path / "demo"
+    revision = _git_checkout(checkout)
+    (checkout / "fake_server.py").write_text(FAKE_SERVER)
+    (checkout / ".venv/bin").mkdir(parents=True)
+    (checkout / ".venv/bin/python").symlink_to(sys.executable)
+    entry = {"id": "demo", "catalog_id": "demo", "repository": "https://example.invalid/demo.git",
+             "revision": revision, "python": "3.12", "install": "uv-sync-frozen",
+             "launch": {"command": ".venv/bin/python", "args": ["{checkout}/fake_server.py"],
+                        "env": {"DEMO_FLAG": "1"}},
+             "expected_tools": ["a", "b"]}
+    setup.validate_entry(entry)
+    monkeypatch.setattr(setup, "load_manifest", lambda *a: {"demo": entry})
+    monkeypatch.setattr(runner, "load_setup", lambda: setup)
+    config = setup.render_config(entry, checkout)
+    if edit_config:
+        edit_config(config["mcpServers"]["demo"])
+    config_path = tmp_path / "demo.mcp.json"
+    config_path.write_text(json.dumps(config))
+    report_path = tmp_path / "report.json"
+    code = runner.main(smoke, ["--config", str(config_path), "--report", str(report_path), *argv])
+    document = json.loads(report_path.read_text())
+    return code, document, {c["name"]: c["status"] for c in document["checks"]}
+
+
+def test_runner_performs_the_shared_checks_around_the_server_hooks(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
+    seen = {}
+
+    def prepare(session):
+        session.state["prepared"] = True
+        assert session.env["DEMO_FLAG"] == "1" and "ANTHROPIC_API_KEY" not in session.env
+        assert session.env["HOME"] == str(session.home) and session.env["TMPDIR"] == str(session.scratch)
+
+    def run_l1(session):
+        assert session.state["prepared"]
+        result = session.call("a works", "a", {})
+        session.report.add("L1", "a works", "PASS" if runner.text_of(result) == "42" else "FAIL")
+        runner.check_rejected(session.call, "b rejects", "b", {})
+        (session.cwd / "declared.html").write_text("x")
+        (session.cwd / "stray.txt").write_text("x")
+
+    def after(session):
+        with session.spawn("probe") as client:
+            seen["probe_tools"] = len(client.initialize() and client.list_tools())
+        seen["flag"] = session.args.flag
+
+    smoke = runner.Smoke(server="demo", run_l1=run_l1, prepare=prepare, after=after,
+                         expected_cwd_files=("declared.html",), packages=("pytest",),
+                         add_arguments=lambda p: p.add_argument("--flag", action="store_true"),
+                         report_fields=lambda session: {"extra": session.state["prepared"]})
+    code, document, statuses = _demo_run(tmp_path, monkeypatch, smoke, argv=["--flag"])
+    assert code == 0, document["checks"]
+    assert statuses == {
+        "config matches manifest": "PASS", "initialize": "PASS", "tools/list": "PASS",
+        "tools/list stable": "PASS", "a works": "PASS", "b rejects": "PASS", "unknown tool is an error": "PASS",
+        "server alive after calls": "PASS", "stdout is pure JSON-RPC": "WARN", "server leaves cwd untouched": "WARN"}
+    checks = {c["name"]: c for c in document["checks"]}
+    assert checks["stdout is pure JSON-RPC"]["non_json_stdout_by_tool"] == {"a": 1, "b": 1}
+    assert checks["server leaves cwd untouched"]["detail"] == "created ['stray.txt']"
+    assert seen == {"probe_tools": 2, "flag": True}
+    assert document["extra"] is True and document["environment"]["pytest"]
+    assert document["server"] == "demo" and document["result"] == "PASS"
+
+
+def test_runner_fails_a_config_that_is_not_the_rendered_manifest(tmp_path, monkeypatch):
+    smoke = runner.Smoke(server="demo", run_l1=lambda session: None)
+    code, document, statuses = _demo_run(tmp_path, monkeypatch, smoke,
+                                         edit_config=lambda server: server["env"].update(DEMO_FLAG="0"))
+    assert code == 1 and statuses["config matches manifest"] == "FAIL"
+    detail = next(c["detail"] for c in document["checks"] if c["name"] == "config matches manifest")
+    assert "env" in detail and "regenerate with setup.py" in detail
+
+
+@pytest.mark.parametrize("response,in_band,expected", [
+    (_text("bad", is_error=True), None, "PASS"),
+    (_text('{"ok": false}'), lambda r: "ok=false" if '"ok": false' in runner.text_of(r) else None, "WARN"),
+    (_text("fine"), None, "FAIL"),
+])
+def test_check_rejected_classification(response, in_band, expected):
+    report = runner.Report()
+    runner.check_rejected(runner.Caller(_StubClient({"t": response}), report), "t[bad]", "t", {}, in_band=in_band)
+    assert _statuses(report) == {"t[bad]": expected}
+    report = runner.Report()
+    runner.check_rejected(runner.Caller(_StubClient({"t": _text("fine")}), report), "t[bad]", "t", {},
+                          on_accept=lambda r: ("WARN", "accepted", {"text": runner.text_of(r)}))
+    assert report.checks[0]["status"] == "WARN" and report.checks[0]["text"] == "fine"
+
+
+def test_json_result_marks_tool_errors_and_fails_non_json():
+    report = runner.Report()
+    assert runner.json_result(report, "c", _text("x", is_error=True)["result"]) == {"_isError": True, "_text": "x"}
+    assert runner.json_result(report, "c", _text('{"a": 1}')["result"]) == {"a": 1}
+    structured = {**_text("ignored")["result"], "structuredContent": {"a": 2}}
+    assert runner.json_result(report, "c", structured, structured=True) == {"a": 2}
+    assert runner.json_result(report, "c", _text("nope")["result"]) is None
+    assert _statuses(report) == {"c": "FAIL"}
+
+
+def test_smoke_cli_knows_every_manifest_server():
+    cli = _load("smoke")
+    for sid in setup.load_manifest():
+        assert cli.load(sid).server == sid
+    with pytest.raises(SystemExit, match="no smoke for 'nope'"):
+        cli.load("nope")
+    assert cli.main([]) == 2

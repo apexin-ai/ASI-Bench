@@ -132,6 +132,10 @@
   安装方式在 `setup.py` 的 `INSTALLERS` 注册表中各自声明字段/校验/`install`/可选 `lock`，
   manifest 条目只允许公共键加本方式字段（拼错或他方式字段即报错），主机检查为 `HOST_PROBES`；
   只 clone 不 vendor 上游；
+  smoke 入口为 `smoke.py <id>`：共享流程与通用检查（revision、config 等于 `setup.py` 渲染结果、
+  握手/tools/list、未知工具报错、存活、stdout 纯 JSON-RPC、cwd 未被写入）在 `e2e_smoke/runner.py`，
+  每个 server 只写 `e2e_smoke/servers/<id>.py`（参考值与专属检查，声明 `SMOKE`），复用
+  `Caller.json`、`check_rejected` 与 `helpers.py`，不在 server 文件里重复实现；manifest 无 `smoke` 字段；
   smoke 用 server 自身 venv 在进程外独立计算参考值，L0/L1 分级，
   smoke 必须覆盖 manifest 列出的全部工具：数值错误为 FAIL，上游缺陷（in-band 错误、
   忽略参数、误导性返回、间歇性错误、stdout 非 JSON 行）记为 WARN；探测已知数值缺陷
