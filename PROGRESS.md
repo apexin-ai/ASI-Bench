@@ -1352,4 +1352,27 @@
   `sys.modules` before `exec_module` or dataclasses fail on Python 3.14;
   `verify_run.py` puts its own directory on `sys.path` so every test loader
   shares one `e2e_verify` package.
+- Commit: `8ffc458`.
+
+## 2026-10-02: MCP E2E chore — `setup.py` installer registry, strict manifest
+
+- Problem: every install mode added pairwise "X only applies to Y" checks to
+  `_check_install_fields`, and one mode's logic was spread over
+  `INSTALL_MODES`, field checks, a `build_env` branch and `--lock`. Unknown
+  top-level keys were ignored, so a misspelt `host_requirement` would have
+  skipped the s4 host check silently.
+- Resolution: `Installer` subclasses (`UvSyncFrozen`, `UvPipPinned`,
+  `CondaExplicit`) in `INSTALLERS` each own their fields (validator per field,
+  also called when absent, so it decides "required"), `install()` and an
+  optional `lock()`. One generic rule replaces the pairwise checks: allowed =
+  `COMMON_KEYS` + the mode's fields; another mode's field is reported as
+  "only apply to install <mode>", anything else as unknown. Common keys
+  (revision hex, python 3.x, launch shape, sorted expected_tools, smoke name)
+  and the document keys are validated too. `host_requirements` checks are a
+  probe table (`HOST_PROBES`). Manifest format unchanged; entries stay dicts
+  (smoke scripts read the same JSON).
+- Verification: all existing setup tests passed unchanged except one message
+  (`conda only applies` → `['conda'] only apply to install conda-explicit`);
+  new tests cover unknown keys, disjoint field owners, and a stub installer
+  registered without touching any other code.
 - Commit: (pending).

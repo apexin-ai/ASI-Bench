@@ -31,6 +31,11 @@ Install modes:
 Servers with prebuilt native code also declare `host_requirements`; `setup.py`
 checks them before cloning and never installs system packages.
 
+The manifest is strict: an entry holds only the common keys plus its install
+mode's fields; a misspelt key or another mode's field is an error. A new mode is
+one `Installer` subclass registered in `INSTALLERS` (fields + validators,
+`install`, optional `lock`); a new host check is one probe in `HOST_PROBES`.
+
 ## Run
 
 Linux, as an unprivileged E2E user:

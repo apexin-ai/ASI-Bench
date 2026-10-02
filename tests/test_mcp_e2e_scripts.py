@@ -1023,7 +1023,7 @@ def test_read_conda_lock_rejects_stale_or_foreign_locks(tmp_path, kind, match):
     (lambda e: e["conda"].update(locks={"linux-64": "../x.txt"}), "relative"),
     (lambda e: e.update(requirements=["mcp==1.0"]), "only apply"),
     (lambda e: e.update(uv_sync_args=["--no-dev"]), "uv_sync_args"),
-    (lambda e: e.update(install="uv-sync-frozen"), "conda only applies"),
+    (lambda e: e.update(install="uv-sync-frozen"), r"\[.conda.\] only apply to install conda-explicit"),
     (lambda e: e["launch"]["env"].update(PYTHONPATH="{checkout}x"), "prefix"),
 ])
 def test_manifest_rejects_bad_conda_fields(tmp_path, mutate, match):
@@ -1355,3 +1355,69 @@ def test_select_narrows_a_call_result_like_an_answer_source():
                                     is_error=False, input={"x": 3})
     assert verify.checks.judge_call(call, cs, {"y_ref": 0.4, "x_ref": 3})["result_ok"] is True
     assert verify.checks.judge_call(call, cs, {"y_ref": 0.2, "x_ref": 3})["result_ok"] is False
+
+
+# --- setup.py: installer registry and strict manifest keys ----------------------
+
+def _manifest_with(tmp_path, sid, mutate):
+    document = json.loads((BUNDLE / "manifest.json").read_text())
+    mutate(next(e for e in document["servers"] if e["id"] == sid))
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(document))
+    return path
+
+
+@pytest.mark.parametrize("sid,mutate,match", [
+    ("s4", lambda e: e.update(host_requirement=e.pop("host_requirements")), r"unknown manifest key\(s\) \['host_requirement'\]"),
+    ("pyscf", lambda e: e.update(uv_sync_arg=["--no-dev"]), "unknown manifest key"),
+    ("pyscf", lambda e: e.update(revision="z" * 40), "40-char commit SHA"),
+    ("pyscf", lambda e: e.update(python="3"), "3.x version"),
+    ("pyscf", lambda e: e.update(expected_tools=["b", "a"]), "sorted"),
+    ("pyscf", lambda e: e.pop("smoke"), "smoke"),
+    ("pyscf", lambda e: e["launch"].update(cwd="."), "launch must have command"),
+    ("jsbsim", lambda e: e.update(conda={}), r"\['conda'\] only apply to install conda-explicit, not uv-pip-pinned"),
+])
+def test_manifest_rejects_unknown_and_malformed_keys(tmp_path, sid, mutate, match):
+    with pytest.raises(setup.SetupError, match=match):
+        setup.load_manifest(_manifest_with(tmp_path, sid, mutate))
+
+
+def test_manifest_document_keys_are_exact(tmp_path):
+    document = json.loads((BUNDLE / "manifest.json").read_text())
+    document["server"] = []
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(document))
+    with pytest.raises(setup.SetupError, match="exactly schema_version"):
+        setup.load_manifest(path)
+
+
+def test_installer_fields_are_disjoint_and_cover_the_manifest():
+    owners = [key for installer in setup.INSTALLERS.values() for key in installer.fields]
+    assert len(owners) == len(set(owners)) and not set(owners) & set(setup.COMMON_KEYS)
+    assert setup.INSTALL_MODES == ("uv-sync-frozen", "uv-pip-pinned", "conda-explicit")
+    assert {e["install"] for e in setup.load_manifest().values()} == set(setup.INSTALL_MODES)
+    assert setup.HOST_REQUIREMENT_KEYS == ("machine", "cpu_flags", "shared_libraries")
+
+
+def test_a_new_install_mode_is_one_registered_installer(tmp_path, monkeypatch):
+    def check_pins(sid, value, entry):
+        if value != ["x==1"]:
+            raise setup.SetupError(f"{sid}: demo_pins")
+
+    class Demo(setup.Installer):
+        mode = "demo"
+        fields = {"demo_pins": check_pins}
+
+        def install(self, entry, dest):
+            return dest / ".venv/bin/python"
+
+    monkeypatch.setitem(setup.INSTALLERS, "demo", Demo())
+    path = _manifest_with(tmp_path, "pyscf", lambda e: e.update(install="demo", demo_pins=["x==1"]))
+    entry = setup.load_manifest(path)["pyscf"]
+    monkeypatch.setattr(setup, "run", lambda cmd, cwd=None, env=None: entry["python"])
+    assert setup.build_env(entry, tmp_path) == tmp_path / ".venv/bin/python"
+    with pytest.raises(setup.SetupError, match="demo_pins"):
+        setup.load_manifest(_manifest_with(tmp_path, "pyscf", lambda e: e.update(install="demo", demo_pins=[])))
+    with pytest.raises(setup.SetupError, match=r"\['demo_pins'\] only apply to install demo"):
+        setup.load_manifest(_manifest_with(tmp_path, "pyscf", lambda e: e.update(demo_pins=["x==1"])))
+    assert setup.main(["pyscf", "--lock", "--root", str(tmp_path)]) == 1   # no lock() for uv-sync-frozen

@@ -606,7 +606,10 @@ uv run --frozen pytest tests/test_mcp_e2e_scripts.py -q
 ```
 
 Checks that `scripts/mcp/e2e/manifest.json` entries are pinned to 40-char
-revisions and match catalog sources, that rendered `*.mcp.json` passes
+revisions and match catalog sources, that `setup.py` rejects unknown keys and
+fields of another install mode (each `Installer` owns its fields; owners are
+disjoint and a stub installer registered in `INSTALLERS` validates, builds and
+refuses `--lock` without other changes), that rendered `*.mcp.json` passes
 `load_mcp_config` with absolute paths, that absolute launch paths and foreign
 checkout remotes are rejected, and that the stdlib stdio client paginates
 `tools/list`, surfaces `isError`, and records non-JSON stdout lines. For

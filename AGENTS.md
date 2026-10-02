@@ -129,6 +129,8 @@
   conda-only 依赖（psi4）用 `conda-explicit`：manifest `conda` 精确 `name=version` specs，
   按平台提交带 SHA-256 的 `@EXPLICIT` lock（header 与 manifest 不符即拒绝），
   `micromamba create --file` 无求解安装，`setup.py <id> --lock` 重新生成；
+  安装方式在 `setup.py` 的 `INSTALLERS` 注册表中各自声明字段/校验/`install`/可选 `lock`，
+  manifest 条目只允许公共键加本方式字段（拼错或他方式字段即报错），主机检查为 `HOST_PROBES`；
   只 clone 不 vendor 上游；
   smoke 用 server 自身 venv 在进程外独立计算参考值，L0/L1 分级，
   smoke 必须覆盖 manifest 列出的全部工具：数值错误为 FAIL，上游缺陷（in-band 错误、
