@@ -117,6 +117,26 @@ also wrong for Codex).
 
 ## Results
 
+### `mcp_e2e.arxiv_search_snippets` (Claude Code and Codex CLI)
+
+2026-10-02, AWS Linux amd64, seed 31415 (gravitational waves: 5 results,
+picked 1103.0576 with 19 authors, counts millisecond 5 / arecibo 3), one run
+per level. Claude Code with `claude-opus-5-5`; Codex CLI with `gpt-5.6-sol`
+through the custom gateway (`codex_home`), effort `medium`:
+
+| Harness | Level | Local score | Verified PASS | Notes |
+|---|---|---|---|---|
+| Claude Code | B1–B4 | 4 × 100 | 4/4 | both tools found without being named at B3/B4 |
+| Codex CLI | B1–B4 | 4 × 100 | 4/4 | both tools found without being named at B3/B4 |
+
+All eight runs passed every verifier check with no WARN: the search returned
+the reference IDs, the snippet call used the picked paper from the search
+result (`tool_chain`) and returned the reference counts, and the answers equal
+the tool-returned values. Although `--mcp-config` runs in search mode, neither
+harness called a web search/fetch tool or reached arXiv from the shell, and
+Codex's default MCP timeouts were enough for the PDF download and conversion.
+One run per level shows the path works, not a pass rate.
+
 ### Codex CLI (both tasks)
 
 2026-09-30, AWS Linux amd64, codex-cli 0.159.2, `gpt-5.6-sol` through a

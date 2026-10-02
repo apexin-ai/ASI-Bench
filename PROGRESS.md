@@ -1069,4 +1069,7 @@
   returned exactly the reference counts and IDs for three of the five cases;
   `asibench generate --sandbox task` + an oracle `--agent-cmd` run scored
   100/100 while `verify_run.py` failed it for lack of MCP evidence.
-  AWS agent runs and the implementation commit ID are added with the results.
+  AWS Linux amd64, seed 31415, B1–B4 ×1 each for Claude Code
+  (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`): local score 400/400 per
+  harness and verifier 8/8 PASS on every check, no WARN (no web tool use).
+- Implementation commit: `1d1e6bc`.
