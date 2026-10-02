@@ -1494,4 +1494,4 @@
   it; a partial re-implementation encoded the same blind spot as the code
   under test. A test that skips a pipeline step to dodge a crash is a bug
   report waiting to be filed.
-- Commit: (pending).
+- Commit: `879dfc0`.
