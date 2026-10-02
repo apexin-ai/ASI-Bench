@@ -1254,7 +1254,7 @@
   with identical verdicts; tampering with one lock SHA-256 makes micromamba
   abort. Offline tests in `tests/test_mcp_e2e_scripts.py`. AWS Linux amd64
   (linux-64 lock): 14 PASS / 11 WARN / 0 FAIL, the same verdicts and values.
-- Implementation commit: `3e95955` (before the rebase onto the s4 L2 commits).
+- Implementation commit: `7a9c5d9`.
 
 ## 2026-10-02: L2 psi4 optimize → frequency task, geometry-valued tool chain
 
@@ -1288,5 +1288,8 @@
   `--agent-cmd` following B1 through the real server scored 100/100 and
   `verify_run.py` failed it for lack of agent evidence; offline tests in
   `tests/test_mcp_e2e_psi4.py` (Claude/Codex streams built from recorded
-  server outputs pass every check). AWS agent runs pending.
-- Implementation commit: pending.
+  server outputs pass every check). AWS Linux amd64, seed 31415 (methane,
+  HF/STO-3G), B1–B4 ×1 each for Claude Code (`claude-opus-5-5`) and Codex CLI
+  (`gpt-5.6-sol`): local score 400/400 per harness and verifier 4/4 PASS per
+  harness.
+- Implementation commit: `f4c48de`.

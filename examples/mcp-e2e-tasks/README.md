@@ -226,6 +226,25 @@ also wrong for Codex).
 
 ## Results
 
+### `mcp_e2e.psi4_opt_freq` (Claude Code and Codex CLI)
+
+2026-10-02, AWS Linux amd64 with the linux-64 conda lock, seed 31415
+(methane, HF/STO-3G, start distorted by up to 0.04 Å; nine modes with the
+triply and doubly degenerate sets split by ≤ 0.1 cm⁻¹), one run per level.
+Claude Code with `claude-opus-5-5`; Codex CLI with `gpt-5.6-sol` through the
+custom gateway (`codex_home`), effort `medium`:
+
+| Harness | Level | Local score | Verified PASS | Notes |
+|---|---|---|---|---|
+| Claude Code | B1–B4 | 4 × 100 | 4/4 | tools found without being named at B3/B4 |
+| Codex CLI | B1–B4 | 4 × 100 | 4/4 | tools found without being named at B3/B4 |
+
+All eight runs passed every verifier check, including `tool_chain`: the
+`frequency` call used the geometry that `optimize` returned (the new
+`"compare": "geometry"` link). The psi4 tools return plain JSON objects, so
+FastMCP's structured content is the payload itself and needs no unwrapping.
+One run per level shows the path works, not a pass rate.
+
 ### `mcp_e2e.s4_grating_spectrum` (Claude Code and Codex CLI)
 
 2026-10-02, AWS Linux amd64 with the pinned upstream `libS4.so`, seed 31415
