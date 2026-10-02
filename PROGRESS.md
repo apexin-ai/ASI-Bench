@@ -1174,3 +1174,37 @@
   with the pinned upstream binary (SHA-256 verified): 41 PASS / 7 WARN /
   0 FAIL, the same seven defect WARNs and values.
 - Implementation commit: `b513672`.
+
+## 2026-10-02: L2 s4 grating-spectrum task, answers selected from returned arrays
+
+- Problem: an L2 task must show that the answer came from the MCP tool, but
+  for planar stacks any agent can reproduce S4 exactly with a few lines of
+  transfer-matrix code, and the s4 server's only other tool takes no input,
+  so there is no real chain. The answers are elements of returned arrays (R at
+  one wavelength, the maximum, its wavelength), which `verify_run.py` could
+  not express.
+- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/s4_grating_spectrum`: one
+  `simulate_stack_spectrum` call of a seeded TM lamellar grating with a given
+  harmonic count (21/37/81, never equivalent to the default 51). The reference
+  is the smoke's independent numpy 1D RCWA with S4's default formulation
+  (Laurent's rule, same truncation), computed in `generate --sandbox task`
+  with numpy only. Instances are selected so that the converged answer (Li's
+  rule) and the next truncation differ from the tool's R at the reported point
+  by ≥ 1e-3, the scorer's zero-credit tolerance. `verify_run.py` answer sources
+  gained `select` (`reduce` max/min, `argmax_of`/`argmin_of`, `where_key` +
+  `equals_reference_key`); `check_engine_sanity` is an optional call.
+- Lesson: pick L2 cases where the tool's specific numerical method is what
+  makes the answer unique; a physically exact quantity proves nothing about
+  provenance. Also keep the angle non-zero and the harmonic count away from
+  the default, so that omitted arguments change the result or show up as an
+  input mismatch.
+- Lesson: in the shared VM `/tmp/e2e` belonged to another session's user; use
+  a scratch directory under the session home.
+- Verification: `tests/test_mcp_e2e_s4.py` (34 offline tests); over 61 seeds
+  the server (S4 built from source, Linux aarch64) matched the reference to
+  ≤ 1.1e-12. `asibench generate --sandbox task` + an oracle `--agent-cmd` that
+  follows B1 through the real server scored 100/100 and `verify_run.py` failed
+  it for lack of agent evidence; Claude and Codex streams built from those real
+  server outputs pass every check. AWS agent runs pending.
+- Implementation commit: pending.
+

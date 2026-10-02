@@ -666,6 +666,23 @@ WARN; steps on another `session_id` break `tool_chain`; no state read fails
 `import jsbsim`, installs, the `jsbsim` CLI and the server's Python are bypass.
 It also checks string chaining (`_same_link`) and optional-call grouping.
 
+`tests/test_mcp_e2e_s4.py` covers `mcp_e2e.s4_grating_spectrum` and the
+verify_run answer `select`, without S4 or the server: deterministic, varied
+seeded gratings that meet every selection rule (Rayleigh clearance, unique
+interior maximum, report point ≠ maximum, bypass margin ≥ 1e-3, θ > 0, TM),
+harmonic counts that are complete shells and never the server default, the
+generator's RCWA identical to the smoke's, tool arguments that follow the B1
+recipe, every reference key the checks use, agent-neutral prompts (the tool is
+named only at B1/B2), scorers (tool values score 100; a converged home-made
+RCWA, the default 51 harmonics, the neighbouring sweep point and rounded values
+lose credit; submission vs evaluator failures), and the verifier on Claude
+stream-json and Codex JSONL: a genuine run passes every check with or without
+the optional sanity call; the default harmonic count fails `tool_correct`;
+recomputed answers fail `answer_from_tool`; numbers as strings pass while an
+omitted `theta_deg` WARNs; `import S4`, RCWA package installs, loading
+`libS4.so` and the server's Python are bypass, RCWA-like code is a WARN; plus
+every `select` mode.
+
 MCP E2E fake tasks and run verifier (offline, no MCP server or PySCF):
 
 ```bash

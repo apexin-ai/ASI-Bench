@@ -70,7 +70,12 @@ Optional specs that share a `"group"` form one requirement: at least one member
 must be called (`tool_called`) and the best member counts for `tool_correct`,
 e.g. reading the final state with either `get_telemetry` or `get_property`. A
 numeric answer can take its value from several calls with `from_calls`
-(`[{"call": ..., "result_key": ...}, ...]`). `inputs_from_call` values that
+(`[{"call": ..., "result_key": ...}, ...]`); a source with `select` takes one
+element of a list field: `{"reduce": "max"}` / `"min"`, `{"argmax_of": key}` /
+`argmin_of` (the element at the extreme of another list field of the same
+result), or `{"where_key": key, "equals_reference_key": ref}` (the element
+where list field `key` equals a reference value, e.g. R at a given wavelength
+of a returned spectrum). `inputs_from_call` values that
 are not numbers, such as a `session_id`, must be identical strings.
 
 ## Tasks
@@ -81,6 +86,7 @@ are not numbers, such as a `session_id`, must be identical strings.
 | `mcp_e2e.pyscf_bond_stretch` | `pyscf` | `run_bond_stretch_calculation_mcp` → `plot_energy_scan_image_mcp` | seeded RDKit + UFF geometry, rigid stretch, PySCF RHF/STO-3G in `generate_gt.py` |
 | `mcp_e2e.arxiv_search_snippets` | `arxiv` | `ArXiv_search_papers` → `ArXiv_get_pdf_snippets` | raw arXiv API query and the PDF converted with MarkItDown (server lockfile versions) in `generate_gt.py` |
 | `mcp_e2e.jsbsim_engine_run` | `jsbsim` | `create_session` → (`set_initial_conditions`) → `set_property` ×3 → `step` → `get_property` or `get_telemetry`, one `session_id` | JSBSim 1.3.1 flown directly in `generate_gt.py` with JSBSim's own initial-condition properties |
+| `mcp_e2e.s4_grating_spectrum` | `s4` | `simulate_stack_spectrum` (optional `check_engine_sanity`) | independent numpy 1D RCWA with S4's default formulation (Laurent's rule, same truncation) in `generate_gt.py` |
 
 `mcp_e2e.pyscf_rhf_energy`: a seed picks one of five small closed-shell
 molecules and STO-3G or 6-31G, and perturbs every coordinate by up to ±0.02 Å so
@@ -141,6 +147,36 @@ and `step` call to use the `session_id` that `create_session` returned
 (`tool_chain`), accepts the final state from either read tool, and treats
 `import jsbsim`, installing it, the `jsbsim` CLI or the server's own Python as
 bypass. No network is needed.
+
+`mcp_e2e.s4_grating_spectrum`: a seed picks a lamellar dielectric grating on
+glass (period 0.6–1.0 µm; Si₃N₄, Ta₂O₅, TiO₂ or Si ridges; fill 0.3–0.7;
+height 0.1–0.4 µm), a TM plane wave at 5–20° from the superstrate, 21, 37 or
+81 harmonics and a sweep of 11–21 wavelengths on a 5 nm grid just above the
+period. The agent must run one `simulate_stack_spectrum` call (layers bottom
+to top, the ridge as a rectangle spanning the cell along y, `include_plot`
+false) and write `result.json` with R and T at a given sweep point, the
+largest R and its wavelength. Scoring: 30 R, 30 T, 25 R_max (each full credit
+within 1e-6, zero at 1e-3) and 15 for the wavelength (full within 1e-4 µm,
+zero at 1e-3), log-linear in between. The reference is an independent 1D
+RCWA in numpy: S4's default formulation uses Laurent's rule with circular
+truncation, so these complete square-lattice shells keep exactly the x-axis
+orders ±2/±3/±5 of a y-uniform grating, and the 1D RCWA with the same rule and
+orders agrees with the server to ~1e-14 (checked by the L1 smoke and over 61
+seeds). This makes the tool the only practical source: every instance is
+selected so that the converged answer (Li's rule, ±40 orders) and the next
+truncation both differ from the tool's R at the reported point by ≥ 1e-3,
+i.e. a home-made RCWA scores zero there; the harmonic counts are never
+equivalent to the server default (51 → ±4); the angle is never 0, so an
+omitted `theta_deg` is visible; the maximum is unique and inside the sweep,
+and grid points avoid Rayleigh anomalies. `verify_run.py` compares the
+returned R spectrum with the reference, takes the answers from the returned
+arrays (`select`: element at the reported wavelength, maximum, wavelength at
+the maximum), judges an optional `check_engine_sanity` call, and treats
+importing or installing S4 or other RCWA packages, loading `libS4.so` or the
+server's own Python as bypass; RCWA-like code (`toeplitz`, `linalg.eig`) and
+mentions of S4 or the server package are WARN for review. Generation needs
+only numpy; the agent run needs the s4 server (x86-64 host, see
+`scripts/mcp/e2e/README.md`). No network is needed.
 
 Prompts must stay agent-neutral: name the MCP server and tool
 (`pyscf_rhf_energy` of the `pyscf` server), never a harness-specific name such
@@ -349,6 +385,24 @@ Score and verify as in steps 3–4 (Codex as above). The server closes sessions
 idle for 300 s, so a run with very long pauses between tool calls loses its
 session.
 
+s4 task (needs `python3 scripts/mcp/e2e/setup.py s4`, i.e. an x86-64 host with
+AVX2/FMA/BMI2 and `libblas3 liblapack3`; generation needs only numpy; no
+network):
+
+```sh
+uv run asibench generate --task mcp_e2e.s4_grating_spectrum --params '{"seed": 31415}' \
+  --sandbox task --tasks-dir examples/mcp-e2e-tasks --output-dir ~/e2e/instances
+
+uv run asibench run --agent claude_code_cli \
+  --agent-config '{"model": "claude-opus-4-6", "permission_mode": "bypassPermissions"}' \
+  --mcp-config ~/mcp/s4.mcp.json \
+  --tasks mcp_e2e.s4_grating_spectrum --include-test --tasks-dir examples/mcp-e2e-tasks \
+  --instances-dir ~/e2e/instances --prompt-levels b1,b2,b3,b4 \
+  --sandbox none --timeout 900 --output-dir ~/e2e/out-s4-claude
+```
+
+Score and verify as in steps 3–4 (Codex as above).
+
 ## Adding a task
 
 Copy the pyscf task layout: `task_meta.yaml` (`status: test`), `task_eval.yaml`,
@@ -357,5 +411,6 @@ Copy the pyscf task layout: `task_meta.yaml` (`status: test`), `task_eval.yaml`,
 see `pyscf_bond_stretch`; schema 1 for a single tool with a scalar answer, see
 `pyscf_rhf_energy`; named extractors and web-tool bypass checks, see
 `arxiv_search_snippets`; a stateful session chain with optional/grouped read
-calls and multi-source answers, see `jsbsim_engine_run`) plus bypass patterns. Add the server to
+calls and multi-source answers, see `jsbsim_engine_run`; answers selected from
+returned arrays, see `s4_grating_spectrum`) plus bypass patterns. Add the server to
 `scripts/mcp/e2e/manifest.json` with a smoke test first.

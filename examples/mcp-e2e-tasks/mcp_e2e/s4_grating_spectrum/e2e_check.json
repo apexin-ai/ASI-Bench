@@ -1,0 +1,118 @@
+{
+  "schema_version": 2,
+  "server": "s4",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": [
+    "check_engine_sanity",
+    "simulate_stack_spectrum"
+  ],
+  "calls": [
+    {
+      "name": "spectrum",
+      "tool": "simulate_stack_spectrum",
+      "inputs_from_reference": {
+        "period": "period_um",
+        "polarization": "polarization",
+        "theta_deg": "theta_deg",
+        "n_harmonics": "n_harmonics",
+        "wavelength_start": "wavelength_start_um",
+        "wavelength_stop": "wavelength_stop_um",
+        "wavelength_points": "wavelength_points"
+      },
+      "result": {
+        "format": "json",
+        "key": "R",
+        "reference_key": "R_spectrum",
+        "abs_tol": 1e-06
+      }
+    },
+    {
+      "name": "sanity",
+      "tool": "check_engine_sanity",
+      "optional": true,
+      "result": {
+        "format": "json",
+        "key": "R",
+        "reference_key": "sanity_R",
+        "abs_tol": 1e-09
+      }
+    }
+  ],
+  "answers": [
+    {
+      "prediction_key": "R_at_report",
+      "reference_key": "R_at_report",
+      "abs_tol": 1e-06,
+      "from_calls": [
+        {
+          "call": "spectrum",
+          "result_key": "R",
+          "select": {
+            "where_key": "wavelength",
+            "equals_reference_key": "report_wavelength_um"
+          }
+        }
+      ]
+    },
+    {
+      "prediction_key": "T_at_report",
+      "reference_key": "T_at_report",
+      "abs_tol": 1e-06,
+      "from_calls": [
+        {
+          "call": "spectrum",
+          "result_key": "T",
+          "select": {
+            "where_key": "wavelength",
+            "equals_reference_key": "report_wavelength_um"
+          }
+        }
+      ]
+    },
+    {
+      "prediction_key": "R_max",
+      "reference_key": "R_max",
+      "abs_tol": 1e-06,
+      "from_calls": [
+        {
+          "call": "spectrum",
+          "result_key": "R",
+          "select": {
+            "reduce": "max"
+          }
+        }
+      ]
+    },
+    {
+      "prediction_key": "wavelength_at_R_max_um",
+      "reference_key": "wavelength_at_R_max_um",
+      "abs_tol": 0.0001,
+      "from_calls": [
+        {
+          "call": "spectrum",
+          "result_key": "wavelength",
+          "select": {
+            "argmax_of": "R"
+          }
+        }
+      ]
+    }
+  ],
+  "bypass_patterns": [
+    "(^|[\\n;'\"])\\s*(import\\s+(S4|grcwa|rcwa|torcwa|inkstone|EMpy|mcp_s4_rcwa)\\b|from\\s+(S4|grcwa|rcwa|torcwa|inkstone|EMpy|mcp_s4_rcwa)[\\w.]*\\s+import\\b)",
+    "\\b(pip|pip3|uv|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\b(S4|grcwa|rcwa|torcwa|inkstone|EMpy|mcp-s4-rcwa)\\b",
+    "\\buvx\\b[^\\n]*\\b(grcwa|rcwa|torcwa|inkstone)\\b",
+    "(ctypes|CDLL)[^\\n]*libS4",
+    "/s4/\\.venv/bin/python|mcp-s4-rcwa[^\\s'\"]*/\\.venv/bin/python"
+  ],
+  "suspicious_patterns": [
+    "libS4|s4lib|s4_core|mcp_s4_rcwa|mcp-s4-rcwa",
+    "\\btoeplitz\\b",
+    "linalg\\.eig",
+    "\\b(rcwa|RCWA|fmm|FMM)\\b",
+    "\\bS4\\b",
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ]
+}

@@ -137,7 +137,7 @@
   的隔离环境中计算，agent 以 `--sandbox none` 运行。scorer 只比对输出与 reference；
   是否真实调用 MCP 工具、答案是否来自工具及是否绕过 MCP 由 `scripts/mcp/e2e/verify_run.py`
   依据 `e2e_check.json`（schema 2：多工具 `calls`、`inputs_from_call` 串联、
-  `image` 结果、`answers`；schema 1 自动归一化；非数值结果用命名 `extract`
+  `image` 结果、`answers`（来源可用 `select` 取返回数组的元素）；schema 1 自动归一化；非数值结果用命名 `extract`
   与 `match` equal/subset/member，`bypass_tools`/`suspicious_tools` 检查 WebFetch 等
   非 MCP 工具，`server_tools` 多出工具记 WARN；`optional` + `group` 表示多选一的必需调用，
   数值答案可用 `from_calls` 多来源，非数值串联值（如 `session_id`）按字符串精确比对）

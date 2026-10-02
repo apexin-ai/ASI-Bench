@@ -1,0 +1,60 @@
+task_id: mcp_e2e.s4_grating_spectrum
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    - scorer: s4_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  # Full credit within the tolerance, zero at 10-1000x, log-linear in between.
+  # The tool and the reference agree to ~1e-12; every instance is selected so
+  # that the converged RCWA answer and the next truncation differ from the
+  # tool's R at the reported point by >= 1e-3 (zero credit). The wavelength of
+  # the maximum is a sweep point (>= 10 nm apart): full credit within 0.1 nm.
+  scoring:
+    - scorer: s4_e2e_value
+      weight: 30
+      config:
+        key: R_at_report
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-3
+    - scorer: s4_e2e_value
+      weight: 30
+      config:
+        key: T_at_report
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-3
+    - scorer: s4_e2e_value
+      weight: 25
+      config:
+        key: R_max
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-3
+    - scorer: s4_e2e_value
+      weight: 15
+      config:
+        key: wavelength_at_R_max_um
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-4
+        zero_score_tol: 1.0e-3
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 300

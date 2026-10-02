@@ -1,0 +1,51 @@
+id: mcp_e2e.s4_grating_spectrum
+name: "MCP E2E: TM grating spectrum through the s4 (S4 RCWA) MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. One simulate_stack_spectrum call of a lamellar grating whose
+# result a home-made RCWA does not reproduce (S4's own formulation and
+# truncation); see examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: physics
+subdomain: "photonics_rcwa_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/prof-davifr/mcp-s4-rcwa"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 1-5
+  requires_gpu: false
+  requires_network: false
+
+tags: [mcp_e2e, s4, rcwa, photonics, grating, simulation]
+
+# Only generate_gt.py needs numpy (an independent 1D RCWA that reproduces S4's
+# default formulation; S4 itself is not needed). Generate instances with
+# `asibench generate --sandbox task`; run the agent with --sandbox none and
+# --mcp-config so that S4 is reachable only through the MCP server.
+runtime:
+  python: ">=3.11"
+  packages: ["numpy>=2.0"]
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: grating.json
+      type: data
+      description: "Grating period, substrate/superstrate, ridge material, width and height, TM illumination angle, number of harmonics, wavelength sweep and the sweep point to report."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with R_at_report, T_at_report, R_max and wavelength_at_R_max_um."

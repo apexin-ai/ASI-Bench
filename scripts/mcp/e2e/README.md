@@ -322,3 +322,7 @@ Implications for agent runs:
   costs context; fake tasks should ask for `include_plot=false` unless the
   plot is the point.
 
+L2 coverage: `simulate_stack_spectrum` of a TM grating with a given harmonic
+count, answers taken from the returned spectrum (`mcp_e2e.s4_grating_spectrum`);
+`check_engine_sanity` is judged when an agent calls it, otherwise L1 only.
+
