@@ -21,6 +21,7 @@ import importlib.util
 import json
 import struct
 import sys
+import tempfile
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
@@ -150,22 +151,16 @@ def _orchestrator(tmp_path: Path | None):
 
 def persist_like_run(stream: str, harness: str = "claude", *, instance_id: str = "inst",
                      tmp_path: Path | None = None) -> tuple[str, list[dict]]:
-    """(persisted raw stdout, trajectory steps) for an agent log.
-
-    Codex logs go through the orchestrator's ``_sanitize_raw_artifact_text``.
-    Claude logs only get ``_redact_raw_prompt_fields`` (user events, i.e. tool
-    results, are redacted); the path scrubbing real runs also apply is not
-    modelled here yet.
-    """
+    """(persisted raw stdout, trajectory steps) for an agent log, through the same code
+    ``asibench run`` uses: the orchestrator's ``_sanitize_raw_artifact_text`` redacts user
+    events (Claude tool results) and replaces absolute host paths with ``<abs_path>``;
+    the trajectory is extracted from the unsanitized log."""
     if harness == "codex":
         from ai4sci_bench.trajectory.codex_extractor import extract_from_jsonl
-        persisted = _orchestrator(tmp_path or Path("/tmp/mcp-e2e"))._sanitize_raw_artifact_text(
-            stream, raw_format="jsonl", workspace=(tmp_path or Path("/tmp/mcp-e2e")) / "ws")
     else:
         from ai4sci_bench.trajectory.claude_extractor import extract_from_jsonl
-        orchestrator = _orchestrator(None)
-        persisted = "".join(json.dumps(orchestrator._redact_raw_prompt_fields(json.loads(line))) + "\n"
-                            for line in stream.splitlines() if line.strip())
+    base = tmp_path or Path(tempfile.gettempdir()) / "mcp-e2e"
+    persisted = _orchestrator(base)._sanitize_raw_artifact_text(stream, raw_format="jsonl", workspace=base / "ws")
     return persisted, [step.to_dict() for step in extract_from_jsonl(stream, instance_id).steps]
 
 
@@ -201,13 +196,15 @@ class Task:
                    for item in self.eval_config()["scoring"])
 
     def verify(self, tmp_path: Path, stream: str, *, reference: dict, answer: Any, harness: str = "claude",
-               persist: bool = True, raw_stdout: bool = True, files: dict[str, str] | None = None,
+               persist: bool = True, raw_stdout: bool = True, trajectory: bool = True,
+               files: dict[str, str] | None = None,
                edit_trajectory: Callable[[list[dict]], None] | None = None) -> dict:
         """Lay out one run result as ``asibench run`` does and return ``verify_one``'s row.
 
         ``persist``: the log goes through :func:`persist_like_run` and a trajectory is
         written; otherwise the raw log is written and there is no trajectory.
-        ``raw_stdout=False`` keeps only the trajectory. ``answer=None`` writes no result.json.
+        ``raw_stdout=False`` keeps only the trajectory, ``trajectory=False`` only the persisted
+        log. ``answer=None`` writes no result.json.
         """
         results, instances = tmp_path / "out", tmp_path / "instances"
         instance_id = self.instance_id
@@ -228,9 +225,10 @@ class Task:
                                                 else "inst", tmp_path=tmp_path)
             if edit_trajectory:
                 edit_trajectory(steps)
-            traj = f"{instance_id}__b1.trajectory.json"
-            task_out.joinpath(traj).write_text(json.dumps(steps))
-            agent["trajectory_file"] = traj
+            if trajectory:
+                traj = f"{instance_id}__b1.trajectory.json"
+                task_out.joinpath(traj).write_text(json.dumps(steps))
+                agent["trajectory_file"] = traj
             stream = persisted
         if raw_stdout:
             task_out.joinpath(stdout).write_text(stream)

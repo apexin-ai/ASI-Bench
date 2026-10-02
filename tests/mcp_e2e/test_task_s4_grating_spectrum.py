@@ -105,7 +105,7 @@ def _codex(calls):
 
 def _run(tmp_path, stream, reference, answer, codex=False, files=None):
     return TASK.verify(tmp_path, stream, reference=reference, answer=answer,
-                       harness="codex" if codex else "claude", persist=not codex, files=files)
+                       harness="codex" if codex else "claude", files=files)
 
 
 def _good(reference):
@@ -324,3 +324,23 @@ def test_home_made_rcwa_file_is_flagged(tmp_path, reference):
     row = _run(tmp_path / "b", _stream(_b1_calls(reference)), reference, _good(reference),
                files={"solve.py": "from grcwa import obj\n"})
     assert _status(row)["no_bypass"] == "FAIL"
+
+
+def test_scrubbed_paths_in_the_log_are_checked_against_the_trajectory(tmp_path, reference):
+    # `asibench run` saves the log with absolute paths replaced by <abs_path>, which hides
+    # `libS4` from the bypass pattern; the trajectory keeps the command as executed.
+    command = "python3 -c \"import ctypes; ctypes.CDLL('/home/e2e/mcp/s4/src/mcp_s4_rcwa/s4lib/libS4.so')\""
+    stream = _stream(_b1_calls(reference), extra=[("Bash", {"command": command})])
+    persisted, _steps = support.persist_like_run(stream, instance_id=INSTANCE_ID, tmp_path=tmp_path)
+    assert "libS4" not in persisted and "CDLL('<abs_path>')" in persisted
+    row = _run(tmp_path, stream, reference, _good(reference))
+    assert _status(row)["no_bypass"] == "FAIL" and "libS4" in row["checks"]["no_bypass"]["detail"]
+    assert row["raw_bash_commands"] == [command] and row["bash_commands"] != [command]
+
+
+def test_scrubbed_command_without_trajectory_is_a_coverage_gap(tmp_path, reference):
+    stream = _stream(_b1_calls(reference), extra=[("Bash", {"command": "cat /home/e2e/notes/spectrum.txt"})])
+    row = TASK.verify(tmp_path, stream, reference=reference, answer=_good(reference), trajectory=False)
+    assert _status(row)["no_bypass"] == "WARN"
+    assert "not checkable" in row["checks"]["no_bypass"]["detail"]
+

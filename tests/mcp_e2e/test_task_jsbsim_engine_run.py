@@ -123,7 +123,7 @@ def _codex(calls):
 
 def _run(tmp_path, stream, reference, answer=None, codex=False):
     return TASK.verify(tmp_path, stream, reference=reference, answer=answer or TOOL,
-                       harness="codex" if codex else "claude", persist=not codex)
+                       harness="codex" if codex else "claude")
 
 
 def test_cases_are_deterministic_and_varied():

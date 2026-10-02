@@ -622,12 +622,16 @@ MCP_E2E_GOLDEN=update uv run --frozen pytest -q tests/mcp_e2e
 
 The update refuses `-k` / `file::test` selections and red runs.
 
-Known gap: `support.persist_like_run` gives Claude logs only the run's
-redaction of user events, not the path scrubbing real runs apply to the
-persisted stdout (`/abs/path` → `<abs_path>`); with it, seven path-based
-bypass expectations (server venv Python, `ctypes.CDLL(...libS4.so)`, `ls` of
-the server checkout) no longer hold, because the verifier reads Bash commands
-from the persisted stream. The trajectory keeps the unscrubbed commands.
+Persistence: `support.persist_like_run` runs the orchestrator's real
+`_sanitize_raw_artifact_text` for Claude and Codex logs (user events
+redacted, absolute paths → `<abs_path>`) and extracts the trajectory from the
+unsanitized log, as `asibench run` does; Codex scenarios are persisted too.
+`test_task_s4_grating_spectrum.py` checks that a `ctypes.CDLL('/…/libS4.so')`
+command is scrubbed in the saved log yet still FAILs `no_bypass` (as-executed
+text from the trajectory), and that a scrubbed command without a trajectory is
+a `no_bypass` WARN; `test_verify_evidence.py` checks the same for a Codex
+`command_execution`; `tests/test_trajectory.py` checks that the Claude extractor
+skips events whose `message` is not an object instead of raising.
 
 `test_setup.py`: manifest entries pinned to 40-char revisions and matching
 catalog sources; unknown keys and fields of another install mode rejected

@@ -138,6 +138,13 @@ The verifier handles these; they matter only if you are debugging it.
 - **Claude, structured output:** for FastMCP tools that declare an
   `outputSchema`, Claude Code shows `structuredContent` (`{"result": …}`) and
   not the text. The verifier unwraps it.
+- **Both, paths in commands:** the persisted stdout has absolute host paths
+  replaced by `<abs_path>` (e.g. `~/mcp/s4/.venv/bin/python` →
+  `~<abs_path>`), which would hide path-based bypass patterns. The verifier
+  scans each shell command as executed, from the trajectory (matched by call
+  id); a scrubbed command it cannot restore is a `no_bypass` WARN. Tool inputs
+  are scrubbed the same way and are not restored yet: a future task whose MCP
+  tools take absolute paths needs a plan for its input checks.
 - **Codex:** each call is an `mcp_tool_call` item that keeps its inputs and
   results, but Codex does not list servers or offered tools. Its own
   `list_mcp_resources*` calls are not counted as required tools.

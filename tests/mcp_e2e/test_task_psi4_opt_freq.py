@@ -111,7 +111,7 @@ def _codex(calls):
 
 def _run(tmp_path, stream, answer, codex=False, files=None):
     return TASK.verify(tmp_path, stream, reference=REFERENCE, answer=answer,
-                       harness="codex" if codex else "claude", persist=not codex, files=files)
+                       harness="codex" if codex else "claude", files=files)
 
 
 def test_cases_are_deterministic_varied_and_distorted():

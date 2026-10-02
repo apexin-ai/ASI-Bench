@@ -132,7 +132,7 @@ def test_verifier_tolerates_string_message_payloads(tmp_path):
         {"type": "user", "message": {"role": "user", "content": "string content"}},
         {"type": "assistant", "message": "x"},
     ))
-    row = _run(tmp_path, odd + "\n" + _stream(), persist=False)
+    row = _run(tmp_path, odd + "\n" + _stream())
     assert row["verdict"] == "PASS", row["checks"]
 
 

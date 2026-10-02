@@ -1,7 +1,12 @@
 """Evidence of what an agent did, from the persisted run artefacts.
 
 One parser per harness log format turns the raw stdout into :class:`Evidence`;
-the normalised trajectory is the adapter-neutral fallback. The parser is chosen
+the normalised trajectory is the adapter-neutral fallback.
+
+``asibench run`` saves the raw stdout sanitized: user events (Claude tool
+results) are redacted and absolute host paths become ``<abs_path>``. The
+trajectory is extracted from the unsanitized stdout, so :func:`load_evidence`
+fills in tool results and the as-executed text of shell commands from it. The parser is chosen
 from the result's ``agent_name`` (:data:`HARNESSES`); an unknown agent falls
 back to trying each format in turn. To support another harness, add a parser
 to :data:`PARSERS` and map its adapter class in :data:`HARNESSES`.
@@ -26,15 +31,33 @@ class ToolCall:
 
 
 @dataclass
+class Command:
+    """One shell command: as persisted (paths may be ``<abs_path>``) and, when the
+    trajectory has it, as executed."""
+    id: str | None
+    text: str
+    raw: str | None = None
+
+    @property
+    def scrubbed(self) -> bool:
+        return "<abs_path>" in self.text and self.raw is None
+
+
+@dataclass
 class Evidence:
     source: str
     mcp_servers: dict[str, str] | None = None  # name -> status; None = not observable
     tools_offered: list[str] | None = None
     calls: list[ToolCall] = field(default_factory=list)
-    bash_commands: list[str] = field(default_factory=list)
+    commands: list[Command] = field(default_factory=list)
     assistant_text: list[str] = field(default_factory=list)
     permission_mode: str | None = None
     final_result: dict | None = None
+
+    @property
+    def bash_commands(self) -> list[str]:
+        """Shell commands as persisted."""
+        return [c.text for c in self.commands]
 
 
 def _json_lines(path: Path):
@@ -105,7 +128,7 @@ def parse_claude_stream(path: Path) -> Evidence | None:
                     if call.id:
                         by_id[call.id] = call
                     if call.name == "Bash" and isinstance(call.input, dict):
-                        ev.bash_commands.append(str(call.input.get("command", "")))
+                        ev.commands.append(Command(call.id, str(call.input.get("command", ""))))
                 elif block.get("type") == "text":
                     ev.assistant_text.append(str(block.get("text", "")))
         elif etype == "user":
@@ -182,7 +205,7 @@ def parse_codex_stream(path: Path) -> Evidence | None:
             command = str(item.get("command", ""))
             call, created = call_for(item, "command_execution", {"command": command})
             if created:
-                ev.bash_commands.append(command)
+                ev.commands.append(Command(call.id, command))
             if done:
                 call.result_text = str(item.get("aggregated_output") or "")
                 call.is_error = item.get("exit_code") not in (None, 0)
@@ -246,12 +269,33 @@ def parse_trajectory(path: Path) -> Evidence:
                 by_id[call.id] = call
             command = (meta.get("key_args") or {}).get("command")
             if command:
-                ev.bash_commands.append(str(command))
+                ev.commands.append(Command(call.id, str(command), str(command)))
         elif step.get("step_type") == "tool_result":
             call = by_id.get(meta.get("tool_call_id"))
             if call is not None:
                 _apply_result(call, step)
     return ev
+
+
+def _step_id(meta: dict) -> str | None:
+    return meta.get("tool_call_id") or meta.get("item_id")
+
+
+def enrich_commands_from_trajectory(ev: Evidence, path: Path) -> int:
+    """Attach the as-executed text of shell commands (trajectory ``key_args.command``,
+    matched by call id) to the persisted, path-scrubbed ones; return how many matched."""
+    raw = {}
+    for step in _trajectory_steps(path):
+        meta = step.get("metadata") or {}
+        command = (meta.get("key_args") or {}).get("command")
+        if step.get("step_type") == "tool_call" and command and _step_id(meta):
+            raw[_step_id(meta)] = str(command)
+    matched = 0
+    for command in ev.commands:
+        if command.id in raw:
+            command.raw = raw[command.id]
+            matched += 1
+    return matched
 
 
 def enrich_results_from_trajectory(ev: Evidence, path: Path) -> int:
@@ -317,4 +361,5 @@ def load_evidence(result_path: Path, result: dict) -> Evidence | None:
         filled = enrich_results_from_trajectory(ev, traj)
         if filled:
             ev.source += f" + {filled} tool result(s) from {traj_file}"
+        enrich_commands_from_trajectory(ev, traj)
     return ev

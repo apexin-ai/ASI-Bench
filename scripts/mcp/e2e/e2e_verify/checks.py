@@ -239,7 +239,10 @@ def check_answer_from_tool(ctx: Context) -> dict:
 
 def check_no_bypass(ctx: Context) -> dict:
     spec, ev = ctx.spec, ctx.evidence
-    texts = [("bash", c) for c in ev.bash_commands]
+    # Scan commands as executed; a persisted command whose paths were scrubbed and that
+    # the trajectory cannot restore hides path-based patterns: a coverage gap (WARN).
+    texts = [("bash", c.raw if c.raw is not None else c.text) for c in ev.commands]
+    gaps = [c.text for c in ev.commands if c.scrubbed]
     if ctx.outputs_dir.is_dir():
         for path in sorted(ctx.outputs_dir.rglob("*")):
             if path.is_file() and path.suffix in {".py", ".sh", ".ipynb"}:
@@ -255,9 +258,13 @@ def check_no_bypass(ctx: Context) -> dict:
                  if call.name == tool and re.search(p, payload)]
     if hard:
         return {"status": "FAIL", "detail": f"direct backend use: {hard[:5]}"}
-    if soft:
-        return {"status": "WARN", "detail": f"review: {soft[:5]}"}
-    return {"status": "PASS", "detail": f"{len(ev.bash_commands)} shell command(s) scanned"}
+    if soft or gaps:
+        notes = [f"review: {soft[:5]}"] if soft else []
+        if gaps:
+            notes.append(f"{len(gaps)} command(s) have scrubbed paths and no trajectory text, so path-based "
+                         f"patterns are not checkable: {gaps[:3]}")
+        return {"status": "WARN", "detail": "; ".join(notes)}
+    return {"status": "PASS", "detail": f"{len(ev.commands)} shell command(s) scanned"}
 
 
 CHECKS: tuple[tuple[str, Callable[[Context], dict | None]], ...] = (
@@ -333,6 +340,7 @@ def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: 
         if outcome is not None:
             row["checks"][name] = outcome
     row["bash_commands"] = ev.bash_commands[:50]
+    row["raw_bash_commands"] = [c.raw if c.raw is not None else c.text for c in ev.commands][:50]
 
     failed = [name for name in CHECK_ORDER if row["checks"].get(name, {}).get("status") == "FAIL"]
     row["verdict"] = "FAIL" if failed else "PASS"

@@ -19,7 +19,10 @@ per result:
                     returned and matches the reference
   no_bypass         no Bash command or produced source file installs/imports
                     the backend directly, and no listed non-MCP tool (e.g.
-                    WebFetch) reached it (suspicious commands/tools are WARN)
+                    WebFetch) reached it (suspicious commands/tools are WARN).
+                    Commands are scanned as executed (trajectory text; the
+                    saved log has absolute paths scrubbed to <abs_path>); a
+                    scrubbed command without trajectory text is a WARN
 
 Per-task expectations come from ``e2e_check.json`` in the task directory
 (examples in examples/mcp-e2e-tasks/mcp_e2e/*/). It is validated strictly when

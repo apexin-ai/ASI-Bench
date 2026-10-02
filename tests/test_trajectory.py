@@ -151,6 +151,22 @@ class TestClaudeExtractor:
         error_steps = [s for s in traj.steps if s.step_type == "error"]
         assert len(error_steps) == 1
 
+    def test_claude_extractor_skips_events_whose_message_is_not_an_object(self):
+        # A string "message" used to raise AttributeError; the orchestrator then silently
+        # re-parsed the Claude log with the Codex extractor and lost the whole trajectory.
+        lines = "\n".join(json.dumps(e) for e in (
+            {"type": "user", "message": "plain string payload"},
+            {"type": "assistant", "message": "x"},
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "a.txt"}]}},
+        ))
+        traj = claude_extract(lines, "inst")
+        assert [s.step_type for s in traj.steps if s.step_type in ("tool_call", "tool_result")] == \
+            ["tool_call", "tool_result"]
+        assert traj.steps[[s.step_type for s in traj.steps].index("tool_result")].content == "a.txt"
+
     def test_claude_extractor_maps_event_types(self):
         events = [
             {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}},

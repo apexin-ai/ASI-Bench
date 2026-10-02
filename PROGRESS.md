@@ -1454,4 +1454,44 @@
   real code path — a hand re-implementation of one step hid a verifier blind
   spot. Carrying golden values over with renamed keys (instead of
   regenerating) turns a test move into a proof that no outcome changed.
+- Commit: `9fe5843`.
+
+## 2026-10-02: MCP E2E fix — path-scrubbed shell commands hid bypasses; Claude extractor crash
+
+- Problem 1: `asibench run` saves the raw stdout through
+  `_sanitize_raw_artifact_text`, which redacts user events and replaces
+  absolute host paths with `<abs_path>` (`~/mcp/s4/.venv/bin/python` →
+  `~<abs_path>`, `ctypes.CDLL('/…/libS4.so')` → `ctypes.CDLL('<abs_path>')`).
+  The verifier read shell commands from that saved log, so path-based
+  `bypass_patterns` (server venv Python, `libS4`, `ls` of a server checkout)
+  could never match in a real Claude or Codex run. Tests did not notice: six
+  `_persist_like_run` copies modelled persistence as redaction only.
+  Realistic persistence turned 7 bypass expectations red (4 missed FAILs).
+- Problem 2: `claude_extractor` raised `AttributeError` on an event whose
+  `message` is a string; `_compute_trajectory_data` then silently re-parsed
+  the Claude log with the Codex extractor and the trajectory (and every tool
+  result the verifier recovers from it) was lost. The verifier test for such
+  payloads used `persist=False` and so never built a trajectory.
+- Resolution: `e2e_verify/evidence.py` keeps each shell command as a
+  `Command(id, text, raw)`; `enrich_commands_from_trajectory` attaches the
+  trajectory's `key_args.command` by call id (`tool_call_id` / Codex
+  `item_id`); `no_bypass` scans the raw text and reports a scrubbed command it
+  cannot restore as a WARN coverage gap; rows gain `raw_bash_commands`.
+  `claude_extractor` skips non-object messages / non-list content
+  (`_message_blocks`). `tests/mcp_e2e/support.persist_like_run` now calls the
+  real `_sanitize_raw_artifact_text` for both harnesses, Codex scenarios are
+  persisted, and the string-payload test builds a trajectory.
+- Verification: red first (7 bypass cases + string payload + 4 new tests),
+  then green; golden diff is 3 added entries only — all 95 existing snapshots
+  unchanged under realistic persistence. Framework tests touching the
+  extractor/orchestrator pass apart from the known VM artefact
+  (`test_save_result_sanitizes_host_paths…`, TMPDIR under HOME).
+- Open: MCP tool inputs are scrubbed the same way and the Claude trajectory
+  keeps only `path`/`file_path`/`command`/`pattern`/`url` arguments, so a
+  future task whose tools take absolute paths (CAD) needs its own plan for
+  `inputs_from_reference` / `tool_chain`.
+- Lesson: test fixtures that stand in for a production code path must call
+  it; a partial re-implementation encoded the same blind spot as the code
+  under test. A test that skips a pipeline step to dodge a crash is a bug
+  report waiting to be filed.
 - Commit: (pending).

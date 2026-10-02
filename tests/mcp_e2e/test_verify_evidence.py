@@ -249,3 +249,12 @@ def test_tool_of_a_lookalike_server_is_not_the_required_tool(tmp_path):
     assert row["tool_call_counts"] == {"mcp__pyscf__list_mcp_resources": 1,
                                        "mcp__pyscf_extra__pyscf_rhf_energy": 1}
     assert _status(row)["tool_called"] == "FAIL" and row["verdict"] == "FAIL"
+
+
+def test_codex_commands_keep_their_unscrubbed_text_from_the_trajectory(tmp_path):
+    row = _rhf(tmp_path, _stream(_rhf_call(), _shell("item_4", "ls /home/e2e/mcp/pyscf/.venv/bin")))
+    assert row["bash_commands"] == ["ls <abs_path>"]                          # as persisted
+    assert row["raw_bash_commands"] == ["ls /home/e2e/mcp/pyscf/.venv/bin"]   # from the trajectory
+    # the suspicious pattern \bpyscf\b only matches the as-executed text
+    assert _status(row)["no_bypass"] == "WARN" and "pyscf" in row["checks"]["no_bypass"]["detail"]
+

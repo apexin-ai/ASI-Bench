@@ -224,6 +224,12 @@
   "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_sanity_call_is_judged_when_made": [
     {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "PASS", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__check_engine_sanity", "mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
   ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_scrubbed_command_without_trajectory_is_a_coverage_gap": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"sanity": "SKIP", "spectrum": "FAIL"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_scrubbed_paths_in_the_log_are_checked_against_the_trajectory": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
   "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_shell_access_to_s4[echo 'values from S4 via MCP'-WARN]": [
     {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
   ],
@@ -259,6 +265,9 @@
   ],
   "tests/mcp_e2e/test_verify_evidence.py::test_arguments_serialised_as_json_string_are_parsed": [
     {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__pyscf_rhf_energy"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_codex_commands_keep_their_unscrubbed_text_from_the_trajectory": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__pyscf_rhf_energy", "command_execution"], "verdict": "PASS"}
   ],
   "tests/mcp_e2e/test_verify_evidence.py::test_direct_backend_use_in_a_shell_command_is_flagged": [
     {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__pyscf_rhf_energy", "command_execution"], "verdict": "FAIL"}

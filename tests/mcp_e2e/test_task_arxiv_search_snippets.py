@@ -87,7 +87,7 @@ def _codex(extra_items=()):
 
 def _run(tmp_path, stream, answer=None, codex=False, files=None):
     return TASK.verify(tmp_path, stream, reference=REFERENCE, answer=answer or _answer(),
-                       harness="codex" if codex else "claude", persist=not codex, files=files)
+                       harness="codex" if codex else "claude", files=files)
 
 
 def test_cases_are_deterministic_and_cover_all_curated_cases():
