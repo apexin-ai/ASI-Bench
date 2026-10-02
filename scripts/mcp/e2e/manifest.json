@@ -10,7 +10,7 @@
       "install": "uv-sync-frozen",
       "launch": {
         "command": ".venv/bin/python",
-        "args": ["main.py"]
+        "args": ["{checkout}/main.py"]
       },
       "smoke": "smoke_pyscf.py",
       "expected_tools": [
@@ -21,6 +21,32 @@
         "run_bond_stretch_calculation_mcp",
         "scan_pes_rhf",
         "visualize_molecule_3d_mcp"
+      ]
+    },
+    {
+      "id": "arxiv",
+      "catalog_id": "arxiv",
+      "repository": "https://github.com/mims-harvard/ToolUniverse.git",
+      "revision": "9959ebee7638773314362f1746980a15f5b17e5b",
+      "python": "3.12",
+      "install": "uv-sync-frozen",
+      "uv_sync_args": ["--no-dev"],
+      "launch": {
+        "command": ".venv/bin/tooluniverse-smcp-stdio",
+        "args": ["--no-search", "--include-tools", "ArXiv_search_papers", "ArXiv_get_pdf_snippets"],
+        "env": {
+          "DO_NOT_TRACK": "1",
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "FASTMCP_SHOW_SERVER_BANNER": "false",
+          "HF_HUB_OFFLINE": "1",
+          "TOOLUNIVERSE_CACHE_ENABLED": "false",
+          "TOOLUNIVERSE_CACHE_PERSIST": "false"
+        }
+      },
+      "smoke": "smoke_arxiv.py",
+      "expected_tools": [
+        "ArXiv_get_pdf_snippets",
+        "ArXiv_search_papers"
       ]
     }
   ]

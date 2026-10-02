@@ -18,11 +18,16 @@ per result:
   answer_from_tool  each configured output-file value equals a value a tool
                     returned and matches the reference
   no_bypass         no Bash command or produced source file installs/imports
-                    the backend directly (suspicious commands are WARN)
+                    the backend directly, and no listed non-MCP tool (e.g.
+                    WebFetch) reached it (suspicious commands/tools are WARN)
 
 Per-task expectations come from ``e2e_check.json`` in the task directory.
 Schema 1 (one tool, one scalar) is normalised to schema 2 (``calls`` and
-``answers`` lists); see examples/mcp-e2e-tasks/README.md. Stdlib only.
+``answers`` lists); see examples/mcp-e2e-tasks/README.md. Results are numeric
+by default; a call result, chain or answer with ``extract`` uses one of the
+named EXTRACTORS (e.g. arXiv IDs from a search result list, snippet counts per
+term) and compares canonical values with ``match`` = equal / subset / member.
+Stdlib only.
 
 Usage::
 
@@ -206,6 +211,14 @@ def parse_codex_stream(path: Path) -> Evidence | None:
                 call["result_text"] = str(item.get("aggregated_output") or "")
                 call["is_error"] = item.get("exit_code") not in (None, 0)
                 call["content_types"], call["media_types"] = ["text"], []
+        elif kind in ("web_search", "web_fetch"):
+            details = {k: v for k, v in item.items() if k not in ("id", "type", "status")}
+            call, _created = call_for(item, kind, details)
+            if done:
+                call["input"] = details
+                call["is_error"] = item.get("status") == "failed"
+                call["result_text"] = ""
+                call["content_types"], call["media_types"] = [], []
         elif kind == "mcp_tool_call":
             name = f"mcp__{item.get('server', '')}__{item.get('tool', '')}"
             call, _created = call_for(item, name, _codex_arguments(item.get("arguments")))
@@ -355,6 +368,88 @@ def _json_result(call: dict) -> dict | None:
 
 
 # --------------------------------------------------------------------------
+# Named extractors for non-numeric results: (extract from parsed tool JSON,
+# canonicalise a prediction/reference/input value). Both return None when the
+# value has the wrong shape.
+# --------------------------------------------------------------------------
+
+def _arxiv_id(value) -> str | None:
+    """'1103.0291' from '1103.0291v1', 'arXiv:1103.0291' or an abs/pdf URL (old-style IDs kept intact)."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = re.sub(r"^https?://(export\.)?arxiv\.org/(abs|pdf)/", "", value.strip())
+    text = re.sub(r"\.pdf$", "", text).removeprefix("arXiv:")
+    return re.sub(r"v\d+$", "", text) or None
+
+
+def _canon_ids(value):
+    if isinstance(value, list):
+        ids = [_arxiv_id(v) for v in value]
+        return ids if ids and all(ids) else None
+    return _arxiv_id(value)
+
+
+def _extract_arxiv_ids(data):
+    if isinstance(data, dict) and isinstance(data.get("data"), list):  # SMCP truncation wrapper
+        data = data["data"]
+    if not isinstance(data, list) or not all(isinstance(p, dict) for p in data):
+        return None
+    return [p.get("url") for p in data]
+
+
+def _canon_counts(value):
+    if not isinstance(value, dict) or not value:
+        return None
+    out = {}
+    for key, count in value.items():
+        number = _float(count)
+        if number is None or number != int(number) or number < 0:
+            return None
+        out[str(key).strip().lower()] = int(number)
+    return out
+
+
+def _extract_term_counts(data):
+    if not isinstance(data, dict) or data.get("status") == "error" or not isinstance(data.get("snippets"), list):
+        return None
+    counts: dict[str, int] = {}
+    for snippet in data["snippets"]:
+        if isinstance(snippet, dict) and isinstance(snippet.get("term"), str):
+            counts[snippet["term"]] = counts.get(snippet["term"], 0) + 1
+    return counts
+
+
+EXTRACTORS = {
+    "arxiv_ids": (_extract_arxiv_ids, _canon_ids),
+    "term_counts": (_extract_term_counts, _canon_counts),
+}
+
+
+def _extracted(call: dict, name: str):
+    """Canonical extracted value of a call's JSON result, or None."""
+    extract, canon = EXTRACTORS[name]
+    try:
+        data = json.loads(call.get("result_text") or "")
+    except (json.JSONDecodeError, TypeError):
+        return None
+    raw = extract(data)
+    return None if raw is None else canon(raw)
+
+
+def _matches(value, ref, mode: str) -> bool:
+    """equal: identical canonical values; subset: every key of a dict value has the
+    reference count; member: the reference scalar is in the value list."""
+    if value is None or ref is None:
+        return False
+    if mode == "member":
+        return isinstance(value, list) and ref in value
+    if mode == "subset":
+        return isinstance(value, dict) and isinstance(ref, dict) and bool(value) and \
+            all(k in ref and ref[k] == v for k, v in value.items())
+    return value == ref
+
+
+# --------------------------------------------------------------------------
 # Spec
 # --------------------------------------------------------------------------
 
@@ -406,6 +501,12 @@ def _judge_call(call: dict, call_spec: dict, reference: dict) -> dict:
             images = call["media_types"] or []
             report["media_types"] = images
             report["result_ok"] = bool(images) and (wanted is None or wanted in images)
+    elif result_spec.get("extract"):
+        name = result_spec["extract"]
+        value = _extracted(call, name)
+        ref_value = EXTRACTORS[name][1](reference.get(result_spec.get("reference_key")))
+        report["extracted"] = value
+        report["result_ok"] = _matches(value, ref_value, result_spec.get("match", "equal"))
     else:
         value = _result_value(call, result_spec.get("key") if fmt == "json" else None)
         ref_value = _values(reference.get(result_spec.get("reference_key")))
@@ -453,6 +554,11 @@ def _check_chain(spec: dict, by_spec: dict[str, list[dict]], checks: dict) -> No
     statuses, details = [], []
     for cs in chained:
         link = cs["inputs_from_call"]
+        if link.get("extract"):
+            status, detail = _chain_by_extract(cs["name"], link, by_spec)
+            statuses.append(status)
+            details.append(detail)
+            continue
         sources = [data for c in by_spec.get(link["call"], []) if not c["is_error"]
                    for data in [_json_result(c)] if data is not None]
         consumers = by_spec.get(cs["name"], [])
@@ -473,6 +579,28 @@ def _check_chain(spec: dict, by_spec: dict[str, list[dict]], checks: dict) -> No
     checks["tool_chain"] = {"status": _worst(statuses), "detail": "; ".join(details)}
 
 
+def _chain_by_extract(name: str, link: dict, by_spec: dict[str, list[dict]]) -> tuple[str, str]:
+    """A consumer argument (any of link['args']) is one of the values extracted from an earlier result."""
+    canon = EXTRACTORS[link["extract"]][1]
+    pool = []
+    for call in by_spec.get(link["call"], []):
+        if not call["is_error"]:
+            value = _extracted(call, link["extract"])
+            pool.extend(value if isinstance(value, list) else [value] if value is not None else [])
+    consumers = by_spec.get(name, [])
+    label = f"{name}←{link['call']}"
+    if not consumers or not pool:
+        return "FAIL", f"{label}: no {'consumer' if not consumers else 'source'} call"
+    if all(not isinstance(c["input"], dict) for c in consumers):
+        return "WARN", f"{label}: tool inputs not observable in this evidence"
+    used = [canon(c["input"].get(arg)) for c in consumers if isinstance(c["input"], dict)
+            for arg in link["args"] if c["input"].get(arg) is not None]
+    linked = [u for u in used if u is not None and u in pool]
+    if linked:
+        return "PASS", f"{label}: {link['args']} = {linked[0]!r}, returned by {link['call']}"
+    return "FAIL", f"{label}: {link['args']} values {used} are not among the {len(pool)} {link['call']} results"
+
+
 def _check_answers(spec: dict, by_spec: dict[str, list[dict]], reference: dict, pred_path: Path,
                    out: dict, checks: dict) -> None:
     try:
@@ -485,6 +613,13 @@ def _check_answers(spec: dict, by_spec: dict[str, list[dict]], reference: dict, 
         return
     statuses, details = [], []
     for k, answer in enumerate(spec["answers"]):
+        if answer.get("extract"):
+            status, detail, pred, ref = _answer_by_extract(answer, prediction, reference, by_spec)
+            if k == 0:
+                out["prediction_value"], out["reference_value"] = pred, ref
+            statuses.append(status)
+            details.append(detail)
+            continue
         pred = _values(prediction.get(answer["prediction_key"]))
         ref = _values(reference.get(answer["reference_key"]))
         returned = [_result_value(c, answer.get("result_key")) for c in by_spec.get(answer["from_call"], [])
@@ -498,6 +633,30 @@ def _check_answers(spec: dict, by_spec: dict[str, list[dict]], reference: dict, 
         details.append(f"{answer['prediction_key']}: " + ("missing/not numeric" if pred is None else
                        f"|d|={err:.2e} vs reference, equals a tool-returned value: {from_tool}"))
     checks["answer_from_tool"] = {"status": _worst(statuses), "detail": "; ".join(details)}
+
+
+def _answer_by_extract(answer: dict, prediction: dict, reference: dict, by_spec: dict[str, list[dict]]):
+    name = answer["extract"]
+    canon = EXTRACTORS[name][1]
+    pred = canon(prediction.get(answer["prediction_key"]))
+    ref = canon(reference.get(answer["reference_key"]))
+    returned = [v for c in by_spec.get(answer["from_call"], []) if not c["is_error"]
+                for v in [_extracted(c, name)] if v is not None]
+    if answer.get("merge_calls") and returned:
+        merged: dict = {}
+        for value in returned:  # e.g. one snippet call per term
+            if isinstance(value, dict):
+                merged.update(value)
+        returned = [merged]
+    mode = answer.get("match", "equal")
+    if mode == "member":
+        from_tool = pred is not None and any(_matches(v, pred, "member") for v in returned)
+    else:
+        from_tool = pred is not None and any(v == pred for v in returned)
+    correct = pred is not None and pred == ref
+    detail = f"{answer['prediction_key']}: " + ("missing or malformed" if pred is None else
+                                                f"matches reference: {correct}, equals a tool-returned value: {from_tool}")
+    return ("PASS" if from_tool and correct else "FAIL"), detail, pred, ref
 
 
 def _load_evidence(result_path: Path, agent: dict) -> Evidence | None:
@@ -576,6 +735,15 @@ def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: 
         checks["mcp_connected"] = {"status": "PASS" if status == "connected" and not not_offered else "FAIL",
                                    "detail": f"server status={status!r}, not offered={not_offered}",
                                    "mcp_servers": ev.mcp_servers}
+        if spec.get("server_tools") and ev.tools_offered is not None:
+            prefix = f"mcp__{server}__"
+            offered = {t for t in ev.tools_offered if t.startswith(prefix)}
+            extra = sorted(offered - {prefix + t for t in spec["server_tools"]})
+            if extra:
+                checks["mcp_connected"]["detail"] += (f"; server offered {len(offered)} tools, expected "
+                                                      f"{len(spec['server_tools'])} (e.g. {extra[:3]})")
+                if checks["mcp_connected"]["status"] == "PASS":
+                    checks["mcp_connected"]["status"] = "WARN"
 
     # 2-4. tools called, results correct, chained inputs
     by_spec = _check_calls(ev, spec, reference, checks)
@@ -594,6 +762,12 @@ def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: 
                 texts.append((f"file:{path.relative_to(outputs_dir)}", path.read_text(encoding="utf-8", errors="replace")))
     hard = [(where, p) for where, text in texts for p in spec.get("bypass_patterns", []) if re.search(p, text)]
     soft = [(where, p) for where, text in texts for p in spec.get("suspicious_patterns", []) if re.search(p, text)]
+    for call in ev.calls:  # non-MCP tools such as WebFetch / Codex web_search
+        payload = json.dumps(call["input"], ensure_ascii=False)
+        hard += [(f"tool:{call['name']}", p) for tool, p in spec.get("bypass_tools", {}).items()
+                 if call["name"] == tool and re.search(p, payload)]
+        soft += [(f"tool:{call['name']}", p) for tool, p in spec.get("suspicious_tools", {}).items()
+                 if call["name"] == tool and re.search(p, payload)]
     if hard:
         checks["no_bypass"] = {"status": "FAIL", "detail": f"direct backend use: {hard[:5]}"}
     elif soft:

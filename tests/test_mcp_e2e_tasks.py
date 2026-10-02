@@ -31,7 +31,7 @@ verify = _load(ROOT / "scripts/mcp/e2e/verify_run.py", "mcp_e2e_verify_run")
 def test_task_is_test_status_and_only_discovered_from_its_own_tasks_dir():
     loader = TaskLoader(E2E_TASKS)
     assert sorted(t["id"] for t in loader.discover_tasks(include_test=True)) == [
-        "mcp_e2e.pyscf_bond_stretch", TASK_ID]
+        "mcp_e2e.arxiv_search_snippets", "mcp_e2e.pyscf_bond_stretch", TASK_ID]
     assert loader.discover_tasks() == []
     meta = loader.load_task_by_id(TASK_ID)
     assert meta["_runtime_packages"] == ["pyscf==2.9.0"]

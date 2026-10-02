@@ -1,0 +1,67 @@
+{
+  "schema_version": 2,
+  "server": "arxiv",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": ["ArXiv_get_pdf_snippets", "ArXiv_search_papers"],
+  "calls": [
+    {
+      "name": "search",
+      "tool": "ArXiv_search_papers",
+      "inputs_from_reference": {
+        "query": "query",
+        "date_from": "date_from",
+        "date_to": "date_to",
+        "sort_by": "sort_by",
+        "sort_order": "sort_order",
+        "limit": "limit"
+      },
+      "result": {"format": "json", "extract": "arxiv_ids", "reference_key": "arxiv_ids", "match": "equal"}
+    },
+    {
+      "name": "snippets",
+      "tool": "ArXiv_get_pdf_snippets",
+      "inputs_from_reference": {
+        "terms": "terms",
+        "window_chars": "window_chars",
+        "max_snippets_per_term": "max_snippets_per_term"
+      },
+      "inputs_from_call": {"call": "search", "extract": "arxiv_ids", "args": ["arxiv_id", "pdf_url"],
+                           "match": "member"},
+      "result": {"format": "json", "extract": "term_counts", "reference_key": "snippet_counts", "match": "subset"}
+    }
+  ],
+  "answers": [
+    {"prediction_key": "arxiv_ids", "from_call": "search", "extract": "arxiv_ids",
+     "reference_key": "arxiv_ids", "match": "equal"},
+    {"prediction_key": "selected_id", "from_call": "search", "extract": "arxiv_ids",
+     "reference_key": "selected_id", "match": "member"},
+    {"prediction_key": "snippet_counts", "from_call": "snippets", "extract": "term_counts",
+     "reference_key": "snippet_counts", "match": "equal", "merge_calls": true}
+  ],
+  "bypass_tools": {
+    "WebFetch": "arxiv\\.org",
+    "web_fetch": "arxiv\\.org"
+  },
+  "suspicious_tools": {
+    "WebFetch": "",
+    "WebSearch": "",
+    "web_search": "",
+    "web_fetch": ""
+  },
+  "bypass_patterns": [
+    "\\b(curl|wget|aria2c|lynx|w3m|httpie|http|xh)\\b[^\\n]*arxiv\\.org",
+    "\\b(requests|httpx|urllib|urlopen|aiohttp|http\\.client|feedparser)\\b[\\s\\S]{0,600}?arxiv\\.org",
+    "(import|from)\\s+(arxiv|feedparser|markitdown|pdfminer|pdfplumber|fitz|pymupdf|pypdf|PyPDF2|tooluniverse)\\b",
+    "\\b(pip|pip3|uv|uvx|conda|mamba|micromamba)\\b[^\\n]*\\b(install|add|--with)\\b[^\\n]*\\b(arxiv|feedparser|markitdown|pdfminer|pdfplumber|pymupdf|pypdf|tooluniverse)\\b",
+    "\\bpdftotext\\b"
+  ],
+  "suspicious_patterns": [
+    "arxiv\\.org",
+    "\\b(curl|wget)\\b",
+    "\\b(requests|httpx|urllib|aiohttp)\\b",
+    "\\btooluniverse\\b",
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ]
+}

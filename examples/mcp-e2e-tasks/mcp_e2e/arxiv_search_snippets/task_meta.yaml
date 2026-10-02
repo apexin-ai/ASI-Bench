@@ -1,0 +1,53 @@
+id: mcp_e2e.arxiv_search_snippets
+name: "MCP E2E: arXiv search and PDF snippets through the ToolUniverse arxiv MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. It exercises a two-tool chain (search → snippets of a paper
+# picked from the search results) on live arXiv data; see
+# examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: research_data
+subdomain: "literature_search_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/mims-harvard/ToolUniverse"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 1-5
+  requires_gpu: false
+  # Generation and the agent run both query export.arxiv.org / arxiv.org.
+  requires_network: true
+
+tags: [mcp_e2e, arxiv, literature_search, pdf_snippets, tool_chain]
+
+# Only generate_gt.py needs these: MarkItDown and its PDF backends, pinned to the
+# versions in the MCP server's uv.lock (ToolUniverse 9959ebee), so that the
+# reference text is converted exactly like the server converts it. Generate
+# instances with `asibench generate --sandbox task` (network required); run the
+# agent with --sandbox none and --mcp-config.
+runtime:
+  python: ">=3.11"
+  packages: ["markitdown[pdf]==0.1.7", "pdfminer.six==20260107", "pdfplumber==0.11.10"]
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: search.json
+      type: data
+      description: "arXiv query, submission-date window, sort order and result limit; the rule for picking one paper; the terms, window and per-term cap for the PDF snippets."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with arxiv_ids (search results in order, without version), selected_id and snippet_counts (term -> number of snippets)."

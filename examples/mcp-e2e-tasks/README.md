@@ -18,7 +18,7 @@ the scorer cannot see:
 | `tool_correct` | per required tool, a successful call returned the expected result (value, JSON field, or an image of the expected media type); WARN if the inputs were not the reference inputs verbatim, or if the result type is not observable in older artefacts |
 | `tool_chain` | only when configured: a call's inputs equal the result of an earlier call (e.g. the plot was drawn from the scan output, not retyped data) |
 | `answer_from_tool` | each configured output-file value equals a value a tool returned and matches the reference |
-| `no_bypass` | no Bash command or produced source file installs/imports the backend directly (FAIL); broader matches are WARN for review |
+| `no_bypass` | no Bash command or produced source file installs/imports the backend directly, and no listed non-MCP tool (e.g. `WebFetch` of arxiv.org) reached it (FAIL); broader matches and other web tool calls are WARN for review |
 
 `asibench score` answers "is the number right"; `verify_run.py` answers "did
 the number come from the MCP tool". An E2E pass needs both.
@@ -51,12 +51,26 @@ use is taken from `command_execution` items.
 reference key and tolerance). Schema 1 (single `tool`, scalar answer) is still
 accepted and normalised to schema 2.
 
+Non-numeric results use a named extractor instead of `key`/`abs_tol`:
+`"extract": "arxiv_ids"` (IDs from a search result list, without version,
+prefix or URL) or `"term_counts"` (snippets per term), compared on canonical
+values with `"match"`: `equal`, `subset` (every term of this call has the
+reference count, for per-term calls) or `member` (the reference value is one
+of the extracted values). `inputs_from_call` with `extract`, `args` and
+`"match": "member"` passes when any listed argument of the consumer call is
+one of the values extracted from the source call; an answer with
+`"merge_calls": true` merges the extracted values of all calls first.
+Optional `server_tools` lists the tools the server must offer (WARN if it
+offers more), `bypass_tools` / `suspicious_tools` map non-MCP tool names to a
+regex over the call input (FAIL / WARN).
+
 ## Tasks
 
 | Task | MCP server | Tool | Reference |
 |---|---|---|---|
 | `mcp_e2e.pyscf_rhf_energy` | `pyscf` (`scripts/mcp/e2e/manifest.json`) | `pyscf_rhf_energy` | PySCF RHF computed in `generate_gt.py` |
 | `mcp_e2e.pyscf_bond_stretch` | `pyscf` | `run_bond_stretch_calculation_mcp` → `plot_energy_scan_image_mcp` | seeded RDKit + UFF geometry, rigid stretch, PySCF RHF/STO-3G in `generate_gt.py` |
+| `mcp_e2e.arxiv_search_snippets` | `arxiv` | `ArXiv_search_papers` → `ArXiv_get_pdf_snippets` | raw arXiv API query and the PDF converted with MarkItDown (server lockfile versions) in `generate_gt.py` |
 
 `mcp_e2e.pyscf_rhf_energy`: a seed picks one of five small closed-shell
 molecules and STO-3G or 6-31G, and perturbs every coordinate by up to ±0.02 Å so
@@ -79,12 +93,49 @@ upstream code for 41 seeds). The tool ignores its `basis` argument, so the task
 is fixed to STO-3G. This is the only L2 task for the remaining pyscf tools; the
 others are covered by the L1 smoke only (`scripts/mcp/e2e/README.md`).
 
+`mcp_e2e.arxiv_search_snippets`: a seed picks one of five curated searches
+(fielded query, closed 2010–2013 submission-date window, 2–6 results, sorted
+by submission date). The agent must search, pick the paper with the most
+authors (ties: first in result order), call the snippet tool for two terms on
+that paper with a per-term cap of 10, and write `result.json` with all result
+IDs in order, the picked ID and the number of snippets per term (each term
+occurs 2–6 times). Scoring: 40 for the ID list, 20 for the pick, 40 split over
+the term counts. Counts rather than snippet text are scored because the
+converted text of two-column PDFs merges words. Generation and the agent run
+both need network access to arXiv; the reference is fetched at generation
+time, so generate shortly before running (the windows are closed, but a paper
+can still get a new PDF version). `verify_run.py` also checks that the snippet
+call used a paper the search returned (`arxiv_id` or `pdf_url`), and flags
+`WebFetch` of arxiv.org, shell HTTP access to arXiv and arXiv/PDF libraries as
+bypass; any web search or fetch call is a WARN. With `--mcp-config` the
+harnesses run in search mode, so these web tools are available to the agent.
+
 Prompts must stay agent-neutral: name the MCP server and tool
 (`pyscf_rhf_energy` of the `pyscf` server), never a harness-specific name such
 as Claude Code's `mcp__pyscf__pyscf_rhf_energy` (see failure mode below; it is
 also wrong for Codex).
 
 ## Results
+
+### `mcp_e2e.arxiv_search_snippets` (Claude Code and Codex CLI)
+
+2026-10-02, AWS Linux amd64, seed 31415 (gravitational waves: 5 results,
+picked 1103.0576 with 19 authors, counts millisecond 5 / arecibo 3), one run
+per level. Claude Code with `claude-opus-5-5`; Codex CLI with `gpt-5.6-sol`
+through the custom gateway (`codex_home`), effort `medium`:
+
+| Harness | Level | Local score | Verified PASS | Notes |
+|---|---|---|---|---|
+| Claude Code | B1–B4 | 4 × 100 | 4/4 | both tools found without being named at B3/B4 |
+| Codex CLI | B1–B4 | 4 × 100 | 4/4 | both tools found without being named at B3/B4 |
+
+All eight runs passed every verifier check with no WARN: the search returned
+the reference IDs, the snippet call used the picked paper from the search
+result (`tool_chain`) and returned the reference counts, and the answers equal
+the tool-returned values. Although `--mcp-config` runs in search mode, neither
+harness called a web search/fetch tool or reached arXiv from the shell, and
+Codex's default MCP timeouts were enough for the PDF download and conversion.
+One run per level shows the path works, not a pass rate.
 
 ### Codex CLI (both tasks)
 
@@ -211,11 +262,30 @@ no filesystem isolation, so use a dedicated unprivileged user. The agent can
 still find PySCF elsewhere on the host (the MCP venv, the generation task venv)
 — that is exactly what `no_bypass` detects.
 
+arxiv task (needs `python3 scripts/mcp/e2e/setup.py arxiv` and network access
+to arXiv for both generation and the run):
+
+```sh
+uv run asibench generate --task mcp_e2e.arxiv_search_snippets --params '{"seed": 31415}' \
+  --sandbox task --tasks-dir examples/mcp-e2e-tasks --output-dir ~/e2e/instances
+
+uv run asibench run --agent claude_code_cli \
+  --agent-config '{"model": "claude-opus-4-6", "permission_mode": "bypassPermissions"}' \
+  --mcp-config ~/mcp/arxiv.mcp.json \
+  --tasks mcp_e2e.arxiv_search_snippets --include-test --tasks-dir examples/mcp-e2e-tasks \
+  --instances-dir ~/e2e/instances --prompt-levels b1,b2,b3,b4 \
+  --sandbox none --timeout 900 --output-dir ~/e2e/out-arxiv-claude
+```
+
+Score and verify as in steps 3–4; for Codex use `--agent codex_cli` with the
+Codex `--agent-config` above.
+
 ## Adding a task
 
 Copy the pyscf task layout: `task_meta.yaml` (`status: test`), `task_eval.yaml`,
 `generate_gt.py` computing an independent reference, `custom_scorer.py`,
 `prompt_b1..b4.md`, and `e2e_check.json` (schema 2: `calls` and `answers`,
 see `pyscf_bond_stretch`; schema 1 for a single tool with a scalar answer, see
-`pyscf_rhf_energy`) plus bypass patterns. Add the server to
+`pyscf_rhf_energy`; named extractors and web-tool bypass checks, see
+`arxiv_search_snippets`) plus bypass patterns. Add the server to
 `scripts/mcp/e2e/manifest.json` with a smoke test first.

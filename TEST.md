@@ -592,6 +592,14 @@ parsing, rotation- and permutation-invariant distance comparison, PNG header
 checks, per-tool stdout attribution, the PASS/WARN/FAIL split for invalid input
 (isError vs in-band error vs accepted), the plot and visualize checks against a
 stub client, and that every manifest tool is called by the smoke.
+It also checks the manifest's launch `env`, `uv_sync_args` and `{checkout}`
+placeholder validation (the arxiv config keeps its CLI flags literal and turns
+the ToolUniverse result cache off), and the network-free parts of
+`smoke_arxiv.py`: arXiv ID/URL splitting (incl. old-style IDs), Atom parsing
+and whitespace normalisation, record comparison, the snippet window/limit/cap
+reference, in-band error classification, the search, OR-precedence and
+snippet checks against a stub client with a stubbed reference, and that the
+server environment is minimal (no operator secrets, proxies passed through).
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
@@ -600,6 +608,12 @@ then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke_pyscf.py --config
 PySCF, RDKit and geomeTRIC run in the smoke process; expected outcome on the
 pinned revision is `PASS` with 0 FAIL and 7–8 WARN (upstream defects listed in
 `scripts/mcp/e2e/README.md`; the benzene symmetry probe is intermittent).
+For arxiv: `python3 scripts/mcp/e2e/setup.py arxiv`, then
+`~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke_arxiv.py --config
+~/mcp/arxiv.mcp.json` (needs access to export.arxiv.org and arxiv.org, ~90 s).
+Expected outcome on the pinned revision: `PASS` with 0 FAIL and 8 WARN (OR +
+date precedence, three in-band errors plus a missing-paper one, `truncated`
+flag, old-style ID, workspace-dependent tool filter).
 
 MCP E2E fake tasks and run verifier (offline, no MCP server or PySCF):
 
@@ -637,6 +651,26 @@ evidence.
 
 ```bash
 uv run --frozen pytest tests/test_mcp_e2e_codex.py -q
+```
+
+`tests/test_mcp_e2e_arxiv.py` covers `mcp_e2e.arxiv_search_snippets` and the
+non-numeric verifier checks offline (no MCP server, no network): deterministic
+case selection over all curated cases, no `OR` in curated queries (the tool's
+date clause has no parentheses), the selection tie rule, snippet counting with
+the tool's semantics and cap, Atom parsing, B1-only tool naming and the ban on
+web tools/HTTP in every prompt; the scorers (ID normalisation, order, pick,
+per-term credit, submission vs evaluator failures); and `verify_run.py` with
+named extractors: a genuine Claude run and a Codex run pass every check,
+snippets by `pdf_url` and per-term calls pass (inputs WARN), a paper not
+returned by the search breaks the chain, the default per-term cap gives wrong
+counts, answers must equal tool-returned values, in-band tool errors are not
+results, `WebFetch` of arxiv.org and shell HTTP/arXiv libraries are bypass
+(FAIL) while web search and writing the answer with Python are not, Codex
+`web_search` items are recorded (WARN), and extra server tools (the
+ToolUniverse workspace trap) WARN in `mcp_connected`.
+
+```bash
+uv run --frozen pytest tests/test_mcp_e2e_arxiv.py -q
 ```
 
 The live agent run (generate → run → score → verify) is documented in

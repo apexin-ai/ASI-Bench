@@ -1,0 +1,40 @@
+task_id: mcp_e2e.arxiv_search_snippets
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    - scorer: arxiv_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  scoring:
+    # IDs are compared without version suffix, "arXiv:" prefix or URL.
+    - scorer: arxiv_e2e_ids
+      weight: 40
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+    - scorer: arxiv_e2e_selected
+      weight: 20
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+    # Credit per term whose count equals the reference exactly.
+    - scorer: arxiv_e2e_snippet_counts
+      weight: 40
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 300

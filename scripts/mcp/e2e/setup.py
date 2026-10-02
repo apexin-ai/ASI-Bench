@@ -16,6 +16,7 @@ operator credentials and never runs business tool calls; use the matching
 Usage::
 
     python3 scripts/mcp/e2e/setup.py pyscf [--root ~/mcp]
+    python3 scripts/mcp/e2e/setup.py arxiv [--root ~/mcp]
 """
 from __future__ import annotations
 
@@ -29,6 +30,8 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 MANIFEST = HERE / "manifest.json"
+# Placeholder in launch args for the absolute checkout path, e.g. "{checkout}/main.py".
+CHECKOUT = "{checkout}"
 
 
 class SetupError(RuntimeError):
@@ -51,6 +54,15 @@ def load_manifest(path: Path = MANIFEST) -> dict[str, dict]:
         launch = entry["launch"]
         if Path(launch["command"]).is_absolute() or any(Path(a).is_absolute() for a in launch["args"]):
             raise SetupError(f"{sid}: launch paths must be relative to the checkout")
+        if any(CHECKOUT in a and not a.startswith(CHECKOUT + "/") for a in launch["args"]):
+            raise SetupError(f"{sid}: {CHECKOUT} may only prefix a path argument")
+        env = launch.get("env", {})
+        if not isinstance(env, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
+            raise SetupError(f"{sid}: launch.env must map strings to strings")
+        sync_args = entry.get("uv_sync_args", [])
+        if not isinstance(sync_args, list) or not all(isinstance(a, str) and a.startswith("--") for a in sync_args) \
+                or any(a.split("=", 1)[0] in {"--python", "--frozen"} for a in sync_args):
+            raise SetupError(f"{sid}: uv_sync_args must be extra --flags (not --python/--frozen)")
         servers[sid] = entry
     return servers
 
@@ -79,7 +91,7 @@ def ensure_checkout(entry: dict, dest: Path) -> None:
             raise SetupError(f"{dest} points at {remote}, expected {entry['repository']}")
     else:
         dest.parent.mkdir(parents=True, exist_ok=True)
-        run(["git", "clone", "--quiet", entry["repository"], str(dest)])
+        run(["git", "clone", "--quiet", "--filter=blob:none", entry["repository"], str(dest)])
     # Refuse to silently discard local edits to tracked files.
     dirty = git(dest, "status", "--porcelain", "--untracked-files=no")
     if dirty:
@@ -96,7 +108,7 @@ def build_env(entry: dict, dest: Path) -> Path:
     if shutil.which("uv") is None:
         raise SetupError("uv not found on PATH; install it first (https://docs.astral.sh/uv/)")
     env = {k: v for k, v in os.environ.items() if k not in {"UV_PYTHON", "VIRTUAL_ENV", "PYTHONPATH"}}
-    run(["uv", "sync", "--frozen", "--python", entry["python"]], cwd=dest, env=env)
+    run(["uv", "sync", "--frozen", *entry.get("uv_sync_args", []), "--python", entry["python"]], cwd=dest, env=env)
     python = dest / ".venv" / "bin" / "python"
     version = run([str(python), "-c", "import sys; print('%d.%d' % sys.version_info[:2])"])
     if version != entry["python"]:
@@ -106,15 +118,14 @@ def build_env(entry: dict, dest: Path) -> Path:
 
 def render_config(entry: dict, dest: Path) -> dict:
     launch = entry["launch"]
-    return {
-        "mcpServers": {
-            entry["id"]: {
-                "command": str(dest / launch["command"]),
-                "args": [str(dest / arg) for arg in launch["args"]],
-                "cwd": str(dest),
-            }
-        }
+    server = {
+        "command": str(dest / launch["command"]),
+        "args": [arg.replace(CHECKOUT, str(dest)) for arg in launch["args"]],
+        "cwd": str(dest),
     }
+    if launch.get("env"):
+        server["env"] = dict(launch["env"])
+    return {"mcpServers": {entry["id"]: server}}
 
 
 def main(argv: list[str] | None = None) -> int:
