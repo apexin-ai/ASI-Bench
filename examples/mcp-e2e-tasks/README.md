@@ -82,7 +82,13 @@ element of a list field: `{"reduce": "max"}` / `"min"`, `{"argmax_of": key}` /
 result), or `{"where_key": key, "equals_reference_key": ref}` (the element
 where list field `key` equals a reference value, e.g. R at a given wavelength
 of a returned spectrum). `inputs_from_call` values that
-are not numbers, such as a `session_id`, must be identical strings.
+are not numbers, such as a `session_id`, must be identical strings; with
+`"compare": "geometry"` (and `abs_tol` in Angstrom, default 1e-4) a geometry
+string is compared as its atom lines — same elements in the same order, every
+coordinate within the tolerance — so an agent may drop a psi4 `charge
+multiplicity` header or round the coordinates it passes on. Result `key`s and
+answer `result_key`s may be dotted paths into nested JSON
+(`result.final_energy.value`); a literal key containing dots takes precedence.
 
 ## Tasks
 
@@ -93,6 +99,7 @@ are not numbers, such as a `session_id`, must be identical strings.
 | `mcp_e2e.arxiv_search_snippets` | `arxiv` | `ArXiv_search_papers` → `ArXiv_get_pdf_snippets` | raw arXiv API query and the PDF converted with MarkItDown (server lockfile versions) in `generate_gt.py` |
 | `mcp_e2e.jsbsim_engine_run` | `jsbsim` | `create_session` → (`set_initial_conditions`) → `set_property` ×3 → `step` → `get_property` or `get_telemetry`, one `session_id` | JSBSim 1.3.1 flown directly in `generate_gt.py` with JSBSim's own initial-condition properties |
 | `mcp_e2e.s4_grating_spectrum` | `s4` | `simulate_stack_spectrum` (optional `check_engine_sanity`) | independent numpy 1D RCWA with S4's default formulation (Laurent's rule, same truncation) in `generate_gt.py` |
+| `mcp_e2e.psi4_opt_freq` | `psi4` | `optimize` → `frequency` at the returned geometry | PySCF DF-RHF with psi4's JK fitting basis, geomeTRIC minimum, analytic Hessian in `generate_gt.py` |
 
 `mcp_e2e.pyscf_rhf_energy`: a seed picks one of five small closed-shell
 molecules and STO-3G or 6-31G, and perturbs every coordinate by up to ±0.02 Å so
@@ -182,6 +189,34 @@ importing or installing S4 or other RCWA packages, loading `libS4.so` or the
 server's own Python as bypass; RCWA-like code (`toeplitz`, `linalg.eig`) and
 mentions of S4 or the server package are WARN for review. Generation needs
 only numpy; the agent run needs the s4 server (x86-64 host, see
+`scripts/mcp/e2e/README.md`). No network is needed.
+
+`mcp_e2e.psi4_opt_freq`: a seed picks one of six small closed-shell molecules
+(water, ammonia, formaldehyde, HCN, HF, methane), STO-3G or cc-pVDZ, and
+distorts every coordinate of a near-equilibrium geometry by up to ±0.04 Å. The
+agent must optimise with RHF (`optimize`, default tight convergence), compute
+harmonic frequencies at the **returned** geometry (`frequency`) and write
+`result.json` with the final energy, the frequencies (ascending) and the ZPE.
+Scoring: 30 energy (full credit within 1e-6 Eh, zero at 1e-4), 50 frequencies
+(max |Δν| over the sorted modes within 1 cm⁻¹, zero at 20; a different mode
+count scores zero), 20 ZPE (5e-6 / 1e-4 Eh), log-linear in between. The
+reference is computed with a different program: PySCF density-fitted RHF with
+psi4's default JK fitting basis (`def2-universal-jkfit` for STO-3G,
+`cc-pvdz-jkfit` for cc-pVDZ), a tight geomeTRIC minimisation, the analytic
+Hessian and most-abundant-isotope masses (psi4's convention). Against the
+pinned server it agrees to ≤ 4e-9 Eh, ≤ 0.11 cm⁻¹ and ≤ 4e-7 Eh over 16 seeds.
+6-31G is not used: psi4 treats the cc-pvdz-jkfit functions of a Cartesian
+Pople basis as Cartesian, which PySCF does not reproduce (1e-5 Eh). Frequencies
+at the starting geometry contain rotations (wrong mode count, zero credit,
+broken `tool_chain`); a loose optimisation costs 1.5–10 cm⁻¹. `verify_run.py`
+compares the optimised energy and the frequency list with the reference,
+requires the `frequency` call's `geometry_xyz` to equal the
+`optimized_geometry_xyz` that `optimize` returned (atom lines within 1e-4 Å),
+takes all three answers from the nested tool results, flags the server's
+`optimize_excited_state` and `tddft` for review, and treats importing or
+installing psi4, PySCF, geomeTRIC or QCEngine, the `psi4` CLI, the server's
+Python or module as bypass. Generation needs PySCF and geomeTRIC in the task
+venv; the agent run needs the psi4 server (`micromamba`, see
 `scripts/mcp/e2e/README.md`). No network is needed.
 
 Prompts must stay agent-neutral: name the MCP server and tool
@@ -429,6 +464,24 @@ uv run asibench run --agent claude_code_cli \
 
 Score and verify as in steps 3–4 (Codex as above).
 
+psi4 task (needs `python3 scripts/mcp/e2e/setup.py psi4`, i.e. `micromamba` on
+`PATH`; generation installs PySCF and geomeTRIC into the task venv; no
+network for the run):
+
+```sh
+uv run asibench generate --task mcp_e2e.psi4_opt_freq --params '{"seed": 31415}' \
+  --sandbox task --tasks-dir examples/mcp-e2e-tasks --output-dir ~/e2e/instances
+
+uv run asibench run --agent claude_code_cli \
+  --agent-config '{"model": "claude-opus-4-6", "permission_mode": "bypassPermissions"}' \
+  --mcp-config ~/mcp/psi4.mcp.json \
+  --tasks mcp_e2e.psi4_opt_freq --include-test --tasks-dir examples/mcp-e2e-tasks \
+  --instances-dir ~/e2e/instances --prompt-levels b1,b2,b3,b4 \
+  --sandbox none --timeout 900 --output-dir ~/e2e/out-psi4-claude
+```
+
+Score and verify as in steps 3–4 (Codex as above).
+
 ## Adding a task
 
 Copy the pyscf task layout: `task_meta.yaml` (`status: test`), `task_eval.yaml`,
@@ -438,5 +491,6 @@ see `pyscf_bond_stretch`; schema 1 for a single tool with a scalar answer, see
 `pyscf_rhf_energy`; named extractors and web-tool bypass checks, see
 `arxiv_search_snippets`; a stateful session chain with optional/grouped read
 calls and multi-source answers, see `jsbsim_engine_run`; answers selected from
-returned arrays, see `s4_grating_spectrum`) plus bypass patterns. Add the server to
+returned arrays, see `s4_grating_spectrum`; nested result keys and a
+geometry-valued chain, see `psi4_opt_freq`) plus bypass patterns. Add the server to
 `scripts/mcp/e2e/manifest.json` with a smoke test first.

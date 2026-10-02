@@ -1,0 +1,51 @@
+task_id: mcp_e2e.psi4_opt_freq
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    - scorer: psi4_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  # Full credit within the tolerance, zero at the second bound, log-linear in
+  # between. The reference is PySCF (DF-RHF with psi4's JK fitting basis);
+  # against the pinned server it agrees to <= 4e-9 Eh, <= 0.11 cm^-1 and
+  # <= 4e-7 Eh (16 seeds). Measured procedure errors: frequencies at the
+  # starting geometry include rotations (wrong mode count, zero); the server's
+  # default B3LYP-D3(BJ)/def2-TZVP is off everywhere; convergence "normal"
+  # costs up to 1.1 cm^-1 and "loose" 1.5-10 cm^-1 and 1e-6-3e-5 Eh in ZPE.
+  scoring:
+    - scorer: psi4_e2e_energy
+      weight: 30
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-4
+    - scorer: psi4_e2e_frequencies
+      weight: 50
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0
+        zero_score_tol: 20.0
+    - scorer: psi4_e2e_zpe
+      weight: 20
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 5.0e-6
+        zero_score_tol: 1.0e-4
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 300

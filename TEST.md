@@ -708,6 +708,24 @@ omitted `theta_deg` WARNs; `import S4`, RCWA package installs, loading
 `libS4.so` and the server's Python are bypass, RCWA-like code is a WARN; plus
 every `select` mode.
 
+`tests/test_mcp_e2e_psi4.py` covers `mcp_e2e.psi4_opt_freq` and the verify_run
+extensions it needs, without psi4 or the server: deterministic, varied seeded
+cases (all six molecules, STO-3G/cc-pVDZ only, distortion within ±0.04 Å),
+every reference key the checks use, agent-neutral prompts (server named at
+B1/B2, tools only at B1), scorers (tool values score 100 in any order;
+frequencies at the starting geometry, a loose optimisation and the server's
+default method lose credit; submission vs evaluator failures), and the verifier
+on Claude stream-json (structured or text block) and Codex JSONL built from
+recorded server outputs: a genuine run passes every check; a reformatted or
+rounded geometry still chains; frequencies at the starting geometry fail
+`tool_chain`, `tool_correct` and `answer_from_tool`; an in-band `ok:false`
+result and the PySCF reference values typed in by hand fail; the default method
+fails `tool_correct`; `import psi4`/`pyscf`, installs, the `psi4` CLI, the
+server's Python or module are bypass and `optimize_excited_state` is a WARN;
+plus dotted keys (`_field`) and geometry comparison. With PySCF and geomeTRIC
+installed (`uv run --with pyscf==2.14.0 --with geometric==1.1.1 ...`) it also
+regenerates seed 31415 and compares with the recorded reference.
+
 MCP E2E fake tasks and run verifier (offline, no MCP server or PySCF):
 
 ```bash

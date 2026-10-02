@@ -34,7 +34,9 @@ answer may list several sources in ``from_calls``; a source with ``select``
 takes one element of a list field (``reduce`` max/min, ``argmax_of``/``argmin_of``
 another field, or ``where_key`` equal to a reference value, e.g. R at a given
 wavelength of a returned spectrum). Chained inputs that are not
-numbers (e.g. a ``session_id``) compare as exact strings.
+numbers (e.g. a ``session_id``) compare as exact strings, or with
+``"compare": "geometry"`` as atom lists within ``abs_tol`` (Angstrom). Result
+and answer keys may be dotted paths into nested JSON (``result.zpe.value``).
 Stdlib only.
 
 Usage::
@@ -364,6 +366,56 @@ def _same_link(given, source) -> bool:
     return str(given).strip() != "" and str(given).strip() == str(source).strip()
 
 
+def _field(data, key):
+    """Field ``key`` of a JSON object; a dotted key walks nested objects
+    (``result.final_energy.value``). A literal key containing dots wins."""
+    if not isinstance(data, dict) or not isinstance(key, str):
+        return None
+    if key in data:
+        return data[key]
+    node = data
+    for part in key.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
+def _geometry(text) -> list[tuple[str, tuple[float, float, float]]] | None:
+    """Atom lines ``Symbol x y z`` of a geometry string; other lines (an XYZ atom count
+    or comment, a psi4 ``charge multiplicity`` header, ``symmetry c1``) are ignored."""
+    if not isinstance(text, str):
+        return None
+    atoms = []
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) != 4 or not fields[0].isalpha():
+            continue
+        coords = [_float(v) for v in fields[1:]]
+        if any(c is None for c in coords):
+            continue
+        atoms.append((fields[0].capitalize(), tuple(coords)))
+    return atoms or None
+
+
+def _same_geometry(given, source, abs_tol: float) -> bool:
+    """Same atoms in the same order, every Cartesian coordinate within ``abs_tol``
+    (an agent may reformat or round the geometry it passes on)."""
+    a, b = _geometry(given), _geometry(source)
+    if a is None or b is None or len(a) != len(b) or [s for s, _ in a] != [s for s, _ in b]:
+        return False
+    return all(abs(x - y) <= abs_tol for (_, p), (_, q) in zip(a, b) for x, y in zip(p, q))
+
+
+def _link_comparator(link: dict):
+    """How a chained input is compared with the earlier result: ``"compare": "geometry"``
+    (with ``abs_tol``, default 1e-4 Angstrom) or, by default, ``_same_link``."""
+    if link.get("compare") == "geometry":
+        tol = float(link.get("abs_tol", 1e-4))
+        return lambda given, source: _same_geometry(given, source, tol)
+    return _same_link
+
+
 def _unwrap_structured(data):
     """Undo FastMCP's structured-output wrapper.
 
@@ -407,7 +459,7 @@ def _result_value(call: dict, key: str | None):
             value = _values(unwrapped) if isinstance(unwrapped, (str, int, float, list)) else None
         return value
     data = _parsed_result(call)
-    return _values(data.get(key)) if isinstance(data, dict) else None
+    return _values(_field(data, key))
 
 
 def _source_value(call: dict, source: dict, reference: dict):
@@ -420,19 +472,19 @@ def _source_value(call: dict, source: dict, reference: dict):
     if not select:
         return _result_value(call, source.get("result_key"))
     data = _json_result(call)
-    values = _values(data.get(source.get("result_key"))) if data else None
+    values = _values(_field(data, source.get("result_key"))) if data else None
     if not isinstance(values, list):
         return None
     if select.get("reduce") in ("max", "min"):
         return max(values) if select["reduce"] == "max" else min(values)
     for mode, pick in (("argmax_of", max), ("argmin_of", min)):
         if select.get(mode):
-            other = _values(data.get(select[mode]))
+            other = _values(_field(data, select[mode]))
             if not isinstance(other, list) or len(other) != len(values):
                 return None
             return values[other.index(pick(other))]
     if select.get("where_key"):
-        keys = _values(data.get(select["where_key"]))
+        keys = _values(_field(data, select["where_key"]))
         target = _float(reference.get(select.get("equals_reference_key")))
         if not isinstance(keys, list) or len(keys) != len(values) or target is None:
             return None
@@ -682,8 +734,9 @@ def _check_chain(spec: dict, by_spec: dict[str, list[dict]], checks: dict) -> No
             statuses.append("WARN")
             details.append(f"{cs['name']}←{link['call']}: tool inputs not observable in this evidence")
             continue
+        same = _link_comparator(link)
         linked = any(isinstance(c["input"], dict) and all(
-            _same_link(c["input"].get(arg), src.get(key)) for arg, key in link["map"].items())
+            same(c["input"].get(arg), _field(src, key)) for arg, key in link["map"].items())
             for c in consumers for src in sources)
         statuses.append("PASS" if linked else "FAIL")
         details.append(f"{cs['name']}←{link['call']}: " + ("inputs equal an earlier result" if linked else

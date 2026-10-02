@@ -77,8 +77,9 @@ The s4 smoke passed on AWS Linux amd64 with the pinned upstream `libS4.so` on
 against a locally built `libS4.so` with the same values (40 PASS, 8 WARN: the
 extra one is "not the upstream binary", four consecutive runs).
 
-The psi4 smoke passed on Linux aarch64 on 2026-10-02 (14 PASS, 11 WARN,
-0 FAIL, ~20 s, four consecutive runs); AWS amd64 pending.
+The psi4 smoke passed on 2026-10-02 on Linux aarch64 (four consecutive runs)
+and AWS Linux amd64 with the linux-64 lock (14 PASS, 11 WARN, 0 FAIL, ~20 s,
+identical verdicts and values).
 
 ## Run (Linux, as the unprivileged E2E user)
 
@@ -390,3 +391,7 @@ Implications for agent runs:
   `optimize_excited_state` for excited-state geometries.
 - Agents should pass small `memory_gb` / `n_threads` on small hosts and expect
   psi4 logs (`meta.output_path`) under the server's `TMPDIR`.
+
+L2 coverage: `optimize` → `frequency` at the returned geometry
+(`mcp_e2e.psi4_opt_freq`, reference computed with PySCF); `single_point`,
+`tddft` and `optimize_excited_state` are covered by the L1 smoke only.

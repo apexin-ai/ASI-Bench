@@ -1,0 +1,52 @@
+id: mcp_e2e.psi4_opt_freq
+name: "MCP E2E: geometry optimisation and harmonic frequencies through the psi4 MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. It exercises a two-tool chain whose link is a geometry
+# (optimize -> frequency at the optimised structure); see
+# examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: chemistry
+subdomain: "quantum_chemistry_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/Keith9922/chemaster"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 1-5
+  requires_gpu: false
+  requires_network: false
+
+tags: [mcp_e2e, psi4, rhf, geometry_optimization, vibrational_frequencies, tool_chain]
+
+# Only generate_gt.py needs PySCF/geomeTRIC: the reference is computed with a
+# different program than the server's psi4 (density-fitted RHF with psi4's JK
+# fitting basis). Generate instances with `asibench generate --sandbox task`;
+# run the agent with --sandbox none and --mcp-config so that psi4 is reachable
+# only through the MCP server.
+runtime:
+  python: ">=3.11"
+  packages: ["pyscf==2.14.0", "geometric==1.1.1"]
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: molecule.json
+      type: data
+      description: "Molecule name, distorted starting geometry (Element x y z lines, Angstrom), charge, multiplicity, method (HF) and basis set."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with molecule, final_energy_hartree, frequencies_cm_inv (ascending) and zpe_hartree at the optimised geometry."

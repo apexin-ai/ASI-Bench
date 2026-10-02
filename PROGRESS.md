@@ -1252,6 +1252,41 @@
   in conda avoids mixing pip-installed pydantic into the conda prefix.
 - Verification: Linux aarch64: 14 PASS / 11 WARN / 0 FAIL, ~20 s, four runs
   with identical verdicts; tampering with one lock SHA-256 makes micromamba
-  abort. Offline tests in `tests/test_mcp_e2e_scripts.py`. AWS amd64 smoke
-  pending.
+  abort. Offline tests in `tests/test_mcp_e2e_scripts.py`. AWS Linux amd64
+  (linux-64 lock): 14 PASS / 11 WARN / 0 FAIL, the same verdicts and values.
+- Implementation commit: `3e95955` (before the rebase onto the s4 L2 commits).
+
+## 2026-10-02: L2 psi4 optimize → frequency task, geometry-valued tool chain
+
+- Problem: the L2 task must chain two psi4 tools through a value an agent
+  cannot recompute (the optimised geometry), and the reference must not come
+  from psi4 itself. The psi4 results are nested JSON (`result.zpe.value`) and
+  the chained value is a geometry string an agent may reformat, which
+  `verify_run.py` could only compare as identical strings of a flat key.
+- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/psi4_opt_freq`: seeded small
+  molecule, STO-3G or cc-pVDZ, ±0.04 Å distortion; `optimize` (RHF, tight),
+  then `frequency` at the returned geometry; answers energy, frequencies, ZPE.
+  Reference in `generate --sandbox task` with PySCF 2.14.0 + geomeTRIC 1.1.1:
+  DF-RHF with psi4's default JK fitting basis, tight minimum, analytic Hessian,
+  isotope masses. `verify_run.py` gained dotted result/answer keys (`_field`)
+  and `"compare": "geometry"` for `inputs_from_call` (atom lines within
+  `abs_tol` Å).
+- Lesson: to reproduce a density-fitted program in another one, match the
+  fitting basis, not just the orbital basis: psi4 uses `def2-universal-jkfit`
+  for STO-3G and `cc-pvdz-jkfit` for cc-pVDZ (both matched PySCF to ≤ 4e-9 Eh),
+  but for the Cartesian 6-31G it treats the fitting functions as Cartesian too
+  (1e-5 Eh off), so 6-31G is excluded. Frequencies also need the same masses:
+  PySCF's default average masses shift them by ~0.3 cm⁻¹ against psi4's
+  most-abundant isotopes.
+- Lesson: PySCF 2.9.0 (pinned by the pyscf tasks) fails in DF-RHF gradients
+  with numpy 2.5 (`einsum` contraction path unpacking); 2.14.0 works.
+- Lesson: when the VM cannot commit and another branch moves underneath,
+  develop on a scratch clone rebased with a throwaway identity and resolve
+  append-only conflicts (PROGRESS, README) by keeping both sides in order.
+- Verification: over 16 seeds the server matched the reference to ≤ 4e-9 Eh,
+  ≤ 0.11 cm⁻¹ and ≤ 4e-7 Eh; `asibench generate --sandbox task` + an oracle
+  `--agent-cmd` following B1 through the real server scored 100/100 and
+  `verify_run.py` failed it for lack of agent evidence; offline tests in
+  `tests/test_mcp_e2e_psi4.py` (Claude/Codex streams built from recorded
+  server outputs pass every check). AWS agent runs pending.
 - Implementation commit: pending.
