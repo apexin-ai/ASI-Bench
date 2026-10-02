@@ -15,14 +15,20 @@ upstream licenses apply.
 ## Layout
 
 - `manifest.json` — one entry per server: repository, 40-char revision, Python
-  version, launch command relative to the checkout (path arguments use the
-  `{checkout}` placeholder, other arguments are literal), optional launch `env`
-  and extra `uv_sync_args` flags, expected tool names.
+  version, install mode, launch command relative to the checkout (path
+  arguments and path values in the optional launch `env` use the `{checkout}`
+  placeholder, everything else is literal), expected tool names. Install
+  `uv-sync-frozen` uses the upstream lockfile (optional extra `uv_sync_args`);
+  `uv-pip-pinned` is for upstreams without one and needs `requirements` (exact
+  `name==version` pins only) and `exclude_newer` (a UTC timestamp that fixes
+  the transitive resolution).
 - `setup.py` — stdlib only. Clones into `<root>/<id>` (`--filter=blob:none`),
   detaches at the pinned revision (refuses dirty checkouts or foreign remotes),
-  runs `uv sync --frozen [uv_sync_args] --python <manifest python>` (ignoring
-  the caller's `UV_PYTHON`), and writes `<root>/<id>.mcp.json` for
-  `--mcp-config` (including the manifest's launch `env`).
+  builds `<root>/<id>/.venv` with the manifest's Python (ignoring the caller's
+  `UV_PYTHON`) — `uv sync --frozen [uv_sync_args]`, or `uv venv --clear` +
+  `uv pip install --exclude-newer <exclude_newer> <pins>` — and writes
+  `<root>/<id>.mcp.json` for `--mcp-config` (including the manifest's launch
+  `env` with `{checkout}` resolved).
 - `stdio_client.py` — stdlib-only JSON-RPC stdio client. It reads raw server
   stdout so non-JSON lines are **recorded**, not swallowed by an SDK.
 - `smoke_<id>.py` — per-server L0/L1 checks; writes a JSON report with versions,
@@ -44,6 +50,9 @@ The arxiv smoke passed on 2026-09-30 on Linux aarch64 and AWS Linux amd64
 smoke process may print a harmless pydub "Couldn't find ffmpeg" warning when it
 imports MarkItDown for the reference.
 
+The jsbsim smoke passed on Linux aarch64 on 2026-10-02 (17 PASS, 17 WARN,
+0 FAIL, ~2 s, five consecutive runs); AWS amd64 pending.
+
 ## Run (Linux, as the unprivileged E2E user)
 
 ```sh
@@ -57,11 +66,17 @@ python3 scripts/mcp/e2e/setup.py arxiv --root ~/mcp
 ~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke_arxiv.py \
   --config ~/mcp/arxiv.mcp.json --report ~/mcp/arxiv-smoke-report.json
 uv run asibench mcp check --config ~/mcp/arxiv.mcp.json
+
+python3 scripts/mcp/e2e/setup.py jsbsim --root ~/mcp
+~/mcp/jsbsim/.venv/bin/python scripts/mcp/e2e/smoke_jsbsim.py \
+  --config ~/mcp/jsbsim.mcp.json --report ~/mcp/jsbsim-smoke-report.json
+uv run asibench mcp check --config ~/mcp/jsbsim.mcp.json
 ```
 
 The smoke script must run with the server's own virtualenv so that its
 reference calculation can import the same scientific library. The server is
-launched from a temporary cwd/HOME (separate directories for arxiv) with a
+launched from a temporary cwd/HOME (separate directories for arxiv; jsbsim
+also gets a temporary `TMPDIR`) with a
 minimal environment plus the config's `env`, and no operator credentials. Exit code is non-zero if any check FAILs; WARNs do not fail.
 
 ## Server notes
@@ -165,3 +180,61 @@ Implications for agent runs:
 
 L2 coverage: `ArXiv_search_papers` → `ArXiv_get_pdf_snippets`
 (`mcp_e2e.arxiv_search_snippets`, both tools, chained).
+
+### jsbsim (`flyintothesky/jsbsim-mcp`)
+
+FastMCP (MCP SDK 1.x) stdio server `run_stdio.py` over the JSBSim 1.3.1 Python
+module; the repository bundles a full JSBSim source tree as `jsbsim_data/`
+(aircraft, engines, systems, scripts). Upstream has no `pyproject.toml` or
+lockfile and its `requirements.txt` uses ranges plus dashboard-only packages,
+so the manifest uses `uv-pip-pinned`: Python 3.12, `jsbsim==1.3.1`,
+`mcp==1.30.0`, `pydantic==2.13.5`, `exclude_newer` 2026-10-01 (fastapi,
+uvicorn extras and websockets serve only the web dashboard; the stdio path does
+not import them). `jsbsim` has wheels for Linux amd64 and aarch64. No network
+or credentials are needed.
+
+Launch `env` in the manifest, and why:
+
+- `JBSIM_ROOT={checkout}/jsbsim_data` (upstream's spelling): otherwise the data
+  root is searched from the server's cwd upwards and falls back to `.`, so
+  `create_session` fails when a client does not honour the config's `cwd`.
+- `JSBSIM_DEBUG=0`: read by JSBSim's `FGFDMExec`; without it every
+  `create_session` writes ~1100 lines (banner and vehicle configuration) to
+  stdout, i.e. into the JSON-RPC stream. Error messages (e.g. an unknown
+  aircraft, 2 lines) still go to stdout.
+
+Both are probed with two short-lived extra servers (`--skip-env-probes` skips
+them).
+
+References are computed in the smoke process with the same `jsbsim` module but
+not with the server code: a separate `FGFDMExec` is driven with JSBSim's own
+property names (`ic/h-sl-ft`, `ic/vc-kts` with an exact ft/s→kt conversion,
+`attitude/theta-deg`, ...). Scenario: c172x, all seven initial conditions
+(4000 ft, 37°N 122°W, 168.78 ft/s calibrated, heading 90°, pitch 2°, roll 0°),
+then `propulsion/set-running=-1`, mixture 1.0, throttle 0.8, then 10 s at the
+default dt of 1/60 s. JSBSim is deterministic: repeated runs are bit-identical.
+
+| Tool | L1 check (FAIL if wrong) | Known WARN on the pinned revision |
+|---|---|---|
+| `list_aircraft` | equals the `aircraft/<name>/<name>.xml` directories under `JBSIM_ROOT` (60), count matches | — |
+| `create_session` | c172x, default dt 1/60 s, t=0, root = `JBSIM_ROOT`; second session with `initial_conditions` reaches a bit-identical state (also covers chunked `step`); unknown aircraft is `isError` | without initial conditions `run_ic()` is never called and the state is invalid after stepping (h=NaN); an unknown `initial_conditions` key is silently ignored |
+| `set_initial_conditions` | all seven keys read back via `get_property` (`airspeed_fps` is a calibrated airspeed: written to `ic/vc-kts`) | unspecified keys are reset to 0 (`x or 0.0`), not kept |
+| `set_property` / `get_property` | writes read back; after 10 s six state properties at full precision vs the reference (altitude within 2e-3 ft; the server's 0.592484 kt/fps factor alone moves it by 3e-4 ft) | unknown paths read as `value: 0.0, present: true` |
+| `step` | 600 frames, t = 10 s | `seconds=0` still integrates one frame |
+| `get_telemetry` | the 13 fields whose properties exist equal the reference to printed precision | **20 of 33 fields read properties that do not exist** and are always 0/false: lat/lon, AGL, pitch/roll/heading, lift/drag/side, n1/rpm/running, nz, wind, gear WOW/compression; `cl` is CL² |
+| `trim` | — (not a JSBSim trim) | returns `ok: true` but the aircraft is not trimmed (max \|u̇,ẇ,q̇\| ≈ 12 vs 1e-4 after JSBSim's own `do_trim(0)` from the same state, which the 1.3.1 module does export); the loop chases the non-existent `attitude/pitch-deg`, forces throttle 0.7, advances the simulation ~2 s; `mode` is ignored (`longitudinal`, `none` and an invalid mode give identical results) |
+| `execute_script` | runs in a separate server process | the `<run>…</run>` literal the description suggests is rejected by JSBSim, yet `ok: true` (return value ignored) and the temp file is never deleted; a stock script (`scripts/c1722.xml`) is loaded on top of the live model: ~640 stdout lines despite `JSBSIM_DEBUG=0`, then the server **segfaults** (exit −11) during the call, the next `step` or `close_session` |
+| `close_session` | closes; the id is unknown afterwards; closing twice gives `ok: false` | — |
+| server | unknown tool is an error; cwd left untouched; process alive after the main run | unknown session ids give in-band `{"ok": false, "error": "unknown-session"}` with `isError=false` |
+
+Implications for agent runs:
+
+- Always pass all seven initial conditions, then the property settings, then
+  step; never rely on `trim` or `execute_script` (the latter can kill the
+  server, losing every session).
+- Read attitude, position and engine state with `get_property` and JSBSim's
+  real names (`attitude/theta-deg`, `attitude/psi-deg`, `position/lat-geod-deg`,
+  `propulsion/engine[0]/engine-rpm`), not from `get_telemetry`.
+- c172x starts with the engine off; `propulsion/set-running=-1` starts it
+  (`propulsion/engine[0]/set-running=1` does not).
+- Sessions idle for 300 s are closed by a background thread (not configurable).

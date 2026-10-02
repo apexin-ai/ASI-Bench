@@ -48,6 +48,37 @@
         "ArXiv_get_pdf_snippets",
         "ArXiv_search_papers"
       ]
+    },
+    {
+      "id": "jsbsim",
+      "catalog_id": "jsbsim",
+      "repository": "https://github.com/flyintothesky/jsbsim-mcp.git",
+      "revision": "3e7f434181e926be7a9fbfaa4e387e0197968053",
+      "python": "3.12",
+      "install": "uv-pip-pinned",
+      "requirements": ["jsbsim==1.3.1", "mcp==1.30.0", "pydantic==2.13.5"],
+      "exclude_newer": "2026-10-01T00:00:00Z",
+      "launch": {
+        "command": ".venv/bin/python",
+        "args": ["{checkout}/run_stdio.py"],
+        "env": {
+          "JBSIM_ROOT": "{checkout}/jsbsim_data",
+          "JSBSIM_DEBUG": "0"
+        }
+      },
+      "smoke": "smoke_jsbsim.py",
+      "expected_tools": [
+        "close_session",
+        "create_session",
+        "execute_script",
+        "get_property",
+        "get_telemetry",
+        "list_aircraft",
+        "set_initial_conditions",
+        "set_property",
+        "step",
+        "trim"
+      ]
     }
   ]
 }

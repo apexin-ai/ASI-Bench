@@ -600,6 +600,16 @@ and whitespace normalisation, record comparison, the snippet window/limit/cap
 reference, in-band error classification, the search, OR-precedence and
 snippet checks against a stub client with a stubbed reference, and that the
 server environment is minimal (no operator secrets, proxies passed through).
+For jsbsim it checks the `uv-pip-pinned` install mode (fresh `uv venv
+--clear`, `uv pip install --exclude-newer` of exact pins, no `uv sync`; ranges,
+missing pins/timestamp and mode-mismatched fields are rejected), `{checkout}`
+in launch `env` values (absolute `JBSIM_ROOT`; absolute or non-prefix values
+rejected), and the JSBSim-free parts of `smoke_jsbsim.py`: frame rounding,
+the `aircraft/<name>/<name>.xml` scan, in-band errors, telemetry comparison
+(printed-precision tolerance, dead fields reported with the real property),
+trim-mode digests, the missing-property/unknown-session/unknown-aircraft
+classification, `list_aircraft` against a directory scan, and that a server
+crash anywhere in the stock-script probe is a WARN, not a FAIL.
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
@@ -614,6 +624,14 @@ For arxiv: `python3 scripts/mcp/e2e/setup.py arxiv`, then
 Expected outcome on the pinned revision: `PASS` with 0 FAIL and 8 WARN (OR +
 date precedence, three in-band errors plus a missing-paper one, `truncated`
 flag, old-style ID, workspace-dependent tool filter).
+For jsbsim: `python3 scripts/mcp/e2e/setup.py jsbsim`, then
+`~/mcp/jsbsim/.venv/bin/python scripts/mcp/e2e/smoke_jsbsim.py --config
+~/mcp/jsbsim.mcp.json` (no network, ~2 s). Expected outcome on the pinned
+revision: `PASS` with 0 FAIL and 17 WARN (dead telemetry fields, `cl` naming,
+missing property, no-IC session, zero step, partial IC, unknown IC key, trim,
+three in-band unknown-session errors, stdout lines of the unknown-aircraft
+error, `execute_script` literal + temp file + stock-script segfault, and the two
+launch-env probes).
 
 MCP E2E fake tasks and run verifier (offline, no MCP server or PySCF):
 
