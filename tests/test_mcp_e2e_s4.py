@@ -348,6 +348,15 @@ def test_sanity_call_is_judged_when_made(tmp_path, reference):
     assert row["verdict"] == "PASS" and row["checks"]["tool_correct"]["per_call"]["sanity"]["status"] == "PASS"
 
 
+def test_wrong_optional_sanity_result_fails_tool_correct(tmp_path, reference):
+    # An optional call without a group is not required, but once made it is judged like any other.
+    calls = _b1_calls(reference, sanity=True)
+    calls[0] = ("check_engine_sanity", {}, {**calls[0][2], "R": reference["sanity_R"] + 1e-3})
+    row = _run(tmp_path, _stream(calls), reference, _good(reference))
+    assert row["checks"]["tool_correct"]["per_call"]["sanity"]["status"] == "FAIL"
+    assert row["checks"]["tool_correct"]["status"] == "FAIL" and row["verdict"] == "FAIL"
+
+
 def test_codex_run_passes(tmp_path, reference):
     row = _run(tmp_path, _codex(_b1_calls(reference, sanity=True)), reference, _good(reference), codex=True)
     assert row["verdict"] == "PASS", row["checks"]

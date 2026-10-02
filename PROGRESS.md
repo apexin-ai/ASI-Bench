@@ -1293,3 +1293,32 @@
   (`gpt-5.6-sol`): local score 400/400 per harness and verifier 4/4 PASS per
   harness.
 - Implementation commit: `f4c48de`.
+
+## 2026-10-02: MCP E2E chore — README condensation and verifier golden snapshot
+
+- Context: before the next MCP server, `setup.py` / `verify_run.py` are to be
+  refactored (they grew by per-server patches). Branch `chore-mcp-e2e-docs`.
+- Docs: `scripts/mcp/e2e/README.md` (397 → 139 lines) and
+  `examples/mcp-e2e-tasks/README.md` (515 → ~140) now hold only tables and
+  author-relevant bullets. Per-server L1 detail stays in `smoke_<id>.py`
+  docstrings, task design in `generate_gt.py` / `task_eval.yaml`, the
+  `e2e_check.json` format in the `verify_run.py` docstring (completed to match
+  the six real files).
+- Safety net for the refactor: `tests/mcp_e2e_golden.py` (pytest plugin from
+  `tests/conftest.py`) wraps `verify.verify_one` in every `test_mcp_e2e_*`
+  module and compares the stable outcome of each call with
+  `tests/golden/mcp_e2e_verify.json` (94 tests, 100 calls). Mismatches, missing
+  and stale entries fail; `MCP_E2E_GOLDEN=update` only writes after a green
+  run of whole files.
+- Lesson: a mutation run showed that the existing assertions already caught
+  every verdict/check-level change tried, except one: an *ungrouped optional*
+  call returning a wrong result (it must fail `tool_correct`) was not covered
+  by any test, and the golden could not catch it either because no fixture
+  exercised that path. Added
+  `test_wrong_optional_sanity_result_fails_tool_correct`. The golden's own
+  value is in fields no test asserts (per-call statuses, tool sequence: 27–41
+  tests turned red only through the golden). A snapshot pins only paths that
+  fixtures exercise — check coverage of a branch before relying on it.
+- Lesson: errors raised in an autouse fixture's teardown are reported by
+  pytest as ERROR, not FAILED; count both when assessing a test run.
+- Commits: docs `fe3651e`; golden snapshot (pending).

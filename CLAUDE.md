@@ -147,6 +147,8 @@
   数值答案可用 `from_calls` 多来源，非数值串联值（如 `session_id`）按字符串精确比对，
   `"compare": "geometry"` 按原子行在 `abs_tol` Å 内比对；结果/答案 key 可用点路径取嵌套 JSON）
   读取 run 产物判定，框架评分契约不变。
+  verifier 行为由 `tests/golden/mcp_e2e_verify.json` 快照锁定（每个 `verify_one` 调用的
+  verdict/各项检查/per-call 状态）；有意改变判定时用 `MCP_E2E_GOLDEN=update` 整文件重生成并在 diff 中审阅。
   `--mcp-config` 强制 search mode，Claude 有 WebSearch/WebFetch、Codex 有 web_search，
   联网类 fake task 必须把它们纳入 bypass 检查。
   持久化 stream-json 会脱敏 user 事件（含 tool_result），工具返回值须从同 tool_call_id

@@ -576,6 +576,20 @@ all tools pages, repeated lists, errors and recovery; never calls real CAD.
 
 ## MCP E2E setup/smoke scripts
 
+Verifier golden snapshot: every `verify_run.verify_one` call made by a passing
+`tests/test_mcp_e2e_*.py` test is recorded (verdict, failure, every check and
+per-call status, tool sequence) and must equal
+`tests/golden/mcp_e2e_verify.json` (plugin `tests/mcp_e2e_golden.py`). A
+mismatch is reported as a test ERROR listing the changed fields; a new
+verifier test without an entry, or a stale entry, also fails. After an
+intended verifier change, regenerate and review the diff:
+
+```bash
+MCP_E2E_GOLDEN=update uv run --frozen pytest -q tests/test_mcp_e2e_*.py
+```
+
+The update refuses `-k` / `file::test` selections and red runs.
+
 Offline checks (no network, no upstream installs):
 
 ```bash
