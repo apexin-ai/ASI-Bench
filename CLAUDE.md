@@ -137,7 +137,9 @@
   依据 `e2e_check.json`（schema 2：多工具 `calls`、`inputs_from_call` 串联、
   `image` 结果、`answers`；schema 1 自动归一化；非数值结果用命名 `extract`
   与 `match` equal/subset/member，`bypass_tools`/`suspicious_tools` 检查 WebFetch 等
-  非 MCP 工具，`server_tools` 多出工具记 WARN）读取 run 产物判定，框架评分契约不变。
+  非 MCP 工具，`server_tools` 多出工具记 WARN；`optional` + `group` 表示多选一的必需调用，
+  数值答案可用 `from_calls` 多来源，非数值串联值（如 `session_id`）按字符串精确比对）
+  读取 run 产物判定，框架评分契约不变。
   `--mcp-config` 强制 search mode，Claude 有 WebSearch/WebFetch、Codex 有 web_search，
   联网类 fake task 必须把它们纳入 bypass 检查。
   持久化 stream-json 会脱敏 user 事件（含 tool_result），工具返回值须从同 tool_call_id

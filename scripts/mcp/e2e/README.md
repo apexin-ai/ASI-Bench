@@ -50,8 +50,11 @@ The arxiv smoke passed on 2026-09-30 on Linux aarch64 and AWS Linux amd64
 smoke process may print a harmless pydub "Couldn't find ffmpeg" warning when it
 imports MarkItDown for the reference.
 
-The jsbsim smoke passed on Linux aarch64 on 2026-10-02 (17 PASS, 17 WARN,
-0 FAIL, ~2 s, five consecutive runs); AWS amd64 pending.
+The jsbsim smoke passed on 2026-10-02 on Linux aarch64 (five consecutive runs)
+and AWS Linux amd64 (17 PASS, 17 WARN, 0 FAIL, ~2 s each); altitude and
+airspeed after the 10 s run are bit-identical on both architectures, attitude
+angles differ by < 1e-12 deg. Where `execute_script` segfaults varies between
+runs (during the call, the next `step` or `close_session`).
 
 ## Run (Linux, as the unprivileged E2E user)
 
@@ -238,3 +241,8 @@ Implications for agent runs:
 - c172x starts with the engine off; `propulsion/set-running=-1` starts it
   (`propulsion/engine[0]/set-running=1` does not).
 - Sessions idle for 300 s are closed by a background thread (not configurable).
+
+L2 coverage: `create_session` → `set_initial_conditions` → `set_property` ×3 →
+`step` → `get_property`/`get_telemetry` on one session
+(`mcp_e2e.jsbsim_engine_run`). `list_aircraft`, `close_session`, `trim` and
+`execute_script` are L1 only; the last two are unusable on the pinned revision.

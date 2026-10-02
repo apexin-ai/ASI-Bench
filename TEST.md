@@ -633,6 +633,21 @@ three in-band unknown-session errors, stdout lines of the unknown-aircraft
 error, `execute_script` literal + temp file + stock-script segfault, and the two
 launch-env probes).
 
+`tests/test_mcp_e2e_jsbsim.py` covers `mcp_e2e.jsbsim_engine_run` and the
+verify_run extensions it needs, without JSBSim: deterministic, varied seeded
+scenarios with all seven initial conditions and the engine/mixture/throttle
+order, exact ft/s→kt conversion in the reference, every reference key the
+checks use present in a generated reference (JSBSim stubbed), B1-only tool
+naming with the procedure rules at every level, scorers (tool values and
+two-decimal telemetry score 100, procedure errors lose credit, submission vs
+evaluator failures), and the verifier on Claude stream-json and Codex JSONL
+built from recorded server outputs: a genuine run passes every check; telemetry
+reads and initial conditions passed to `create_session` pass; chunked steps
+WARN; steps on another `session_id` break `tool_chain`; no state read fails
+`tool_called`; recomputed answers fail `answer_from_tool`; `trim` is a WARN;
+`import jsbsim`, installs, the `jsbsim` CLI and the server's Python are bypass.
+It also checks string chaining (`_same_link`) and optional-call grouping.
+
 MCP E2E fake tasks and run verifier (offline, no MCP server or PySCF):
 
 ```bash

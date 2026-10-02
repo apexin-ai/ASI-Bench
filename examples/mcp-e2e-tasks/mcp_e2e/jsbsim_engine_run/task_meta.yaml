@@ -1,0 +1,52 @@
+id: mcp_e2e.jsbsim_engine_run
+name: "MCP E2E: powered c172x flight through the jsbsim MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. It exercises a stateful tool chain (create_session ->
+# initial conditions -> set_property x3 -> step -> read state, all on one
+# session_id); see examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: physics
+subdomain: "flight_dynamics_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/flyintothesky/jsbsim-mcp"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 1-5
+  requires_gpu: false
+  requires_network: false
+
+tags: [mcp_e2e, jsbsim, flight_dynamics, simulation, tool_chain, stateful]
+
+# Only generate_gt.py needs JSBSim (independent reference with the same version
+# as the server, jsbsim 1.3.1; its bundled c172x data equals the server's).
+# Generate instances with `asibench generate --sandbox task`; run the agent with
+# --sandbox none and --mcp-config so that JSBSim is reachable only through the
+# MCP server.
+runtime:
+  python: ">=3.11"
+  packages: ["jsbsim==1.3.1"]
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: scenario.json
+      type: data
+      description: "Aircraft, seven initial conditions (altitude, lat/lon, calibrated airspeed in ft/s, heading, pitch, roll), property settings to apply in order, duration and timestep."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with altitude_ft, airspeed_kt, thrust_lbs and sim_time_s at the end of the run."

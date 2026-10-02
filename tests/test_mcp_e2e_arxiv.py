@@ -296,6 +296,7 @@ def test_web_fetch_of_arxiv_is_a_bypass_and_web_search_a_warning(tmp_path):
     "curl -s 'http://export.arxiv.org/api/query?search_query=ti:graphene'",
     "python3 -c \"import urllib.request; urllib.request.urlopen('https://arxiv.org/pdf/1103.0576')\"",
     "pip install arxiv",
+    "uv run --with arxiv python search.py",  # \b before --with never matched
     "python3 - <<'EOF'\nimport feedparser\nEOF",
 ])
 def test_shell_access_to_arxiv_is_a_bypass(tmp_path, command):

@@ -27,6 +27,11 @@ Schema 1 (one tool, one scalar) is normalised to schema 2 (``calls`` and
 by default; a call result, chain or answer with ``extract`` uses one of the
 named EXTRACTORS (e.g. arXiv IDs from a search result list, snippet counts per
 term) and compares canonical values with ``match`` = equal / subset / member.
+A call spec with ``"optional": true`` is only judged if called; optional specs
+sharing a ``"group"`` count as one requirement (at least one of them must be
+called and correct), e.g. reading a state with either of two tools. A numeric
+answer may list several sources in ``from_calls``. Chained inputs that are not
+numbers (e.g. a ``session_id``) compare as exact strings.
 Stdlib only.
 
 Usage::
@@ -345,6 +350,17 @@ def _same_input(given, expected) -> bool:
     return str(given).strip() == str(expected).strip()
 
 
+def _same_link(given, source) -> bool:
+    """A chained input equals an earlier result: numbers to printing precision, other
+    scalars (e.g. a session id) as identical non-empty strings."""
+    a, b = _values(given), _values(source)
+    if a is not None and b is not None:
+        return _same(a, b)
+    if isinstance(given, (dict, list)) or isinstance(source, (dict, list)) or given is None or source is None:
+        return False
+    return str(given).strip() != "" and str(given).strip() == str(source).strip()
+
+
 def _result_value(call: dict, key: str | None):
     """Numeric value of a text result, or of field `key` of a JSON-object result."""
     text = call.get("result_text")
@@ -516,21 +532,43 @@ def _judge_call(call: dict, call_spec: dict, reference: dict) -> dict:
     return report
 
 
+def _requirements(spec: dict) -> list[list[dict]]:
+    """Call specs grouped into requirements: a required spec alone, optional specs by `group`
+    (a group is met if any member is). Optional specs without a group are no requirement."""
+    groups: dict[str, list[dict]] = {}
+    out = []
+    for cs in spec["calls"]:
+        if not cs.get("optional"):
+            out.append([cs])
+        elif cs.get("group"):
+            if cs["group"] not in groups:
+                groups[cs["group"]] = []
+                out.append(groups[cs["group"]])
+            groups[cs["group"]].append(cs)
+    return out
+
+
+def _label(requirement: list[dict]) -> str:
+    return "|".join(cs["tool"] for cs in requirement)
+
+
 def _check_calls(ev: Evidence, spec: dict, reference: dict, checks: dict) -> dict[str, list[dict]]:
     server = spec["server"]
     by_spec = {cs["name"]: [c for c in ev.calls if _is_target(c["name"], server, cs["tool"])] for cs in spec["calls"]}
 
-    missing = [cs["tool"] for cs in spec["calls"] if not by_spec[cs["name"]]]
+    missing = [_label(req) for req in _requirements(spec) if not any(by_spec[cs["name"]] for cs in req)]
     counts = ", ".join(f"{cs['tool']}×{len(by_spec[cs['name']])}" for cs in spec["calls"])
     checks["tool_called"] = {"status": "FAIL" if missing else "PASS",
                              "detail": (f"not called: {missing}; " if missing else "") + counts}
 
-    per_call, statuses = {}, []
+    per_call, judged = {}, {}
     for cs in spec["calls"]:
         reports = [_judge_call(c, cs, reference) for c in by_spec[cs["name"]]]
         good = [r for r in reports if r["result_ok"]]
         verbatim = [r for r in good if r["inputs_match_reference"] is not False]
-        if verbatim:
+        if not reports and cs.get("optional"):
+            status, detail = None, "not called (optional)"
+        elif verbatim:
             status, detail = "PASS", f"{len(good)} correct call(s)"
         elif good:
             status, detail = "WARN", "result correct but inputs differ from reference"
@@ -538,9 +576,20 @@ def _check_calls(ev: Evidence, spec: dict, reference: dict, checks: dict) -> dic
             status, detail = "WARN", "result type not observable in this evidence"
         else:
             status, detail = "FAIL", "no successful call returned the expected result"
-        statuses.append(status)
-        per_call[cs["name"]] = {"tool": cs["tool"], "status": status, "detail": detail, "calls": reports}
-    failing = [f"{n}: {c['detail']}" for n, c in per_call.items() if c["status"] != "PASS"]
+        judged[cs["name"]] = status
+        per_call[cs["name"]] = {"tool": cs["tool"], "status": status or "SKIP", "detail": detail, "calls": reports}
+    statuses, covered = [], set()
+    for cs in spec["calls"]:  # ungrouped optional specs count only if called
+        if cs.get("optional") and not cs.get("group") and judged[cs["name"]] is not None:
+            statuses.append(judged[cs["name"]])
+    for req in _requirements(spec):  # a group takes its best called member
+        called = [judged[cs["name"]] for cs in req if judged[cs["name"]] is not None]
+        best = min(called, key=lambda s: SEVERITY[s]) if called else "FAIL"
+        statuses.append(best)
+        if len(req) > 1 and best == "PASS":
+            covered.update(cs["name"] for cs in req)
+    failing = [f"{n}: {c['detail']}" for n, c in per_call.items()
+               if c["status"] not in ("PASS", "SKIP") and n not in covered]
     checks["tool_correct"] = {"status": _worst(statuses),
                               "detail": "; ".join(failing) or "all required tools returned expected results",
                               "per_call": per_call}
@@ -548,7 +597,8 @@ def _check_calls(ev: Evidence, spec: dict, reference: dict, checks: dict) -> dic
 
 
 def _check_chain(spec: dict, by_spec: dict[str, list[dict]], checks: dict) -> None:
-    chained = [cs for cs in spec["calls"] if cs.get("inputs_from_call")]
+    chained = [cs for cs in spec["calls"] if cs.get("inputs_from_call")
+               and not (cs.get("optional") and not by_spec.get(cs["name"]))]
     if not chained:
         return
     statuses, details = [], []
@@ -571,7 +621,7 @@ def _check_chain(spec: dict, by_spec: dict[str, list[dict]], checks: dict) -> No
             details.append(f"{cs['name']}←{link['call']}: tool inputs not observable in this evidence")
             continue
         linked = any(isinstance(c["input"], dict) and all(
-            _same(_values(c["input"].get(arg)), _values(src.get(key))) for arg, key in link["map"].items())
+            _same_link(c["input"].get(arg), src.get(key)) for arg, key in link["map"].items())
             for c in consumers for src in sources)
         statuses.append("PASS" if linked else "FAIL")
         details.append(f"{cs['name']}←{link['call']}: " + ("inputs equal an earlier result" if linked else
@@ -622,8 +672,9 @@ def _check_answers(spec: dict, by_spec: dict[str, list[dict]], reference: dict, 
             continue
         pred = _values(prediction.get(answer["prediction_key"]))
         ref = _values(reference.get(answer["reference_key"]))
-        returned = [_result_value(c, answer.get("result_key")) for c in by_spec.get(answer["from_call"], [])
-                    if not c["is_error"]]
+        sources = answer.get("from_calls") or [{"call": answer["from_call"], "result_key": answer.get("result_key")}]
+        returned = [_result_value(c, src.get("result_key")) for src in sources
+                    for c in by_spec.get(src["call"], []) if not c["is_error"]]
         from_tool = any(_same(pred, v) for v in returned if v is not None)
         err = _diff(pred, ref)
         correct = err <= float(answer["abs_tol"])
@@ -723,8 +774,9 @@ def verify_one(result_path: Path, result: dict, instances_dir: Path, tasks_dir: 
     if ev.mcp_servers is None:
         # No server list (Codex JSONL, trajectory): a result returned by the
         # server's tool is the only proof that it was connected and offered.
-        silent = [cs["tool"] for cs in spec["calls"]
-                  if not any(_is_target(c["name"], server, cs["tool"]) and c["is_error"] is False for c in ev.calls)]
+        silent = [_label(req) for req in _requirements(spec)
+                  if not any(_is_target(c["name"], server, cs["tool"]) and c["is_error"] is False
+                             for cs in req for c in ev.calls)]
         checks["mcp_connected"] = (
             {"status": "PASS", "detail": "no server list in this evidence; every required tool returned a result"}
             if not silent else
