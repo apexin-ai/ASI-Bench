@@ -158,8 +158,12 @@
   不适用的键均报 `invalid_spec`）；所有取值走同一 `Selector`（key/select/extract），比较器共用，
   新值类型只加 extractor 或 comparator，不在单个检查里打补丁；工具名按 `mcp__<server>__<tool>`
   精确匹配；日志解析器按结果的 `agent_name` 选择，未知 agent 依次试探。
-  verifier 行为由 `tests/golden/mcp_e2e_verify.json` 快照锁定（每个 `verify_one` 调用的
+  verifier 行为由 `tests/mcp_e2e/golden.json` 快照锁定（每个 `verify_one` 调用的
   verdict/各项检查/per-call 状态）；有意改变判定时用 `MCP_E2E_GOLDEN=update` 整文件重生成并在 diff 中审阅。
+  MCP E2E 离线测试全部在 `tests/mcp_e2e/`：共享构件只在 `support.py`（加载器、Claude/Codex 日志构造、
+  `persist_like_run`、`Task.verify`、评分目录、smoke 桩），按被测对象分文件（`test_setup`、`test_smoke_runner`、
+  `test_smoke_<id>`、`test_verify_{spec,values,evidence}`、`test_task_<task>`）；所有 task 通用约定在
+  `test_task_contract.py` 参数化覆盖，新 task 只写 `test_task_<task>.py` 的数据与场景，不复制 run 目录/日志 helper。
   `--mcp-config` 强制 search mode，Claude 有 WebSearch/WebFetch、Codex 有 web_search，
   联网类 fake task 必须把它们纳入 bypass 检查。
   持久化 stream-json 会脱敏 user 事件（含 tool_result），工具返回值须从同 tool_call_id

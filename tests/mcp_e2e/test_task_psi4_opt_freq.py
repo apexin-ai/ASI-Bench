@@ -1,33 +1,23 @@
-"""Offline checks for the psi4 optimize → frequency MCP E2E task and the verify_run features it
-needs (dotted result keys, a geometry-valued tool chain). No MCP server; PySCF only for the
-optional regeneration test."""
-import importlib.util
+"""psi4_opt_freq (optimize -> frequency, dotted result keys, geometry-valued chain): generator, scorer,
+verifier scenarios. No MCP server; PySCF only for the optional regeneration test."""
 import json
 import math
-import sys
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-E2E_TASKS = ROOT / "examples/mcp-e2e-tasks"
-TASK_DIR = E2E_TASKS / "mcp_e2e/psi4_opt_freq"
-TASK_ID = "mcp_e2e.psi4_opt_freq"
-INSTANCE_ID = f"{TASK_ID}__seed31415"
+from . import support
+from .support import ROOT, claude, codex, jsonl
+
+TASK = support.Task("mcp_e2e.psi4_opt_freq")
+TASK_DIR, TASK_ID, INSTANCE_ID = TASK.dir, TASK.task_id, TASK.instance_id
 SERVER = "psi4"
+TOOLS = ("frequency", "optimize", "optimize_excited_state", "single_point", "tddft")
 
+generate_gt = TASK.module("generate_gt")
+scorer = TASK.module("custom_scorer")
+verify = support.verify
+_status = support.statuses
 
-def _load(path, name):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-generate_gt = _load(TASK_DIR / "generate_gt.py", "mcp_e2e_psi4_generate_gt")
-scorer = _load(TASK_DIR / "custom_scorer.py", "mcp_e2e_psi4_custom_scorer")
-verify = _load(ROOT / "scripts/mcp/e2e/verify_run.py", "mcp_e2e_psi4_verify_run")
 
 # Seed 31415 (methane, HF/STO-3G) as generated with PySCF 2.14.0 / geomeTRIC 1.1.1 on 2026-10-02.
 REFERENCE = {
@@ -41,23 +31,33 @@ REFERENCE = {
                            3786.7052811254007],
     "zpe_hartree": 0.05403984581951306,
 }
+
+
 OPT_GEOMETRY = ("0 1\n C    0.000000183968    0.000000183867   -0.000000496868\n"
                 " H    0.624646961412    0.617402384774    0.633673566314\n"
                 " H   -0.625822419613   -0.633108429762    0.616774691633\n"
                 " H   -0.624721384455    0.633046007280   -0.617946714492\n"
                 " H    0.625894652181   -0.617342151569   -0.632495627327\n")
+
+
 # What the pinned server returned for the B1 calls of this instance (VM, 2026-10-02).
 OPT_PAYLOAD = {"ok": True, "result": {"final_energy": {"value": -39.72701072, "unit": "Hartree"},
                                       "optimized_geometry_xyz": OPT_GEOMETRY, "n_iterations": 0, "converged": True},
                "warnings": [], "meta": {"psi4_version": "1.11", "wall_time_s": 1.28,
                                         "output_path": "/tmp/chemaster_psi4_x/optimize_output.log"}}
+
+
 FREQS = [1675.7456, 1675.7483, 1675.7575, 1903.6959, 1903.6981, 3525.9929, 3786.7117, 3786.7549, 3786.8098]
+
+
 FREQ_PAYLOAD = {"ok": True, "result": {"frequencies_cm_inv": FREQS, "ir_intensities_km_per_mol": [0.0] * 9,
                                        "n_imaginary": 0, "zpe": {"value": 0.05404022, "unit": "Hartree"},
                                        "thermal_corrections": {"h_corr": {"value": 0.05782578, "unit": "Hartree"}},
                                        "temperature_K": 298.15, "pressure_atm": 1.0},
                 "warnings": [], "meta": {"psi4_version": "1.11", "wall_time_s": 0.27,
                                          "output_path": "/tmp/chemaster_psi4_y/frequency_output.log"}}
+
+
 COMMON = {"method": "HF", "basis": "sto-3g", "charge": 0, "multiplicity": 1}
 
 
@@ -66,7 +66,53 @@ def _good_answer():
             "zpe_hartree": 0.05404022}
 
 
-# --- task ---------------------------------------------------------------------
+
+def _dirs(tmp_path, prediction, reference=REFERENCE):
+    return support.score_dirs(tmp_path, prediction, reference)
+
+
+def _eval():
+    return TASK.eval_config()
+
+
+def _total(pred, ref):
+    return TASK.total(pred, ref)
+
+
+def _b1_calls(opt_args=None, freq_args=None, opt_payload=OPT_PAYLOAD, freq_payload=FREQ_PAYLOAD):
+    opt = {"geometry_xyz": REFERENCE["geometry_xyz"], **COMMON, **(opt_args or {})}
+    freq = {"geometry_xyz": OPT_GEOMETRY, **COMMON, **(freq_args or {})}
+    return [("optimize", opt, opt_payload), ("frequency", freq, freq_payload)]
+
+
+
+def _stream(calls, extra=(), structured=True):
+    """Claude Code stream-json. The psi4 tools return dicts, so FastMCP declares an object
+    outputSchema and its structuredContent is the payload itself (no {"result": ...} wrapper);
+    Claude shows that object, otherwise the indented text block."""
+    events = [claude.init(SERVER, ["Bash", "Read", "Write", "WebFetch", "WebSearch",
+                                   *(f"mcp__{SERVER}__{t}" for t in TOOLS)])]
+    for k, (name, args) in enumerate(extra):
+        events += claude.call(f"x{k}", name, args, "ok")
+    for k, (tool, args, payload) in enumerate(calls):
+        events += claude.call(f"c{k}", f"mcp__{SERVER}__{tool}", args,
+                              json.dumps(payload) if structured else json.dumps(payload, indent=2))
+    events.append(claude.result(len(calls)))
+    return jsonl(events)
+
+
+def _codex(calls):
+    events = list(codex.START)
+    for k, (tool, args, payload) in enumerate(calls):
+        events += codex.mcp(f"m{k}", SERVER, tool, args, json.dumps(payload, indent=2), structured=payload)
+    events.append(codex.done())
+    return jsonl(events)
+
+
+def _run(tmp_path, stream, answer, codex=False, files=None):
+    return TASK.verify(tmp_path, stream, reference=REFERENCE, answer=answer,
+                       harness="codex" if codex else "claude", persist=not codex, files=files)
+
 
 def test_cases_are_deterministic_varied_and_distorted():
     assert generate_gt.build_case(31415) == generate_gt.build_case(31415)
@@ -128,30 +174,6 @@ def test_task_meta_is_test_status_with_pinned_reference_packages():
     assert meta["runtime"]["packages"] == ["pyscf==2.14.0", "geometric==1.1.1"]
 
 
-# --- scorer -------------------------------------------------------------------
-
-def _dirs(tmp_path, prediction, reference=REFERENCE):
-    pred, ref = tmp_path / "pred", tmp_path / "ref"
-    pred.mkdir(parents=True)
-    ref.mkdir(parents=True)
-    if prediction is not None:
-        (pred / "result.json").write_text(json.dumps(prediction) if not isinstance(prediction, str) else prediction)
-    if reference is not None:
-        (ref / "reference.json").write_text(json.dumps(reference))
-    return pred, ref
-
-
-def _eval():
-    import yaml
-    return yaml.safe_load((TASK_DIR / "task_eval.yaml").read_text())["evaluation"]
-
-
-def _total(pred, ref):
-    from ai4sci_bench.core.scorer import get_scorer
-    return sum(get_scorer(item["scorer"]).score(pred, ref, {**item["config"], "weight": item["weight"]}).score
-               for item in _eval()["scoring"])
-
-
 def test_tool_values_score_full(tmp_path):
     assert _total(*_dirs(tmp_path, _good_answer())) == pytest.approx(100.0)
     shuffled = {**_good_answer(), "frequencies_cm_inv": list(reversed(FREQS))}   # order does not matter
@@ -201,94 +223,6 @@ def test_missing_reference_is_an_evaluator_failure(tmp_path):
     for item in _eval()["scoring"]:
         detail = get_scorer(item["scorer"]).score(pred, ref, {**item["config"], "weight": item["weight"]})
         assert detail.details["scorer_internal_error"] and detail.details["failure_kind"] == "missing_evaluator_input"
-
-
-# --- verify_run: Claude stream-json and Codex JSONL -----------------------------
-
-def _b1_calls(opt_args=None, freq_args=None, opt_payload=OPT_PAYLOAD, freq_payload=FREQ_PAYLOAD):
-    opt = {"geometry_xyz": REFERENCE["geometry_xyz"], **COMMON, **(opt_args or {})}
-    freq = {"geometry_xyz": OPT_GEOMETRY, **COMMON, **(freq_args or {})}
-    return [("optimize", opt, opt_payload), ("frequency", freq, freq_payload)]
-
-
-def _stream(calls, extra=(), structured=True):
-    """Claude Code stream-json. The psi4 tools return dicts, so FastMCP declares an object
-    outputSchema and its structuredContent is the payload itself (no {"result": ...} wrapper);
-    Claude shows that object, otherwise the indented text block."""
-    tools = ["Bash", "Read", "Write", "WebFetch", "WebSearch",
-             *(f"mcp__{SERVER}__{t}" for t in ("frequency", "optimize", "optimize_excited_state",
-                                                 "single_point", "tddft"))]
-    events = [{"type": "system", "subtype": "init", "mcp_servers": [{"name": SERVER, "status": "connected"}],
-               "tools": tools}]
-
-    def event(cid, name, args, text):
-        return [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": cid, "name": name,
-                                                               "input": args}]}},
-                {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": cid,
-                                                          "is_error": False,
-                                                          "content": [{"type": "text", "text": text}]}]}}]
-    for k, (name, args) in enumerate(extra):
-        events += event(f"x{k}", name, args, "ok")
-    for k, (tool, args, payload) in enumerate(calls):
-        events += event(f"c{k}", f"mcp__{SERVER}__{tool}", args,
-                        json.dumps(payload) if structured else json.dumps(payload, indent=2))
-    events.append({"type": "result", "subtype": "success", "is_error": False, "num_turns": len(calls)})
-    return "\n".join(json.dumps(e) for e in events) + "\n"
-
-
-def _codex(calls):
-    events = [{"type": "thread.started", "thread_id": "t"}, {"type": "turn.started"}]
-    for k, (tool, args, payload) in enumerate(calls):
-        item = {"id": f"m{k}", "type": "mcp_tool_call", "server": SERVER, "tool": tool, "arguments": args,
-                "status": "completed", "error": None,
-                "result": {"content": [{"type": "text", "text": json.dumps(payload, indent=2)}],
-                           "structured_content": payload}}
-        events += [{"type": "item.started", "item": {**item, "status": "in_progress", "result": None}},
-                   {"type": "item.completed", "item": item}]
-    events.append({"type": "turn.completed", "usage": {}})
-    return "\n".join(json.dumps(e) for e in events) + "\n"
-
-
-def _persist_like_run(stream):
-    from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator
-    from ai4sci_bench.trajectory.claude_extractor import extract_from_jsonl
-
-    orchestrator = object.__new__(BenchmarkOrchestrator)
-    persisted = "".join(json.dumps(orchestrator._redact_raw_prompt_fields(json.loads(line))) + "\n"
-                        for line in stream.splitlines() if line.strip())
-    return persisted, [step.to_dict() for step in extract_from_jsonl(stream, INSTANCE_ID).steps]
-
-
-def _run(tmp_path, stream, answer, codex=False, files=None):
-    results, instances = tmp_path / "out", tmp_path / "instances"
-    task_out = results / TASK_ID
-    outputs = task_out / f"{INSTANCE_ID}__b1.outputs"
-    outputs.mkdir(parents=True)
-    ref = instances / INSTANCE_ID / "reference"
-    ref.mkdir(parents=True)
-    ref.joinpath("reference.json").write_text(json.dumps(REFERENCE))
-    outputs.joinpath("result.json").write_text(json.dumps(answer))
-    for name, text in (files or {}).items():
-        outputs.joinpath(name).write_text(text)
-    stdout = f"{INSTANCE_ID}__b1.agent_stdout.jsonl"
-    agent = {"raw_stdout_file": stdout, "persisted_outputs": {"dir": outputs.name}}
-    if codex:
-        task_out.joinpath(stdout).write_text(stream)
-    else:
-        persisted, steps = _persist_like_run(stream)
-        traj = f"{INSTANCE_ID}__b1.trajectory.json"
-        task_out.joinpath(stdout).write_text(persisted)
-        task_out.joinpath(traj).write_text(json.dumps(steps))
-        agent["trajectory_file"] = traj
-    result = {"task_id": TASK_ID, "instance_id": INSTANCE_ID, "prompt_level": "b1", "status": "completed",
-              "agent_output": agent}
-    path = task_out / f"{INSTANCE_ID}__b1.json"
-    path.write_text(json.dumps(result))
-    return verify.verify_one(path, result, instances, E2E_TASKS)
-
-
-def _status(row):
-    return {name: check["status"] for name, check in row["checks"].items()}
 
 
 @pytest.mark.parametrize("structured", [True, False])
@@ -368,8 +302,6 @@ def test_excited_state_tool_is_only_suspicious(tmp_path):
     assert "optimize_excited_state" in row["checks"]["no_bypass"]["detail"]
 
 
-# --- verify_run: dotted keys and geometry comparison ------------------------------
-
 def test_field_walks_nested_objects_and_prefers_literal_keys():
     data = {"result": {"zpe": {"value": 0.05}}, "a.b": 1, "a": {"b": 2}}
     assert verify.values.field(data, "result.zpe.value") == 0.05
@@ -381,17 +313,3 @@ def test_field_walks_nested_objects_and_prefers_literal_keys():
     assert verify.values.read(call, verify.spec.Selector(key="result.final_energy.value")) == -39.72701072
     raw = verify.spec.Selector(key="result.optimized_geometry_xyz", raw=True)
     assert verify.values.read(call, raw) == OPT_PAYLOAD["result"]["optimized_geometry_xyz"]
-
-
-def test_same_geometry():
-    plain = "O 0 0 0.1\nH 0 0.75 -0.47\nH 0 -0.75 -0.47"
-    assert verify.values.same_geometry("0 1\n" + plain + "\nsymmetry c1\n", "3\nwater\n" + plain, 1e-4)
-    assert verify.values.same_geometry(plain.replace("0.75", "0.75004"), plain, 1e-4)
-    assert not verify.values.same_geometry(plain.replace("0.75", "0.7502"), plain, 1e-4)
-    assert not verify.values.same_geometry(plain.replace("O", "S", 1), plain, 1e-4)
-    assert not verify.values.same_geometry("\n".join(plain.splitlines()[:2]), plain, 1e-4)
-    assert not verify.values.same_geometry("no atoms here", plain, 1e-4) and not verify.values.same_geometry(None, plain, 1e-4)
-    link = verify.spec.Binding(("g",), verify.spec.Selector(key="g", raw=True))
-    assert verify.values.link_comparator(link)("abc", "abc") and not verify.values.link_comparator(link)("0.1", "0.2")
-    geo = verify.spec.Binding(("g",), verify.spec.Selector(key="g", raw=True), "geometry", 1e-4)
-    assert verify.values.link_comparator(geo)(plain.replace("0.75", "0.75004"), plain)

@@ -1417,3 +1417,41 @@
   per-check status diff of old vs new reports is a cheap, complete parity
   check; keep the old reports and write new ones beside them.
 - Commit: `cbf026f`.
+
+## 2026-10-02: MCP E2E chore — tests regrouped into `tests/mcp_e2e/` with one support module
+
+- Problem: the eight `tests/test_mcp_e2e_*.py` files grew one per server by
+  copying the previous one. File names did not say what they tested
+  (`_tasks.py` was only pyscf_rhf_energy, `_codex.py` mixed framework extractor
+  and verifier tests, `_scripts.py` was 1552 lines of setup + five smokes +
+  runner + spec), verifier helper unit tests sat in task files, ~580 lines of
+  helpers were copied 4–8 times (`_run` ×7, `_stream` ×7, `_persist_like_run`
+  ×7, `_dirs` ×6, `_load` ×8, `_codex` ×4), and task-wide conventions were
+  re-asserted per task with drifting wording (only psi4 checked
+  `server_tools` against the manifest).
+- Resolution: `tests/mcp_e2e/` with `support.py` (loaders, `claude`/`codex`
+  log builders, `persist_like_run`, `Task.verify` → `verify_one`,
+  `score_dirs`, smoke stubs), `test_setup`, `test_smoke_runner`,
+  `test_smoke_<id>`, `test_verify_{spec,values,evidence}`, `test_task_<task>`
+  and `test_task_contract.py` (parametrized over every fake task: status and
+  discovery, agent-neutral prompts, strict e2e_check vs manifest tools, and
+  that each task has its own test module covering generator determinism,
+  submission/evaluator failures and a genuine run). Golden plugin and data
+  moved to `tests/mcp_e2e/golden.py` / `golden.json`, keyed on the directory.
+- Verification: inventory before/after (374 → 393 items = 374 − 7 replaced +
+  26 contract/runtime); 230 moved test bodies AST-identical to `git HEAD`
+  (smoke stub renames applied); the old golden snapshots were carried over
+  with renamed keys only and pass unchanged, and an update-mode regeneration
+  reproduces the file byte for byte; a corrupted snapshot is still caught.
+- Finding (not fixed here): six of seven `_persist_like_run` copies modelled
+  Claude persistence as redaction only, while real runs also scrub absolute
+  paths in the persisted stdout. With realistic persistence 7 bypass
+  expectations fail (4 FAIL → missed: server venv Python, `ctypes.CDLL` of
+  `libS4.so`), because the verifier reads Bash commands from the persisted
+  stream; the trajectory, built from the raw stdout, keeps them. Codex runs
+  are persisted the same way.
+- Lesson: when a test helper says "exactly as the real code does", call the
+  real code path — a hand re-implementation of one step hid a verifier blind
+  spot. Carrying golden values over with renamed keys (instead of
+  regenerating) turns a test move into a proof that no outcome changed.
+- Commit: (pending).

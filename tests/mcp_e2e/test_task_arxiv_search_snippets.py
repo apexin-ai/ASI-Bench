@@ -1,18 +1,14 @@
-"""Offline checks for the arXiv search → snippets MCP E2E task and the verify_run extensions
-(named extractors, member chaining, merged answers, web-tool bypass, exact server tool set).
-No MCP server, no network."""
-import importlib.util
+"""arxiv_search_snippets (search -> snippets, named extractors, member chaining, merged answers,
+web-tool bypass, exact server tool set): generator, scorers, verifier scenarios. No network."""
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-E2E_TASKS = ROOT / "examples/mcp-e2e-tasks"
-TASK_DIR = E2E_TASKS / "mcp_e2e/arxiv_search_snippets"
-TASK_ID = "mcp_e2e.arxiv_search_snippets"
-INSTANCE_ID = f"{TASK_ID}__seed31415"
+from . import support
+from .support import claude, codex, jsonl
+
+TASK = support.Task("mcp_e2e.arxiv_search_snippets")
+TASK_DIR, TASK_ID, INSTANCE_ID = TASK.dir, TASK.task_id, TASK.instance_id
 
 # seed31415 case (gravitational waves), as generated 2026-10-02
 IDS = ["1103.0115", "1103.0346", "1103.0373", "1103.0576", "1103.1301"]
@@ -30,19 +26,12 @@ SNIPPET_ARGS = {"arxiv_id": "1103.0576v1", "terms": ["millisecond", "arecibo"], 
                 "max_snippets_per_term": 10}
 SEARCH = "mcp__arxiv__ArXiv_search_papers"
 SNIPPETS = "mcp__arxiv__ArXiv_get_pdf_snippets"
+ALL = ("arxiv_e2e_schema", "arxiv_e2e_ids", "arxiv_e2e_selected", "arxiv_e2e_snippet_counts")
 
-
-def _load(path, name):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-generate_gt = _load(TASK_DIR / "generate_gt.py", "mcp_e2e_arxiv_generate_gt")
-scorer = _load(TASK_DIR / "custom_scorer.py", "mcp_e2e_arxiv_custom_scorer")
-verify = _load(ROOT / "scripts/mcp/e2e/verify_run.py", "mcp_e2e_arxiv_verify_run")
+generate_gt = TASK.module("generate_gt")
+scorer = TASK.module("custom_scorer")
+verify = support.verify
+_status = support.statuses
 
 
 def _search_result(ids=IDS):
@@ -63,7 +52,43 @@ def _answer(**overrides):
     return {"arxiv_ids": IDS, "selected_id": "1103.0576", "snippet_counts": dict(COUNTS), **overrides}
 
 
-# --- task ---------------------------------------------------------------------
+
+def _dirs(tmp_path, prediction, reference=REFERENCE):
+    return support.score_dirs(tmp_path, prediction, reference)
+
+
+def _score(name, pred, ref, weight=1.0):
+    from ai4sci_bench.core.scorer import get_scorer
+    return get_scorer(name).score(pred, ref, {"weight": weight})
+
+
+
+def _stream(search_args=SEARCH_ARGS, snippet_calls=None, search_result=None, tools=None, extra=()):
+    """Claude stream-json; snippet_calls = [(input, result_text)], extra = [(tool name, input)]."""
+    if snippet_calls is None:
+        snippet_calls = [(SNIPPET_ARGS, _snippet_result())]
+    events = [claude.init("arxiv", tools or ["Bash", "Read", "Write", "WebFetch", "WebSearch", SEARCH, SNIPPETS])]
+    for k, (name, args) in enumerate(extra):
+        events += claude.call(f"x{k}", name, args, "ok")
+    events += claude.call("s1", SEARCH, search_args, search_result or _search_result())
+    for k, (args, result) in enumerate(snippet_calls):
+        events += claude.call(f"p{k}", SNIPPETS, args, result)
+    events.append(claude.result(4))
+    return jsonl(events)
+
+
+def _codex(extra_items=()):
+    events = [*codex.START, *(codex.item(item) for item in extra_items)]
+    events += codex.mcp("m1", "arxiv", "ArXiv_search_papers", SEARCH_ARGS, _search_result())
+    events += codex.mcp("m2", "arxiv", "ArXiv_get_pdf_snippets", SNIPPET_ARGS, _snippet_result())
+    events.append(codex.done())
+    return jsonl(events)
+
+
+def _run(tmp_path, stream, answer=None, codex=False, files=None):
+    return TASK.verify(tmp_path, stream, reference=REFERENCE, answer=answer or _answer(),
+                       harness="codex" if codex else "claude", persist=not codex, files=files)
+
 
 def test_cases_are_deterministic_and_cover_all_curated_cases():
     assert generate_gt.build_case(31415) == generate_gt.build_case(31415)
@@ -123,27 +148,6 @@ def test_task_is_test_status_and_needs_pinned_converter():
     assert "markitdown[pdf]==0.1.7" in meta["runtime"]["packages"]
 
 
-# --- scorer -------------------------------------------------------------------
-
-def _dirs(tmp_path, prediction, reference=REFERENCE):
-    pred, ref = tmp_path / "pred", tmp_path / "ref"
-    pred.mkdir(parents=True)
-    ref.mkdir(parents=True)
-    if prediction is not None:
-        (pred / "result.json").write_text(json.dumps(prediction) if not isinstance(prediction, str) else prediction)
-    if reference is not None:
-        (ref / "reference.json").write_text(json.dumps(reference))
-    return pred, ref
-
-
-def _score(name, pred, ref, weight=1.0):
-    from ai4sci_bench.core.scorer import get_scorer
-    return get_scorer(name).score(pred, ref, {"weight": weight})
-
-
-ALL = ("arxiv_e2e_schema", "arxiv_e2e_ids", "arxiv_e2e_selected", "arxiv_e2e_snippet_counts")
-
-
 def test_reference_answer_scores_full_and_ids_are_normalised(tmp_path):
     answer = _answer(arxiv_ids=[f"https://arxiv.org/abs/{i}v1" for i in IDS], selected_id="arXiv:1103.0576v1",
                      snippet_counts={"Millisecond": "5", "arecibo": 3.0})
@@ -174,72 +178,6 @@ def test_missing_reference_is_an_evaluator_failure(tmp_path):
     pred, ref = _dirs(tmp_path, _answer(), reference=None)
     for name in ALL[1:]:
         assert _score(name, pred, ref).details["scorer_internal_error"] is True
-
-
-# --- verify_run: Claude stream -----------------------------------------------
-
-def _stream(search_args=SEARCH_ARGS, snippet_calls=None, search_result=None, tools=None, extra=()):
-    """Claude stream-json; snippet_calls = [(input, result_text)], extra = [(tool name, input)]."""
-    if snippet_calls is None:
-        snippet_calls = [(SNIPPET_ARGS, _snippet_result())]
-    events = [{"type": "system", "subtype": "init", "mcp_servers": [{"name": "arxiv", "status": "connected"}],
-               "tools": tools or ["Bash", "Read", "Write", "WebFetch", "WebSearch", SEARCH, SNIPPETS]}]
-
-    def call(cid, name, args, result):
-        return [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": cid, "name": name,
-                                                               "input": args}]}},
-                {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": cid,
-                                                          "is_error": False,
-                                                          "content": [{"type": "text", "text": result}]}]}}]
-    for k, (name, args) in enumerate(extra):
-        events += call(f"x{k}", name, args, "ok")
-    events += call("s1", SEARCH, search_args, search_result or _search_result())
-    for k, (args, result) in enumerate(snippet_calls):
-        events += call(f"p{k}", SNIPPETS, args, result)
-    events.append({"type": "result", "subtype": "success", "is_error": False, "num_turns": 4})
-    return "\n".join(json.dumps(e) for e in events) + "\n"
-
-
-def _persist_like_run(stream):
-    from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator
-    from ai4sci_bench.trajectory.claude_extractor import extract_from_jsonl
-
-    orchestrator = object.__new__(BenchmarkOrchestrator)
-    persisted = "".join(json.dumps(orchestrator._redact_raw_prompt_fields(json.loads(line))) + "\n"
-                        for line in stream.splitlines() if line.strip())
-    return persisted, [step.to_dict() for step in extract_from_jsonl(stream, INSTANCE_ID).steps]
-
-
-def _run(tmp_path, stream, answer=None, codex=False, files=None):
-    results, instances = tmp_path / "out", tmp_path / "instances"
-    task_out = results / TASK_ID
-    outputs = task_out / f"{INSTANCE_ID}__b1.outputs"
-    outputs.mkdir(parents=True)
-    ref = instances / INSTANCE_ID / "reference"
-    ref.mkdir(parents=True)
-    ref.joinpath("reference.json").write_text(json.dumps(REFERENCE))
-    outputs.joinpath("result.json").write_text(json.dumps(answer or _answer()))
-    for name, text in (files or {}).items():
-        outputs.joinpath(name).write_text(text)
-    stdout = f"{INSTANCE_ID}__b1.agent_stdout.jsonl"
-    agent = {"raw_stdout_file": stdout, "persisted_outputs": {"dir": outputs.name}}
-    if codex:
-        task_out.joinpath(stdout).write_text(stream)
-    else:
-        persisted, steps = _persist_like_run(stream)
-        traj = f"{INSTANCE_ID}__b1.trajectory.json"
-        task_out.joinpath(stdout).write_text(persisted)
-        task_out.joinpath(traj).write_text(json.dumps(steps))
-        agent["trajectory_file"] = traj
-    result = {"task_id": TASK_ID, "instance_id": INSTANCE_ID, "prompt_level": "b1", "status": "completed",
-              "agent_output": agent}
-    path = task_out / f"{INSTANCE_ID}__b1.json"
-    path.write_text(json.dumps(result))
-    return verify.verify_one(path, result, instances, E2E_TASKS)
-
-
-def _status(row):
-    return {name: check["status"] for name, check in row["checks"].items()}
 
 
 def test_genuine_search_and_snippets_run_passes(tmp_path):
@@ -323,24 +261,6 @@ def test_in_band_tool_errors_are_not_results(tmp_path):
     assert row["failure"] == "tool_correct"
 
 
-# --- verify_run: Codex JSONL --------------------------------------------------
-
-def _codex(extra_items=()):
-    def mcp(cid, tool, args, text):
-        item = {"id": cid, "type": "mcp_tool_call", "server": "arxiv", "tool": tool, "arguments": args,
-                "status": "completed", "error": None,
-                "result": {"content": [{"type": "text", "text": text}], "structured_content": None}}
-        return [{"type": "item.started", "item": {**item, "status": "in_progress", "result": None}},
-                {"type": "item.completed", "item": item}]
-    events = [{"type": "thread.started", "thread_id": "t"}, {"type": "turn.started"}]
-    for item in extra_items:
-        events.append({"type": "item.completed", "item": item})
-    events += mcp("m1", "ArXiv_search_papers", SEARCH_ARGS, _search_result())
-    events += mcp("m2", "ArXiv_get_pdf_snippets", SNIPPET_ARGS, _snippet_result())
-    events.append({"type": "turn.completed", "usage": {}})
-    return "\n".join(json.dumps(e) for e in events) + "\n"
-
-
 def test_codex_run_passes_and_web_search_items_are_recorded(tmp_path):
     row = _run(tmp_path, _codex(), codex=True)
     assert row["verdict"] == "PASS", row["checks"]
@@ -349,8 +269,6 @@ def test_codex_run_passes_and_web_search_items_are_recorded(tmp_path):
     row = _run(tmp_path / "2", _codex([web]), codex=True)
     assert row["tool_sequence"][0] == "web_search" and _status(row)["no_bypass"] == "WARN"
 
-
-# --- extractors -----------------------------------------------------------------
 
 def test_extractors_canonicalise_ids_and_counts():
     ext, values = verify.extractors, verify.values

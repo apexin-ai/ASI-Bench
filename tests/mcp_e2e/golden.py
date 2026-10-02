@@ -7,16 +7,16 @@ per-call status, the observed tool sequence — so that a refactor of
 ``scripts/mcp/e2e/verify_run.py`` cannot silently change a check nobody
 asserted on.
 
-Every test module ``test_mcp_e2e_*.py`` that loads the verifier as a
-module-level ``verify`` is covered automatically: an autouse fixture wraps
+Every test module in ``tests/mcp_e2e/`` that has a module-level ``verify``
+(``support.verify``) is covered automatically: an autouse fixture wraps
 ``verify.verify_one`` and, when the test passes, the recorded snapshots must
-equal ``tests/golden/mcp_e2e_verify.json[<nodeid>]``. A full run also fails on
+equal ``tests/mcp_e2e/golden.json[<nodeid>]``. A full run also fails on
 stale entries (tests that no longer exist or no longer call the verifier).
 
 Intended behaviour changes are recorded by regenerating the file; the change
 then shows up in the diff::
 
-    MCP_E2E_GOLDEN=update uv run --frozen pytest -q tests/test_mcp_e2e_*.py
+    MCP_E2E_GOLDEN=update uv run --frozen pytest -q tests/mcp_e2e
 
 Update mode only writes after a green run of whole test files (no ``-k`` or
 ``file::test`` selections), because it replaces those files' entries.
@@ -29,8 +29,9 @@ from pathlib import Path
 
 import pytest
 
-GOLDEN = Path(__file__).resolve().parent / "golden" / "mcp_e2e_verify.json"
-MODULE_PREFIX = "test_mcp_e2e_"
+HERE = Path(__file__).resolve().parent
+GOLDEN = HERE / "golden.json"
+DIR_PREFIX = "tests/mcp_e2e/"            # nodeid prefix of the covered test files
 ENV = "MCP_E2E_GOLDEN"
 
 _state: dict = {"golden": None, "recorded": {}, "callers": set(), "passed": set(), "deselected": set()}
@@ -65,7 +66,7 @@ def snapshot(row: dict) -> dict:
 
 def _covered(request) -> bool:
     module = request.module
-    return module.__name__.rsplit(".", 1)[-1].startswith(MODULE_PREFIX) \
+    return Path(module.__file__).resolve().parent == HERE \
         and hasattr(getattr(module, "verify", None), "verify_one")
 
 
@@ -142,7 +143,7 @@ def _report(config, message: str) -> None:
 def pytest_sessionfinish(session, exitstatus) -> None:
     config = session.config
     ran = {item.nodeid for item in session.items}
-    files = {_file_of(n) for n in ran if Path(_file_of(n)).name.startswith(MODULE_PREFIX)}
+    files = {_file_of(n) for n in ran if _file_of(n).startswith(DIR_PREFIX)}
     if not files:
         return
     deselected = {n for n in _state["deselected"] if _file_of(n) in files}

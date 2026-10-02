@@ -1,34 +1,21 @@
-"""Offline checks for the s4 grating-spectrum MCP E2E task and the verify_run answer `select`
-it needs (an element of a returned spectrum). No MCP server, no S4."""
-import importlib
-import importlib.util
+"""s4_grating_spectrum (answers selected from a returned spectrum, structured output): generator,
+scorer, verifier scenarios. No MCP server, no S4."""
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-E2E_TASKS = ROOT / "examples/mcp-e2e-tasks"
-TASK_DIR = E2E_TASKS / "mcp_e2e/s4_grating_spectrum"
-TASK_ID = "mcp_e2e.s4_grating_spectrum"
-INSTANCE_ID = f"{TASK_ID}__seed31415"
+from . import support
+from .support import claude, codex, jsonl
+
+TASK = support.Task("mcp_e2e.s4_grating_spectrum")
+TASK_DIR, TASK_ID, INSTANCE_ID = TASK.dir, TASK.task_id, TASK.instance_id
 SERVER = "s4"
 
-
-def _load(path, name):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-generate_gt = _load(TASK_DIR / "generate_gt.py", "mcp_e2e_s4_generate_gt")
-scorer = _load(TASK_DIR / "custom_scorer.py", "mcp_e2e_s4_custom_scorer")
-verify = _load(ROOT / "scripts/mcp/e2e/verify_run.py", "mcp_e2e_s4_verify_run")
-sys.path.insert(0, str(ROOT / "scripts/mcp/e2e"))
-smoke = importlib.import_module("e2e_smoke.servers.s4")
+generate_gt = TASK.module("generate_gt")
+scorer = TASK.module("custom_scorer")
+verify = support.verify
+smoke = support.smoke_module("s4")
+_status = support.statuses
 
 
 @pytest.fixture(scope="module")
@@ -64,7 +51,66 @@ def _answer(spectrum, reference):
             "wavelength_at_R_max_um": spectrum["wavelength"][j]}
 
 
-# --- task ---------------------------------------------------------------------
+
+def _dirs(tmp_path, prediction, reference):
+    return support.score_dirs(tmp_path, prediction, reference)
+
+
+def _eval():
+    return TASK.eval_config()
+
+
+def _total(pred, ref):
+    return TASK.total(pred, ref)
+
+
+def _b1_calls(reference, sanity=False, orders=None, **overrides):
+    args = {**reference["tool_arguments"], **overrides}
+    calls = [("check_engine_sanity", {}, {"R": reference["sanity_R"] + 1e-17, "T": 1 - reference["sanity_R"],
+                                          "A": 0.0, "expected_R": 0.3055, "ok": True})] if sanity else []
+    calls.append(("simulate_stack_spectrum", args, _tool_spectrum(reference, orders=orders)))
+    return calls
+
+
+def _structured(tool, payload):
+    """The tool result as Claude Code shows it: the server's FastMCP ``structuredContent``
+    (``{"result": ...}``, observed with mcp 1.30.0) instead of the text block. check_engine_sanity
+    returns a str; simulate_stack_spectrum returns content blocks."""
+    text = json.dumps(payload)
+    if tool == "check_engine_sanity":
+        return json.dumps({"result": text})
+    return json.dumps({"result": [{"type": "text", "text": text, "annotations": None, "_meta": None}]})
+
+
+
+def _stream(calls, extra=(), structured=True):
+    events = [claude.init(SERVER, ["Bash", "Read", "Write", "WebFetch", "WebSearch",
+                                   f"mcp__{SERVER}__check_engine_sanity", f"mcp__{SERVER}__simulate_stack_spectrum"])]
+    for k, (name, args) in enumerate(extra):
+        events += claude.call(f"x{k}", name, args, "ok")
+    for k, (tool, args, payload) in enumerate(calls):
+        events += claude.call(f"c{k}", f"mcp__{SERVER}__{tool}", args,
+                              _structured(tool, payload) if structured else json.dumps(payload))
+    events.append(claude.result(len(calls)))
+    return jsonl(events)
+
+
+def _codex(calls):
+    events = list(codex.START)
+    for k, (tool, args, payload) in enumerate(calls):
+        events += codex.mcp(f"m{k}", SERVER, tool, args, json.dumps(payload))
+    events.append(codex.done())
+    return jsonl(events)
+
+
+def _run(tmp_path, stream, reference, answer, codex=False, files=None):
+    return TASK.verify(tmp_path, stream, reference=reference, answer=answer,
+                       harness="codex" if codex else "claude", persist=not codex, files=files)
+
+
+def _good(reference):
+    return _answer(_tool_spectrum(reference), reference)
+
 
 def test_cases_are_deterministic_varied_and_meet_every_selection_rule():
     assert generate_gt.build_case(31415)["case"] == generate_gt.build_case(31415)["case"]
@@ -152,30 +198,6 @@ def test_task_meta_is_test_status_with_numpy_only():
     assert meta["runtime"]["packages"] == ["numpy>=2.0"]
 
 
-# --- scorer -------------------------------------------------------------------
-
-def _dirs(tmp_path, prediction, reference):
-    pred, ref = tmp_path / "pred", tmp_path / "ref"
-    pred.mkdir(parents=True)
-    ref.mkdir(parents=True)
-    if prediction is not None:
-        (pred / "result.json").write_text(json.dumps(prediction) if not isinstance(prediction, str) else prediction)
-    if reference is not None:
-        (ref / "reference.json").write_text(json.dumps(reference))
-    return pred, ref
-
-
-def _eval():
-    import yaml
-    return yaml.safe_load((TASK_DIR / "task_eval.yaml").read_text())["evaluation"]
-
-
-def _total(pred, ref):
-    from ai4sci_bench.core.scorer import get_scorer
-    return sum(get_scorer(item["scorer"]).score(pred, ref, {**item["config"], "weight": item["weight"]}).score
-               for item in _eval()["scoring"])
-
-
 def test_tool_values_score_full(tmp_path, reference):
     assert _total(*_dirs(tmp_path, _answer(_tool_spectrum(reference), reference), reference)) == pytest.approx(100.0)
 
@@ -221,105 +243,6 @@ def test_missing_reference_and_bad_key_are_evaluator_failures(tmp_path, referenc
     assert detail.details["scorer_internal_error"]
 
 
-# --- verify_run: Claude stream-json and Codex JSONL -----------------------------
-
-def _b1_calls(reference, sanity=False, orders=None, **overrides):
-    args = {**reference["tool_arguments"], **overrides}
-    calls = [("check_engine_sanity", {}, {"R": reference["sanity_R"] + 1e-17, "T": 1 - reference["sanity_R"],
-                                          "A": 0.0, "expected_R": 0.3055, "ok": True})] if sanity else []
-    calls.append(("simulate_stack_spectrum", args, _tool_spectrum(reference, orders=orders)))
-    return calls
-
-
-def _structured(tool, payload):
-    """The tool result as Claude Code shows it: the server's FastMCP ``structuredContent``
-    (``{"result": ...}``, observed with mcp 1.30.0) instead of the text block. check_engine_sanity
-    returns a str; simulate_stack_spectrum returns content blocks."""
-    text = json.dumps(payload)
-    if tool == "check_engine_sanity":
-        return json.dumps({"result": text})
-    return json.dumps({"result": [{"type": "text", "text": text, "annotations": None, "_meta": None}]})
-
-
-def _stream(calls, extra=(), structured=True):
-    tools = ["Bash", "Read", "Write", "WebFetch", "WebSearch",
-             f"mcp__{SERVER}__check_engine_sanity", f"mcp__{SERVER}__simulate_stack_spectrum"]
-    events = [{"type": "system", "subtype": "init", "mcp_servers": [{"name": SERVER, "status": "connected"}],
-               "tools": tools}]
-
-    def event(cid, name, args, text):
-        return [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": cid, "name": name,
-                                                               "input": args}]}},
-                {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": cid,
-                                                          "is_error": False,
-                                                          "content": [{"type": "text", "text": text}]}]}}]
-    for k, (name, args) in enumerate(extra):
-        events += event(f"x{k}", name, args, "ok")
-    for k, (tool, args, payload) in enumerate(calls):
-        events += event(f"c{k}", f"mcp__{SERVER}__{tool}", args,
-                        _structured(tool, payload) if structured else json.dumps(payload))
-    events.append({"type": "result", "subtype": "success", "is_error": False, "num_turns": len(calls)})
-    return "\n".join(json.dumps(e) for e in events) + "\n"
-
-
-def _codex(calls):
-    events = [{"type": "thread.started", "thread_id": "t"}, {"type": "turn.started"}]
-    for k, (tool, args, payload) in enumerate(calls):
-        item = {"id": f"m{k}", "type": "mcp_tool_call", "server": SERVER, "tool": tool, "arguments": args,
-                "status": "completed", "error": None,
-                "result": {"content": [{"type": "text", "text": json.dumps(payload)}], "structured_content": None}}
-        events += [{"type": "item.started", "item": {**item, "status": "in_progress", "result": None}},
-                   {"type": "item.completed", "item": item}]
-    events.append({"type": "turn.completed", "usage": {}})
-    return "\n".join(json.dumps(e) for e in events) + "\n"
-
-
-def _persist_like_run(stream):
-    from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator
-    from ai4sci_bench.trajectory.claude_extractor import extract_from_jsonl
-
-    orchestrator = object.__new__(BenchmarkOrchestrator)
-    persisted = "".join(json.dumps(orchestrator._redact_raw_prompt_fields(json.loads(line))) + "\n"
-                        for line in stream.splitlines() if line.strip())
-    return persisted, [step.to_dict() for step in extract_from_jsonl(stream, INSTANCE_ID).steps]
-
-
-def _run(tmp_path, stream, reference, answer, codex=False, files=None):
-    results, instances = tmp_path / "out", tmp_path / "instances"
-    task_out = results / TASK_ID
-    outputs = task_out / f"{INSTANCE_ID}__b1.outputs"
-    outputs.mkdir(parents=True)
-    ref = instances / INSTANCE_ID / "reference"
-    ref.mkdir(parents=True)
-    ref.joinpath("reference.json").write_text(json.dumps(reference))
-    outputs.joinpath("result.json").write_text(json.dumps(answer))
-    for name, text in (files or {}).items():
-        outputs.joinpath(name).write_text(text)
-    stdout = f"{INSTANCE_ID}__b1.agent_stdout.jsonl"
-    agent = {"raw_stdout_file": stdout, "persisted_outputs": {"dir": outputs.name}}
-    if codex:
-        task_out.joinpath(stdout).write_text(stream)
-    else:
-        persisted, steps = _persist_like_run(stream)
-        traj = f"{INSTANCE_ID}__b1.trajectory.json"
-        task_out.joinpath(stdout).write_text(persisted)
-        task_out.joinpath(traj).write_text(json.dumps(steps))
-        agent["trajectory_file"] = traj
-    result = {"task_id": TASK_ID, "instance_id": INSTANCE_ID, "prompt_level": "b1", "status": "completed",
-              "agent_output": agent}
-    path = task_out / f"{INSTANCE_ID}__b1.json"
-    path.write_text(json.dumps(result))
-    return verify.verify_one(path, result, instances, E2E_TASKS)
-
-
-def _status(row):
-    return {name: check["status"] for name, check in row["checks"].items()}
-
-
-def _good(reference):
-    return _answer(_tool_spectrum(reference), reference)
-
-
 def test_genuine_b1_run_passes_every_check(tmp_path, reference):
     row = _run(tmp_path, _stream(_b1_calls(reference)), reference, _good(reference))
     assert row["verdict"] == "PASS", row["checks"]
@@ -330,19 +253,6 @@ def test_genuine_b1_run_passes_every_check(tmp_path, reference):
 def test_plain_text_results_pass_too(tmp_path, reference):
     row = _run(tmp_path, _stream(_b1_calls(reference, sanity=True), structured=False), reference, _good(reference))
     assert row["verdict"] == "PASS" and set(_status(row).values()) == {"PASS"}
-
-
-def test_unwrap_structured_output():
-    payload = {"R": 0.3, "ok": True}
-    assert verify.values.unwrap_structured({"result": json.dumps(payload)}) == payload
-    blocks = [{"type": "text", "text": json.dumps(payload), "annotations": None}, {"type": "image", "data": "x"}]
-    assert verify.values.unwrap_structured({"result": blocks}) == payload
-    assert verify.values.unwrap_structured({"result": 1.5}) == 1.5
-    assert verify.values.unwrap_structured({"result": "not json"}) == "not json"
-    assert verify.values.unwrap_structured({"result": [{"url": "a"}]}) == [{"url": "a"}]   # not content blocks
-    assert verify.values.unwrap_structured({"result": 1, "other": 2}) == {"result": 1, "other": 2}
-    call = verify.evidence.ToolCall(result_text=json.dumps({"result": "0.25"}))
-    assert verify.values.read(call, verify.spec.Selector()) == 0.25
 
 
 def test_sanity_call_is_judged_when_made(tmp_path, reference):
@@ -414,31 +324,3 @@ def test_home_made_rcwa_file_is_flagged(tmp_path, reference):
     row = _run(tmp_path / "b", _stream(_b1_calls(reference)), reference, _good(reference),
                files={"solve.py": "from grcwa import obj\n"})
     assert _status(row)["no_bypass"] == "FAIL"
-
-
-# --- verify_run: answer `select` ----------------------------------------------
-
-def _call(payload):
-    return verify.evidence.ToolCall(result_text=json.dumps(payload), is_error=False)
-
-
-def _pick(call, key, ref, **select):
-    selector = verify.spec.Selector(key=key, select=verify.spec.SelectSpec(**select) if select else None)
-    return verify.values.read(call, selector, ref)
-
-
-def test_source_value_select_modes():
-    call = _call({"wavelength": [1.0, 1.1, 1.2], "R": [0.1, 0.3, 0.2], "T": [0.9, 0.7, 0.8]})
-    ref = {"lam": 1.1, "far": 1.15}
-    assert _pick(call, "R", ref, reduce="max") == 0.3
-    assert _pick(call, "T", ref, reduce="min") == 0.7
-    assert _pick(call, "wavelength", ref, argmax_of="R") == 1.1
-    assert _pick(call, "T", ref, argmin_of="R") == 0.9
-    assert _pick(call, "T", ref, where_key="wavelength", equals_reference_key="lam") == 0.7
-    assert _pick(call, "T", ref, where_key="wavelength", equals_reference_key="far") is None
-    assert _pick(call, "A", ref, reduce="max") is None
-    assert _pick(call, "R", ref, argmax_of="missing") is None
-    assert _pick(call, "R", ref) == [0.1, 0.3, 0.2]
-    assert _pick(_call({"R": 0.5}), "R", ref, reduce="max") is None
-    assert _pick(_call({"R": 0.5}), "R", ref) == 0.5
-    assert _pick(verify.evidence.ToolCall(result_text="not json"), "R", ref, reduce="max") is None

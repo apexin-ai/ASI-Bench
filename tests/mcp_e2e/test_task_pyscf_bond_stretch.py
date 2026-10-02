@@ -1,16 +1,14 @@
-"""Offline checks for the pyscf bond-stretch MCP E2E task and verify_run schema 2 (no MCP server, no PySCF)."""
-import importlib.util
+"""pyscf_bond_stretch (scan -> plot chain, image result): generator, scorers, verifier scenarios
+(Claude stream-json). Codex runs of this task are in test_verify_evidence.py."""
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-E2E_TASKS = ROOT / "examples/mcp-e2e-tasks"
-TASK_DIR = E2E_TASKS / "mcp_e2e/pyscf_bond_stretch"
-TASK_ID = "mcp_e2e.pyscf_bond_stretch"
-INSTANCE_ID = f"{TASK_ID}__seed31415"
+from . import support
+from .support import claude, jsonl
+
+TASK = support.Task("mcp_e2e.pyscf_bond_stretch")
+TASK_DIR, TASK_ID, INSTANCE_ID = TASK.dir, TASK.task_id, TASK.instance_id
 
 LENGTHS = [0.994, 1.0711428571428572, 1.1482857142857144, 1.2254285714285715,
            1.3025714285714287, 1.3797142857142859, 1.456857142857143, 1.534]
@@ -22,22 +20,45 @@ REFERENCE = {"smiles": "C#N", "atom1_idx": 0, "atom2_idx": 2, "start_dist": 0.99
 SCAN_ARGS = {"smiles_string": "C#N", "atom1_idx": 0, "atom2_idx": 2, "start_dist": 0.994, "end_dist": 1.534,
              "num_points": 8, "basis": "sto-3g"}
 PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAA+gAAAJYCAYAAADxHswl"
+ENERGY_CFG = {"weight": 80, "full_score_tol": 1e-5, "zero_score_tol": 1e-3, "grid_tol": 1e-6}
+SCAN = "mcp__pyscf__run_bond_stretch_calculation_mcp"
+PLOT = "mcp__pyscf__plot_energy_scan_image_mcp"
+
+generate_gt = TASK.module("generate_gt")
+scorer = TASK.module("custom_scorer")
+verify = support.verify
+_status = support.statuses
 
 
-def _load(path, name):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+def _dirs(tmp_path, prediction, reference=REFERENCE):
+    return support.score_dirs(tmp_path, prediction, reference)
 
 
-generate_gt = _load(TASK_DIR / "generate_gt.py", "mcp_e2e_bond_generate_gt")
-scorer = _load(TASK_DIR / "custom_scorer.py", "mcp_e2e_bond_custom_scorer")
-verify = _load(ROOT / "scripts/mcp/e2e/verify_run.py", "mcp_e2e_bond_verify_run")
+def _answer(**overrides):
+    return {"molecule": "hydrogen cyanide", "bond_lengths": LENGTHS, "energies_hartree": ENERGIES,
+            "min_bond_length": LENGTHS[1], "min_energy_hartree": ENERGIES[1], **overrides}
 
 
-# --- task ---------------------------------------------------------------------
+def _stream(scan_args=SCAN_ARGS, plot_input=None, plot=True, plot_result=None, bash=()):
+    events = [claude.init("pyscf", ["Bash", "Read", "Write", SCAN, PLOT])]
+    events += [claude.tool_use(f"b{i}", "Bash", {"command": command}) for i, command in enumerate(bash)]
+    events += claude.call("s1", SCAN, scan_args, json.dumps({"bond_lengths": LENGTHS, "energies": ENERGIES}, indent=2))
+    if plot:
+        image = [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": PNG_B64}}]
+        events += claude.call("p1", PLOT, plot_input or {"bond_lengths": LENGTHS, "energies": ENERGIES},
+                              plot_result or image)
+    events.append(claude.result(4))
+    return jsonl(events)
+
+
+def _persist_like_run(stream):
+    return support.persist_like_run(stream, instance_id=INSTANCE_ID)
+
+
+def _run(tmp_path, stream, answer=None, edit_trajectory=None):
+    return TASK.verify(tmp_path, stream, reference=REFERENCE, answer=answer or _answer(),
+                       edit_trajectory=edit_trajectory)
+
 
 def test_cases_are_deterministic_and_within_ranges():
     assert generate_gt.build_case(31415) == generate_gt.build_case(31415)
@@ -69,27 +90,6 @@ def test_prompts_name_tools_only_at_b1_and_forbid_local_work():
         named = ("`run_bond_stretch_calculation_mcp`" in text, "`plot_energy_scan_image_mcp`" in text)
         assert named == ((True, True) if level == "b1" else (False, False))
         assert "mcp__" not in text and "Claude" not in text
-
-
-# --- scorer -------------------------------------------------------------------
-
-def _dirs(tmp_path, prediction, reference=REFERENCE):
-    pred, ref = tmp_path / "pred", tmp_path / "ref"
-    pred.mkdir(parents=True)
-    ref.mkdir(parents=True)
-    if prediction is not None:
-        (pred / "result.json").write_text(json.dumps(prediction))
-    if reference is not None:
-        (ref / "reference.json").write_text(json.dumps(reference))
-    return pred, ref
-
-
-def _answer(**overrides):
-    return {"molecule": "hydrogen cyanide", "bond_lengths": LENGTHS, "energies_hartree": ENERGIES,
-            "min_bond_length": LENGTHS[1], "min_energy_hartree": ENERGIES[1], **overrides}
-
-
-ENERGY_CFG = {"weight": 80, "full_score_tol": 1e-5, "zero_score_tol": 1e-3, "grid_tol": 1e-6}
 
 
 def test_scorers_give_full_credit_to_the_reference(tmp_path):
@@ -126,75 +126,6 @@ def test_submission_and_evaluator_failures_are_separated(tmp_path):
     no_ref = scorer.ScanMinimum().score(*_dirs(tmp_path / "r", _answer(), reference=None), {"weight": 20})
     assert no_ref.details["scorer_internal_error"] is True
     assert no_ref.details["failure_kind"] == "missing_evaluator_input"
-
-
-# --- verify_run schema 2 ----------------------------------------------------------
-
-SCAN = "mcp__pyscf__run_bond_stretch_calculation_mcp"
-PLOT = "mcp__pyscf__plot_energy_scan_image_mcp"
-
-
-def _stream(scan_args=SCAN_ARGS, plot_input=None, plot=True, plot_result=None, bash=()):
-    scan_result = json.dumps({"bond_lengths": LENGTHS, "energies": ENERGIES}, indent=2)
-    events = [{"type": "system", "subtype": "init", "mcp_servers": [{"name": "pyscf", "status": "connected"}],
-               "tools": ["Bash", "Read", "Write", SCAN, PLOT]}]
-    for i, command in enumerate(bash):
-        events.append({"type": "assistant", "message": {"content": [
-            {"type": "tool_use", "id": f"b{i}", "name": "Bash", "input": {"command": command}}]}})
-    events += [
-        {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "s1", "name": SCAN, "input": scan_args}]}},
-        {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "s1", "is_error": False,
-                                                  "content": [{"type": "text", "text": scan_result}]}]}},
-    ]
-    if plot:
-        events += [
-            {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "p1", "name": PLOT,
-                                                           "input": plot_input or {"bond_lengths": LENGTHS,
-                                                                                   "energies": ENERGIES}}]}},
-            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "p1", "is_error": False,
-                                                      "content": plot_result or [{"type": "image", "source": {
-                                                          "type": "base64", "media_type": "image/png",
-                                                          "data": PNG_B64}}]}]}},
-        ]
-    events.append({"type": "result", "subtype": "success", "is_error": False, "num_turns": 4})
-    return "\n".join(json.dumps(e) for e in events) + "\n"
-
-
-def _persist_like_run(stream):
-    from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator
-    from ai4sci_bench.trajectory.claude_extractor import extract_from_jsonl
-
-    orchestrator = object.__new__(BenchmarkOrchestrator)
-    persisted = "".join(json.dumps(orchestrator._redact_raw_prompt_fields(json.loads(line))) + "\n"
-                        for line in stream.splitlines() if line.strip())
-    return persisted, [step.to_dict() for step in extract_from_jsonl(stream, INSTANCE_ID).steps]
-
-
-def _run(tmp_path, stream, answer=None, edit_trajectory=None):
-    results, instances = tmp_path / "out", tmp_path / "instances"
-    task_out = results / TASK_ID
-    outputs = task_out / f"{INSTANCE_ID}__b1.outputs"
-    outputs.mkdir(parents=True)
-    ref = instances / INSTANCE_ID / "reference"
-    ref.mkdir(parents=True)
-    ref.joinpath("reference.json").write_text(json.dumps(REFERENCE))
-    outputs.joinpath("result.json").write_text(json.dumps(answer or _answer()))
-    persisted, steps = _persist_like_run(stream)
-    if edit_trajectory:
-        edit_trajectory(steps)
-    stdout, traj = f"{INSTANCE_ID}__b1.agent_stdout.jsonl", f"{INSTANCE_ID}__b1.trajectory.json"
-    task_out.joinpath(stdout).write_text(persisted)
-    task_out.joinpath(traj).write_text(json.dumps(steps))
-    result = {"task_id": TASK_ID, "instance_id": INSTANCE_ID, "prompt_level": "b1", "status": "completed",
-              "agent_output": {"raw_stdout_file": stdout, "trajectory_file": traj,
-                               "persisted_outputs": {"dir": outputs.name}}}
-    path = task_out / f"{INSTANCE_ID}__b1.json"
-    path.write_text(json.dumps(result))
-    return verify.verify_one(path, result, instances, E2E_TASKS)
-
-
-def _status(row):
-    return {name: check["status"] for name, check in row["checks"].items()}
 
 
 def test_extractor_keeps_image_results_observable():
@@ -253,11 +184,3 @@ def test_wrong_scan_inputs_fail(tmp_path):
     row = _run(tmp_path, _stream(scan_args={**SCAN_ARGS, "atom2_idx": 1}))
     # energies returned are still the reference ones here, so only the inputs differ
     assert row["checks"]["tool_correct"]["per_call"]["scan"]["status"] == "WARN"
-
-
-def test_schema_1_specs_are_normalised():
-    spec = json.loads((E2E_TASKS / "mcp_e2e/pyscf_rhf_energy/e2e_check.json").read_text())
-    norm = verify.normalize_spec(spec)
-    assert [c["tool"] for c in norm["calls"]] == ["pyscf_rhf_energy"]
-    assert norm["answers"][0]["from_call"] == "pyscf_rhf_energy"
-    assert verify.normalize_spec(norm) is norm

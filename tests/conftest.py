@@ -1,7 +1,7 @@
 """Shared test fixtures."""
 
-# Golden snapshot of every MCP E2E verify_one result (see tests/mcp_e2e_golden.py).
-pytest_plugins = ["tests.mcp_e2e_golden"]
+# Golden snapshot of every MCP E2E verify_one result (see tests/mcp_e2e/golden.py).
+pytest_plugins = ["tests.mcp_e2e.golden"]
 
 import json
 import shutil
