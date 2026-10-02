@@ -1407,4 +1407,13 @@
   disabled in config"; pyscf now has its own HOME/cwd/TMPDIR (the visualize HTML
   is a declared cwd artefact); arxiv now gets a TMPDIR; "unknown tool is an
   error" runs after the server's own checks for all five servers.
-- Commit: (pending).
+- AWS re-run (amd64, 2026-10-02) of all five smokes on the new layout: all
+  PASS, no FAIL; per server the only status differences against the previous
+  reports are the expected ones ("config matches manifest" PASS replacing the
+  per-server env checks; pyscf's new "cwd untouched" PASS). pyscf 21/8/0,
+  arxiv 16/8/0, jsbsim 17/17/0, s4 41/7/0, psi4 14/11/0 (PASS/WARN/FAIL).
+- Lesson: for a refactor of scripts that only run on a remote host, an AST
+  comparison of same-named functions against `git show HEAD:` plus a
+  per-check status diff of old vs new reports is a cheap, complete parity
+  check; keep the old reports and write new ones beside them.
+- Commit: `cbf026f`.
