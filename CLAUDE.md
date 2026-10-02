@@ -129,7 +129,13 @@
   conda-only 依赖（psi4）用 `conda-explicit`：manifest `conda` 精确 `name=version` specs，
   按平台提交带 SHA-256 的 `@EXPLICIT` lock（header 与 manifest 不符即拒绝），
   `micromamba create --file` 无求解安装，`setup.py <id> --lock` 重新生成；
+  安装方式在 `setup.py` 的 `INSTALLERS` 注册表中各自声明字段/校验/`install`/可选 `lock`，
+  manifest 条目只允许公共键加本方式字段（拼错或他方式字段即报错），主机检查为 `HOST_PROBES`；
   只 clone 不 vendor 上游；
+  smoke 入口为 `smoke.py <id>`：共享流程与通用检查（revision、config 等于 `setup.py` 渲染结果、
+  握手/tools/list、未知工具报错、存活、stdout 纯 JSON-RPC、cwd 未被写入）在 `e2e_smoke/runner.py`，
+  每个 server 只写 `e2e_smoke/servers/<id>.py`（参考值与专属检查，声明 `SMOKE`），复用
+  `Caller.json`、`check_rejected` 与 `helpers.py`，不在 server 文件里重复实现；manifest 无 `smoke` 字段；
   smoke 用 server 自身 venv 在进程外独立计算参考值，L0/L1 分级，
   smoke 必须覆盖 manifest 列出的全部工具：数值错误为 FAIL，上游缺陷（in-band 错误、
   忽略参数、误导性返回、间歇性错误、stdout 非 JSON 行）记为 WARN；探测已知数值缺陷
@@ -147,10 +153,23 @@
   数值答案可用 `from_calls` 多来源，非数值串联值（如 `session_id`）按字符串精确比对，
   `"compare": "geometry"` 按原子行在 `abs_tol` Å 内比对；结果/答案 key 可用点路径取嵌套 JSON）
   读取 run 产物判定，框架评分契约不变。
+  verifier 实现在 `scripts/mcp/e2e/e2e_verify/`（spec/extractors/values/evidence/checks，仅标准库），
+  `verify_run.py` 只是 CLI：`e2e_check.json` 加载时严格校验（未知键、非法枚举、悬空调用引用、
+  不适用的键均报 `invalid_spec`）；所有取值走同一 `Selector`（key/select/extract），比较器共用，
+  新值类型只加 extractor 或 comparator，不在单个检查里打补丁；工具名按 `mcp__<server>__<tool>`
+  精确匹配；日志解析器按结果的 `agent_name` 选择，未知 agent 依次试探。
+  verifier 行为由 `tests/mcp_e2e/golden.json` 快照锁定（每个 `verify_one` 调用的
+  verdict/各项检查/per-call 状态）；有意改变判定时用 `MCP_E2E_GOLDEN=update` 整文件重生成并在 diff 中审阅。
+  MCP E2E 离线测试全部在 `tests/mcp_e2e/`：共享构件只在 `support.py`（加载器、Claude/Codex 日志构造、
+  `persist_like_run`、`Task.verify`、评分目录、smoke 桩），按被测对象分文件（`test_setup`、`test_smoke_runner`、
+  `test_smoke_<id>`、`test_verify_{spec,values,evidence}`、`test_task_<task>`）；所有 task 通用约定在
+  `test_task_contract.py` 参数化覆盖，新 task 只写 `test_task_<task>.py` 的数据与场景，不复制 run 目录/日志 helper。
   `--mcp-config` 强制 search mode，Claude 有 WebSearch/WebFetch、Codex 有 web_search，
   联网类 fake task 必须把它们纳入 bypass 检查。
-  持久化 stream-json 会脱敏 user 事件（含 tool_result），工具返回值须从同 tool_call_id
-  的 trajectory 补齐；Claude 对带 outputSchema 的 FastMCP 工具展示 `structuredContent`
+  持久化 stdout（Claude/Codex）会脱敏 user 事件（含 tool_result）并把绝对路径替换为 `<abs_path>`；
+  工具返回值与 shell 命令原文须从同 call id 的 trajectory（由未脱敏 stdout 提取）补齐，
+  `no_bypass` 扫描命令原文，无法还原的脱敏命令记 WARN；测试的 `persist_like_run` 必须调用真实
+  `_sanitize_raw_artifact_text`，不得手写近似；Claude extractor 遇到非对象 message 跳过而不抛错；Claude 对带 outputSchema 的 FastMCP 工具展示 `structuredContent`
   `{"result": ...}`，verifier 须先解包；Claude/Codex trajectory 不保存图片内容，只在 tool_result metadata 记录
   `content_types` / `image_media_types`。Codex 证据来自 `exec --json` 的 `mcp_tool_call`
   item（统一命名为 `mcp__<server>__<tool>`，输入与结果在持久化 JSONL 中保留）；Codex 无

@@ -9,7 +9,7 @@ stay fixed, and the RHF/STO-3G energy is computed at every point.
 
 Only rigid molecules are used: their UFF minimum is unique up to rotation and
 H permutation, so the server's unseeded geometry gives the same energies
-(measured agreement ~1e-8 Ha, see scripts/mcp/e2e/README.md).
+(measured agreement ~1e-8 Ha, see scripts/mcp/e2e/e2e_smoke/servers/pyscf.py).
 
 Framework call: python generate_gt.py --output-dir <dir> --params '<json>'
 Needs PySCF and RDKit: generate with ``asibench generate --sandbox task``.

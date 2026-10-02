@@ -2,7 +2,7 @@
 
 Run with the server's own virtualenv (it provides numpy for the references)::
 
-    ~/mcp/s4/.venv/bin/python scripts/mcp/e2e/smoke_s4.py --config ~/mcp/s4.mcp.json
+    ~/mcp/s4/.venv/bin/python scripts/mcp/e2e/smoke.py s4 --config ~/mcp/s4.mcp.json
 
 No network is needed. The references are computed here, in this process, with
 code that shares nothing with S4 or the server:
@@ -18,44 +18,33 @@ code that shares nothing with S4 or the server:
   Li's (inverse) rule with many orders gives the converged answer, used to
   report how far S4's default formulation is from convergence.
 
-Levels reported:
-  L0  initialize + tools/list (stable, matches manifest), launch environment,
-      the vendored libS4.so is the upstream binary
-  L1  real tools/call of both tools: Fresnel self-test; unpatterned stacks
-      (README example, quarter-wave mirror at 0/30/60 deg in TE and TM, an
-      absorbing film, both material notations) against the TMM; gratings
-      against the 1D RCWA (TE/TM, oblique, diffracting, absorbing ridge);
-      2D-pattern symmetry and translation invariance; the PNG plot;
-      repeatability; validation errors; defect probes
+L0 adds: the vendored libS4.so is the upstream binary. L1: real tools/call of
+both tools: Fresnel self-test; unpatterned stacks (README example,
+quarter-wave mirror at 0/30/60 deg in TE and TM, an absorbing film, both
+material notations) against the TMM; gratings against the 1D RCWA (TE/TM,
+oblique, diffracting, absorbing ridge); 2D-pattern symmetry and translation
+invariance; the PNG plot; repeatability; validation errors; defect probes (the
+shared L0/L1 checks are in ``e2e_smoke/runner.py``).
 
 Upstream defects that do not make a correctly used tool wrong (silently
 accepted inputs that give unphysical or misleading spectra, in-band errors,
 stdout chatter) are WARN; wrong numbers for correct inputs are FAIL.
-
-The server runs from a temporary cwd, HOME and TMPDIR with a minimal
-environment and no operator credentials.
 """
 from __future__ import annotations
 
-import argparse
 import base64
 import cmath
-import datetime as dt
 import hashlib
 import json
 import math
 import struct
-import subprocess
-import sys
-import tempfile
-from collections import Counter
 from pathlib import Path
 
 import numpy as np
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-from smoke_common import Caller, MCPError, Report, StdioMCP, package_versions, text_of  # noqa: E402
+from ..client import text_of
+from ..helpers import image_blocks, png_size
+from ..runner import Caller, Report, Session, Smoke, check_rejected, json_result
 
 # sha256 of src/mcp_s4_rcwa/s4lib/libS4.so at the pinned revision (x86-64, GCC 13.3).
 UPSTREAM_LIBS4_SHA256 = "f4097479f835fd429b1865264c29d8338ddce5fb3a6612c78ecba782c25e4d98"
@@ -359,13 +348,6 @@ def spectrum_problems(spectrum, arguments: dict) -> list[str]:
     return problems
 
 
-def png_size(data: bytes) -> tuple[int, int]:
-    """Width and height from a PNG IHDR chunk."""
-    if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
-        raise ValueError("not a PNG")
-    return struct.unpack(">II", data[16:24])
-
-
 def unphysical(spectrum: dict, slack: float = 1e-9) -> list[str]:
     """Values outside 0 <= R, T, A <= 1 (for passive structures)."""
     bad = []
@@ -385,14 +367,7 @@ def simulate(call: Caller, report: Report, check: str, arguments: dict, *, allow
     result = call(check, "simulate_stack_spectrum", arguments, allow_error=allow_error)
     if result is None:
         return None, []
-    images = [b for b in result.get("content", []) if b.get("type") == "image"]
-    if result.get("isError"):
-        return {"_isError": True, "_text": text_of(result)}, images
-    try:
-        return json.loads(text_of(result)), images
-    except json.JSONDecodeError:
-        report.add("L1", check, "FAIL", f"result is not JSON: {text_of(result)[:200]!r}")
-        return None, images
+    return json_result(report, check, result), image_blocks(result)
 
 
 def compare(report: Report, check: str, spectrum, arguments: dict, reference, tol: float, what: str) -> None:
@@ -563,7 +538,7 @@ def check_repeatability(call: Caller, report: Report) -> None:
                    "bit-identical spectra" if first == second else "spectra differ between identical calls")
 
 
-def check_errors(call: Caller, report: Report, client: StdioMCP) -> None:
+def check_errors(call: Caller, report: Report) -> None:
     base = dict(README_EXAMPLE, include_plot=False, wavelength_points=3)
     cases = {
         "wavelength_points=1": {**base, "wavelength_points": 1},
@@ -575,32 +550,20 @@ def check_errors(call: Caller, report: Report, client: StdioMCP) -> None:
             base["layers"][2]]},
     }
     for label, arguments in cases.items():
-        name = f"simulate_stack_spectrum[{label}]"
-        payload, _ = simulate(call, report, name, arguments, allow_error=True)
-        if payload is None:
-            continue
-        if payload.get("_isError"):
-            report.add("L1", name, "PASS", f"isError=true: {payload['_text'][:120]}")
-        else:
-            report.add("L1", name, "FAIL", f"accepted: {str(payload)[:160]}")
-    try:
-        response = client.call_tool("__nonexistent__", {})
-        ok = "error" in response or response.get("result", {}).get("isError") is True
-        report.add("L1", "unknown tool is an error", "PASS" if ok else "FAIL", "" if ok else f"got {response}")
-    except MCPError as exc:
-        report.add("L1", "unknown tool is an error", "FAIL", str(exc))
+        check_rejected(call, f"simulate_stack_spectrum[{label}]", "simulate_stack_spectrum", arguments)
 
 
 def _probe(call: Caller, report: Report, label: str, arguments: dict, explain) -> None:
     """A misuse the server should reject; WARN with ``explain(spectrum)`` if it is silently accepted."""
-    name = f"simulate_stack_spectrum[{label}]"
-    payload, _ = simulate(call, report, name, arguments, allow_error=True)
-    if payload is None:
-        return
-    if payload.get("_isError"):
-        report.add("L1", name, "PASS", f"rejected: {payload['_text'][:120]}")
-    else:
-        report.add("L1", name, "WARN", explain(payload), spectrum=payload)
+    def accepted(result: dict) -> tuple:
+        try:
+            spectrum = json.loads(text_of(result))
+        except json.JSONDecodeError:
+            return "WARN", f"accepted, result is not JSON: {text_of(result)[:160]!r}"
+        return "WARN", explain(spectrum), {"spectrum": spectrum}
+
+    check_rejected(call, f"simulate_stack_spectrum[{label}]", "simulate_stack_spectrum", arguments,
+                   on_accept=accepted)
 
 
 def check_defects(call: Caller, report: Report) -> None:
@@ -636,8 +599,8 @@ def check_defects(call: Caller, report: Report) -> None:
                      "first 'spacer' becomes unreachable")
 
 
-def run_l1(client: StdioMCP, report: Report) -> Caller:
-    call = Caller(client, report)
+def run_l1(session: Session) -> None:
+    call, report = session.call, session.report
     check_sanity(call, report)
     check_readme_example(call, report)
     check_mirror(call, report)
@@ -646,21 +609,8 @@ def run_l1(client: StdioMCP, report: Report) -> Caller:
     check_pattern_geometry(call, report)
     check_convergence(call, report)
     check_repeatability(call, report)
-    check_errors(call, report, client)
+    check_errors(call, report)
     check_defects(call, report)
-    return call
-
-
-# --------------------------------------------------------------------------
-# Main
-# --------------------------------------------------------------------------
-
-def server_env(server: dict, home: Path, tmpdir: Path) -> dict:
-    venv_bin = str(Path(server["command"]).parent)
-    env = {"HOME": str(home), "TMPDIR": str(tmpdir), "PATH": f"{venv_bin}:/usr/bin:/bin",
-           "PYTHONNOUSERSITE": "1", "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8"}
-    env.update(server.get("env", {}))
-    return env
 
 
 def sha256_of(path: Path) -> str | None:
@@ -670,97 +620,20 @@ def sha256_of(path: Path) -> str | None:
         return None
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True, help="generated <root>/s4.mcp.json")
-    parser.add_argument("--server", default="s4")
-    parser.add_argument("--report", default="s4-smoke-report.json")
-    args = parser.parse_args(argv)
-
-    config = json.loads(Path(args.config).expanduser().read_text(encoding="utf-8"))
-    server = config["mcpServers"][args.server]
-    manifest = {e["id"]: e for e in json.loads((HERE / "manifest.json").read_text())["servers"]}
-    entry = manifest[args.server]
-    checkout = Path(server["cwd"])
-    try:
-        revision = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"],
-                                  capture_output=True, text=True, check=True).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        revision = None
-
-    report = Report()
-    if revision != entry["revision"]:
-        report.add("L0", "pinned revision", "FAIL", f"checkout at {revision}, manifest pins {entry['revision']}")
-    want_path = str(checkout / "src")
-    got_path = server.get("env", {}).get("PYTHONPATH")
-    report.add("L0", "launch env in config", "PASS" if got_path == want_path else "FAIL",
-               f"PYTHONPATH={got_path}" + ("" if got_path == want_path else f" (expected {want_path})"))
-    digest = sha256_of(checkout / LIBS4)
+def check_libs4(session: Session) -> None:
+    digest = session.state["libS4_sha256"] = sha256_of(session.checkout / LIBS4)
     if digest == UPSTREAM_LIBS4_SHA256:
-        report.add("L0", "vendored libS4.so", "PASS", f"upstream binary, sha256 {digest[:16]}…")
+        session.report.add("L0", "vendored libS4.so", "PASS", f"upstream binary, sha256 {digest[:16]}…")
     else:
-        report.add("L0", "vendored libS4.so", "WARN",
-                   f"sha256 {digest} is not the upstream x86-64 binary ({UPSTREAM_LIBS4_SHA256[:16]}…): "
-                   "a locally built S4 — fine for development, not evidence for the pinned server")
-
-    call = None
-    stderr_tail = ""
-    with tempfile.TemporaryDirectory(prefix="mcp-e2e-s4-") as tmp:
-        tmp_path = Path(tmp)
-        home, cwd, scratch = tmp_path / "home", tmp_path / "cwd", tmp_path / "tmpdir"
-        for d in (home, cwd, scratch):
-            d.mkdir()
-        stderr_path = tmp_path / "server.stderr.log"
-        client = StdioMCP(server["command"], server["args"], cwd=cwd, env=server_env(server, home, scratch),
-                          stderr_path=stderr_path)
-        try:
-            try:
-                info = client.initialize()
-                report.add("L0", "initialize", "PASS",
-                           f"server={info.get('serverInfo')} protocol={info.get('protocolVersion')}")
-                names = sorted(t["name"] for t in client.list_tools())
-                expected = sorted(entry["expected_tools"])
-                report.add("L0", "tools/list", "PASS" if names == expected else "FAIL",
-                           f"{len(names)} tools" + ("" if names == expected else
-                                                    f"; expected {expected}, got {names}"))
-                again = sorted(t["name"] for t in client.list_tools())
-                report.add("L0", "tools/list stable", "PASS" if again == names else "FAIL")
-            except MCPError as exc:
-                report.add("L0", "handshake", "FAIL", str(exc))
-            else:
-                call = run_l1(client, report)
-            alive = client.proc.poll() is None
-            report.add("L1", "server alive after calls", "PASS" if alive else "FAIL",
-                       "" if alive else f"exit code {client.proc.returncode}")
-        finally:
-            client.close()
-            stderr_tail = stderr_path.read_text(encoding="utf-8", errors="replace")[-4000:]
-
-        polluted = client.non_json_stdout
-        per_tool = {k: v for k, v in sorted(call.stdout_by_tool.items()) if v} if call else {}
-        report.add("L1", "stdout is pure JSON-RPC", "WARN" if polluted else "PASS",
-                   f"{len(polluted)} non-JSON line(s), per tool {per_tool}, e.g. {polluted[:3]}" if polluted else "",
-                   non_json_stdout=polluted[:50], non_json_stdout_by_tool=per_tool)
-        leftovers = sorted(p.name for p in cwd.iterdir())
-        report.add("L1", "server leaves cwd untouched", "WARN" if leftovers else "PASS",
-                   f"created {leftovers}" if leftovers else "")
-
-    document = {
-        "server": args.server,
-        "repository": entry["repository"],
-        "revision": revision,
-        "libS4_sha256": digest,
-        "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "environment": package_versions(("mcp", "numpy", "matplotlib", "pydantic")),
-        "result": "FAIL" if report.failed else "PASS",
-        "summary": dict(Counter(c["status"] for c in report.checks)),
-        "checks": report.checks,
-        "server_stderr_tail": stderr_tail,
-    }
-    Path(args.report).write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"\n{document['result']} {document['summary']}  report -> {Path(args.report).resolve()}")
-    return 1 if report.failed else 0
+        session.report.add("L0", "vendored libS4.so", "WARN",
+                           f"sha256 {digest} is not the upstream x86-64 binary ({UPSTREAM_LIBS4_SHA256[:16]}…): "
+                           "a locally built S4 — fine for development, not evidence for the pinned server")
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+SMOKE = Smoke(
+    server="s4",
+    run_l1=run_l1,
+    packages=("mcp", "numpy", "matplotlib", "pydantic"),
+    prepare=check_libs4,
+    report_fields=lambda session: {"libS4_sha256": session.state.get("libS4_sha256")},
+)

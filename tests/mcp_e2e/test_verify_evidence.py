@@ -1,20 +1,17 @@
-"""Codex CLI evidence for the MCP E2E verifier and trajectory (offline; no MCP server, no Codex).
+"""How agent logs become verifier evidence: the Codex trajectory extractor, persisted Codex JSONL,
+the stdout parser chosen by agent, and Codex runs of the two pyscf tasks end to end.
 
 Event shapes are those emitted by ``codex exec --json`` (codex-cli 0.159.2) in
 real runs against the pyscf MCP server: ``mcp_tool_call`` items with server,
 tool, arguments and a result whose content blocks are MCP blocks (images carry
-``data`` and ``mimeType``).
-"""
-import importlib.util
+``data`` and ``mimeType``)."""
 import json
-import sys
-from pathlib import Path
 
-from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator
 from ai4sci_bench.trajectory.codex_extractor import extract_from_jsonl
 
-ROOT = Path(__file__).resolve().parents[1]
-E2E_TASKS = ROOT / "examples/mcp-e2e-tasks"
+from . import support
+from .support import codex, jsonl
+
 RHF_TASK, BOND_TASK = "mcp_e2e.pyscf_rhf_energy", "mcp_e2e.pyscf_bond_stretch"
 
 REF_ENERGY = -75.98321949952147
@@ -32,56 +29,32 @@ BOND_ANSWER = {"molecule": "water", "bond_lengths": LENGTHS, "energies_hartree":
                "min_bond_length": LENGTHS[1], "min_energy_hartree": ENERGIES[1]}
 PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAA+gAAAJYCAYAAADxHswl+/9j/4AAQSkZJRg"  # contains path-like runs on purpose
 
+verify = support.verify
+_status = support.statuses
+_shell = codex.shell
 
-def _load(path, name):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-verify = _load(ROOT / "scripts/mcp/e2e/verify_run.py", "mcp_e2e_codex_verify_run")
-
-
-# --- Codex JSONL fixtures -------------------------------------------------------
 
 def _mcp(item_id, tool, arguments, content=None, error=None):
-    base = {"id": item_id, "type": "mcp_tool_call", "server": "pyscf", "tool": tool, "arguments": arguments}
-    started = {"type": "item.started", "item": {**base, "result": None, "error": None, "status": "in_progress"}}
-    if error is not None:
-        done = {**base, "result": None, "error": {"message": error}, "status": "failed"}
-    else:
-        done = {**base, "result": {"content": content, "structured_content": None}, "error": None,
-                "status": "completed"}
-    return [started, {"type": "item.completed", "item": done}]
+    return codex.mcp(item_id, "pyscf", tool, arguments, content, error=error)
 
 
 def _text(value):
     return [{"type": "text", "text": value}]
 
 
-def _shell(item_id, command, output="", exit_code=0):
-    base = {"id": item_id, "type": "command_execution", "command": command}
-    return [{"type": "item.started", "item": {**base, "aggregated_output": "", "exit_code": None,
-                                              "status": "in_progress"}},
-            {"type": "item.completed", "item": {**base, "aggregated_output": output, "exit_code": exit_code,
-                                                "status": "completed"}}]
-
-
 def _stream(*groups, final="done"):
     events = [{"type": "thread.started", "thread_id": "01a0f1fc-c68d-73e3-8c18-ba20543905b9"},
               {"type": "turn.started"},
-              {"type": "item.completed", "item": {"id": "item_0", "type": "reasoning", "text": "**Planning**"}},
+              codex.item({"id": "item_0", "type": "reasoning", "text": "**Planning**"}),
               # Codex lists MCP resources on its own; reported under the server name.
               *_mcp("item_1", "list_mcp_resources", {"server": "pyscf"},
                     _text('{"server":"pyscf","resources":[]}'))]
     for group in groups:
         events += group
-    events += [{"type": "item.completed", "item": {"id": "item_99", "type": "agent_message", "text": final}},
-               {"type": "turn.completed", "usage": {"input_tokens": 55966, "cached_input_tokens": 31104,
-                                                    "output_tokens": 331, "reasoning_output_tokens": 116}}]
-    return "\n".join(json.dumps(e) for e in events) + "\n"
+    events += [codex.item({"id": "item_99", "type": "agent_message", "text": final}),
+               codex.done({"input_tokens": 55966, "cached_input_tokens": 31104,
+                           "output_tokens": 331, "reasoning_output_tokens": 116})]
+    return jsonl(events)
 
 
 def _rhf_call(value=REF_ENERGY, atom=ATOM):
@@ -98,38 +71,14 @@ def _plot_call(arguments=None, content=None):
                 content or [{"type": "image", "data": PNG_B64, "mimeType": "image/png"}])
 
 
-# --- run artefacts as `asibench run` writes them ----------------------------------
 
 def _persist_like_run(stream, tmp_path):
-    orchestrator = object.__new__(BenchmarkOrchestrator)
-    orchestrator.output_dir, orchestrator.repo_root = tmp_path / "out", ROOT
-    persisted = orchestrator._sanitize_raw_artifact_text(stream, raw_format="jsonl", workspace=tmp_path / "ws")
-    return persisted, [step.to_dict() for step in extract_from_jsonl(stream, "inst").steps]
+    return support.persist_like_run(stream, "codex", tmp_path=tmp_path)
 
 
 def _run(tmp_path, task_id, reference, answer, stream, *, raw=True):
-    instance_id = f"{task_id}__seed31415"
-    results, instances = tmp_path / "out", tmp_path / "instances"
-    task_out = results / task_id
-    outputs = task_out / f"{instance_id}__b1.outputs"
-    outputs.mkdir(parents=True)
-    ref = instances / instance_id / "reference"
-    ref.mkdir(parents=True)
-    ref.joinpath("reference.json").write_text(json.dumps(reference))
-    if answer is not None:
-        outputs.joinpath("result.json").write_text(json.dumps(answer))
-    persisted, steps = _persist_like_run(stream, tmp_path)
-    traj = f"{instance_id}__b1.trajectory.json"
-    task_out.joinpath(traj).write_text(json.dumps(steps))
-    agent_output = {"trajectory_file": traj, "persisted_outputs": {"dir": outputs.name}}
-    if raw:
-        agent_output["raw_stdout_file"] = f"{instance_id}__b1.agent_stdout.jsonl"
-        task_out.joinpath(agent_output["raw_stdout_file"]).write_text(persisted)
-    result = {"task_id": task_id, "instance_id": instance_id, "prompt_level": "b1", "status": "completed",
-              "agent_output": agent_output}
-    path = task_out / f"{instance_id}__b1.json"
-    path.write_text(json.dumps(result))
-    return verify.verify_one(path, result, instances, E2E_TASKS)
+    return support.Task(task_id).verify(tmp_path, stream, reference=reference, answer=answer, harness="codex",
+                                        raw_stdout=raw)
 
 
 def _rhf(tmp_path, stream, answer=REF_ENERGY, **kwargs):
@@ -140,12 +89,6 @@ def _rhf(tmp_path, stream, answer=REF_ENERGY, **kwargs):
 def _bond(tmp_path, stream, answer=BOND_ANSWER, **kwargs):
     return _run(tmp_path, BOND_TASK, BOND_REFERENCE, answer, stream, **kwargs)
 
-
-def _status(row):
-    return {name: check["status"] for name, check in row["checks"].items()}
-
-
-# --- trajectory extractor -------------------------------------------------------
 
 def test_extractor_records_mcp_calls_and_results():
     traj = extract_from_jsonl(_stream(_scan_call(), _plot_call()), "inst")
@@ -182,8 +125,6 @@ def test_extractor_marks_failed_mcp_calls():
     assert [s.step_type for s in pending.steps].count("tool_call") == 2
     assert [s.step_type for s in pending.steps].count("tool_result") == 1
 
-
-# --- verifier ---------------------------------------------------------------------
 
 def test_codex_tool_results_survive_persistence(tmp_path):
     # Unlike Claude stream-json (tool results sit in redacted user events), the
@@ -273,3 +214,47 @@ def test_non_agent_logs_are_not_mistaken_for_codex(tmp_path):
     path = tmp_path / "log.jsonl"
     path.write_text('{"type": "message", "role": "assistant", "content": "hi"}\nplain text\n')
     assert verify.parse_codex_stream(path) is None
+
+
+def test_stdout_parser_follows_the_agent_adapter(tmp_path):
+    path = tmp_path / "agent_stdout.jsonl"
+    path.write_text(_stream(_rhf_call()))
+    parse = verify.evidence.parse_stdout
+    assert parse(path, "CodexCLIAdapter").source.startswith("codex exec JSONL")
+    assert parse(path, None).source.startswith("codex exec JSONL")          # unknown agent: try each format
+    assert parse(path, "SomeFutureAdapter").source.startswith("codex exec JSONL")
+    assert parse(path, "ClaudeCodeCLIAdapter") is None                     # not a Claude stream
+
+
+def test_known_agent_with_unparseable_stdout_falls_back_to_the_trajectory(tmp_path):
+    instance_id = f"{RHF_TASK}__seed31415"
+    task_out = tmp_path / "out" / RHF_TASK
+    task_out.mkdir(parents=True)
+    _persisted, steps = _persist_like_run(_stream(_rhf_call()), tmp_path)
+    task_out.joinpath("t.trajectory.json").write_text(json.dumps(steps))
+    task_out.joinpath("s.jsonl").write_text("not a Codex log\n")
+    result = {"agent_name": "CodexCLIAdapter",
+              "agent_output": {"raw_stdout_file": "s.jsonl", "trajectory_file": "t.trajectory.json"}}
+    ev = verify.evidence.load_evidence(task_out / f"{instance_id}__b1.json", result)
+    assert ev.source.startswith("trajectory")
+    assert "mcp__pyscf__pyscf_rhf_energy" in [c.name for c in ev.calls]
+
+
+def test_tool_of_a_lookalike_server_is_not_the_required_tool(tmp_path):
+    # mcp__pyscf_extra__pyscf_rhf_energy contains the server name and ends with the
+    # tool name, but is another server's tool: names must match exactly.
+    lookalike = [json.loads(json.dumps(e).replace('"server": "pyscf"', '"server": "pyscf_extra"'))
+                 for e in _rhf_call()]
+    row = _rhf(tmp_path, _stream(lookalike))
+    assert row["tool_call_counts"] == {"mcp__pyscf__list_mcp_resources": 1,
+                                       "mcp__pyscf_extra__pyscf_rhf_energy": 1}
+    assert _status(row)["tool_called"] == "FAIL" and row["verdict"] == "FAIL"
+
+
+def test_codex_commands_keep_their_unscrubbed_text_from_the_trajectory(tmp_path):
+    row = _rhf(tmp_path, _stream(_rhf_call(), _shell("item_4", "ls /home/e2e/mcp/pyscf/.venv/bin")))
+    assert row["bash_commands"] == ["ls <abs_path>"]                          # as persisted
+    assert row["raw_bash_commands"] == ["ls /home/e2e/mcp/pyscf/.venv/bin"]   # from the trajectory
+    # the suspicious pattern \bpyscf\b only matches the as-executed text
+    assert _status(row)["no_bypass"] == "WARN" and "pyscf" in row["checks"]["no_bypass"]["detail"]
+

@@ -574,85 +574,153 @@ For opt-in installed-server stdio tests, follow
 port protection, and 60-second per-server timeouts; validates initialization,
 all tools pages, repeated lists, errors and recovery; never calls real CAD.
 
-## MCP E2E setup/smoke scripts
+## MCP E2E (setup, smoke, verifier, fake tasks)
 
-Offline checks (no network, no upstream installs):
+All offline MCP E2E tests are in `tests/mcp_e2e/` (no network, no MCP server,
+no upstream scientific libraries):
 
 ```bash
-uv run --frozen pytest tests/test_mcp_e2e_scripts.py -q
+uv run --frozen pytest tests/mcp_e2e -q
 ```
 
-Checks that `scripts/mcp/e2e/manifest.json` entries are pinned to 40-char
-revisions and match catalog sources, that rendered `*.mcp.json` passes
-`load_mcp_config` with absolute paths, that absolute launch paths and foreign
-checkout remotes are rejected, and that the stdlib stdio client paginates
-`tools/list`, surfaces `isError`, and records non-JSON stdout lines. For
-`smoke_pyscf.py` it also covers the PySCF-free parts: atom-string/XYZ/float-list
-parsing, rotation- and permutation-invariant distance comparison, PNG header
-checks, per-tool stdout attribution, the PASS/WARN/FAIL split for invalid input
-(isError vs in-band error vs accepted), the plot and visualize checks against a
-stub client, and that every manifest tool is called by the smoke.
-It also checks the manifest's launch `env`, `uv_sync_args` and `{checkout}`
-placeholder validation (the arxiv config keeps its CLI flags literal and turns
-the ToolUniverse result cache off), and the network-free parts of
-`smoke_arxiv.py`: arXiv ID/URL splitting (incl. old-style IDs), Atom parsing
-and whitespace normalisation, record comparison, the snippet window/limit/cap
-reference, in-band error classification, the search, OR-precedence and
-snippet checks against a stub client with a stubbed reference, and that the
-server environment is minimal (no operator secrets, proxies passed through).
-For jsbsim it checks the `uv-pip-pinned` install mode (fresh `uv venv
---clear`, `uv pip install --exclude-newer` of exact pins, no `uv sync`; ranges,
-missing pins/timestamp and mode-mismatched fields are rejected), `{checkout}`
-in launch `env` values (absolute `JBSIM_ROOT`; absolute or non-prefix values
-rejected), and the JSBSim-free parts of `smoke_jsbsim.py`: frame rounding,
-the `aircraft/<name>/<name>.xml` scan, in-band errors, telemetry comparison
-(printed-precision tolerance, dead fields reported with the real property),
-trim-mode digests, the missing-property/unknown-session/unknown-aircraft
-classification, `list_aircraft` against a directory scan, and that a server
-crash anywhere in the stock-script probe is a WARN, not a FAIL.
-For s4 it checks `host_requirements` (machine, CPU flags from
-`/proc/cpuinfo`, loadable shared libraries; every problem listed with the
-reason; malformed fields rejected; checked before cloning), the
-`python -m` + `PYTHONPATH={checkout}/src` launch, and the numpy-only references
-of `smoke_s4.py`: TMM against closed forms (Fresnel, Brewster, quarter-wave AR
-coating and mirror), energy conservation and absorption, the 1D RCWA's uniform
-limit against the TMM, energy conservation with diffraction, Li vs Laurent
-convergence, the square-lattice shell → order mapping, that every smoke grid
-avoids Rayleigh anomalies, the spectrum shape/grid checks, and that stubbed
-servers answering from the references PASS while a TE/TM swap or a Li-rule
-grating FAILs; defect probes WARN only when a misuse is accepted.
-For psi4 it checks the `conda-explicit` install mode (fresh `micromamba create
---no-rc --prefix .venv --file <lock>` with the package cache under
-`<root>/.micromamba` and conda/mamba variables dropped; an old conda prefix is
-replaced, a non-conda `.venv` is refused; missing micromamba or a platform
-without a lock is an error), the committed locks (header matches the manifest,
-every spec present, conda-forge `<platform>`/`noarch` URLs with `#sha256:`;
-stale, foreign, md5-only or wrong-channel locks rejected), `setup.py --lock`
-from `micromamba --dry-run --json` output (and that `--lock` is refused for
-non-conda servers), malformed `conda` fields, a bare `{checkout}` in launch
-`env`, and the psi4-free parts of `smoke_psi4.py`: geometry parsing (psi4
-`charge multiplicity` header, XYZ, bare lines), the frequency classification
-(signed match PASS, imaginary sign dropped WARN, anything else FAIL), the
-tri-state correct/defect/FAIL helper, excited-state comparison, the
-`optimize_excited_state` verdicts against a stubbed reference (a real S1
-minimum PASS, the ground-state minimum WARN, other energies FAIL) and that a
-valid request answered with `ok:false` is a FAIL.
+| File | Covers |
+|---|---|
+| `support.py` | not a test: the one copy of loaders, Claude/Codex log builders, `persist_like_run`, `Task.verify` (run directory → `verify_one`), scorer dirs, smoke stubs |
+| `test_setup.py` | `scripts/mcp/e2e/setup.py` |
+| `test_smoke_runner.py` | `e2e_smoke/runner.py`, `client.py`, `smoke.py` |
+| `test_smoke_<id>.py` | the library-free parts of `e2e_smoke/servers/<id>.py` |
+| `test_verify_spec.py`, `test_verify_values.py` | `e2e_verify/spec.py`, `values.py` |
+| `test_verify_evidence.py` | Codex extractor, persisted Codex JSONL, stdout parser per agent, Codex runs of the pyscf tasks |
+| `test_task_contract.py` | conventions every fake task meets, parametrized over `examples/mcp-e2e-tasks` |
+| `test_task_<task>.py` | one task: generator, scorers, verifier scenarios |
+
+A new task needs only `test_task_<task>.py` with its data and scenarios (the
+contract fails until it exists and covers generator determinism, submission
+failures, evaluator failures and a genuine passing run); a new server needs
+`test_smoke_<id>.py`. Build agent logs with `support.claude` / `support.codex`
+and run the verifier with `Task.verify`; do not copy run-directory or stream
+helpers into the test file.
+
+Contract (`test_task_contract.py`): every task is `status: test`, discovered
+only from its own directory and never from `tasks/`; prompts B1–B4 exist,
+mention `result.json` and never `mcp__`, Claude or Codex; `e2e_check.json`
+parses strictly, every call tool is one of the manifest's `expected_tools`,
+`server_tools` (when given) equals them, and `mcp__` names in
+`bypass_tools`/`suspicious_tools` are tools of the task's server.
+
+Verifier golden snapshot: every `verify_run.verify_one` call made by a passing
+test in `tests/mcp_e2e/` is recorded (verdict, failure, every check and
+per-call status, tool sequence) and must equal `tests/mcp_e2e/golden.json`
+(plugin `tests/mcp_e2e/golden.py`, loaded from `tests/conftest.py`). A
+mismatch is reported as a test ERROR listing the changed fields; a new
+verifier test without an entry, or a stale entry, also fails. After an
+intended verifier change, regenerate and review the diff:
+
+```bash
+MCP_E2E_GOLDEN=update uv run --frozen pytest -q tests/mcp_e2e
+```
+
+The update refuses `-k` / `file::test` selections and red runs.
+
+Persistence: `support.persist_like_run` runs the orchestrator's real
+`_sanitize_raw_artifact_text` for Claude and Codex logs (user events
+redacted, absolute paths → `<abs_path>`) and extracts the trajectory from the
+unsanitized log, as `asibench run` does; Codex scenarios are persisted too.
+`test_task_s4_grating_spectrum.py` checks that a `ctypes.CDLL('/…/libS4.so')`
+command is scrubbed in the saved log yet still FAILs `no_bypass` (as-executed
+text from the trajectory), and that a scrubbed command without a trajectory is
+a `no_bypass` WARN; `test_verify_evidence.py` checks the same for a Codex
+`command_execution`; `tests/test_trajectory.py` checks that the Claude extractor
+skips events whose `message` is not an object instead of raising.
+
+`test_setup.py`: manifest entries pinned to 40-char revisions and matching
+catalog sources; unknown keys and fields of another install mode rejected
+(each `Installer` owns its fields; owners are disjoint; a stub installer
+registered in `INSTALLERS` validates, builds and refuses `--lock` without
+other changes); rendered `*.mcp.json` valid with absolute paths, launch `env`,
+`uv_sync_args` and `{checkout}` placeholders (the arxiv config keeps its CLI
+flags literal and turns the ToolUniverse cache off; absolute `JBSIM_ROOT`);
+absolute launch paths and foreign checkout remotes rejected; `uv-pip-pinned`
+(fresh `uv venv --clear`, `uv pip install --exclude-newer` of exact pins);
+`host_requirements` (machine, CPU flags, loadable libraries, every problem
+listed, checked before cloning); `conda-explicit` (fresh `micromamba create
+--file <lock>`, package cache under `<root>/.micromamba`, conda variables
+dropped, non-conda `.venv` refused) and the committed locks (header matches
+the manifest, conda-forge `<platform>`/`noarch` URLs with `#sha256:`; stale,
+foreign, md5-only or wrong-channel locks rejected), `setup.py --lock` from
+`micromamba --dry-run --json`.
+
+`test_smoke_runner.py`: the stdio client paginates `tools/list`, surfaces
+`isError` and records non-JSON stdout; the shared run end to end against a fake
+stdio server from a pinned scratch checkout (config equals the rendered
+manifest, handshake, unknown tool, stdout attribution per tool, cwd leftovers
+minus declared artefacts) around the `prepare` / `run_l1` / `after` hooks; a
+config that differs from the manifest FAILs; `check_rejected` and
+`json_result` classification; every manifest tool is called by its smoke and
+`smoke.py` resolves every manifest id.
+
+`test_smoke_<id>.py`: pyscf — atom-string/XYZ/float-list parsing, invariant
+distance comparison, PNG headers, in-band error split, plot and visualize
+checks; arxiv — ID/URL splitting (incl. old-style IDs), Atom parsing, record
+diffs, the snippet window/limit/cap reference, search/OR-precedence/snippet
+checks with a stubbed reference, minimal server environment with proxies;
+jsbsim — frame rounding, aircraft scan, telemetry comparison (printed
+precision, dead fields), trim digests, missing-property/unknown-session
+classification, a crash in the stock-script probe is a WARN; s4 — TMM against
+closed forms, energy conservation, RCWA uniform limit and Li vs Laurent
+convergence, shell → order mapping, grids clear of Rayleigh anomalies, stubbed
+servers PASS while a TE/TM swap or Li-rule grating FAILs, defect probes WARN
+only when a misuse is accepted; psi4 — geometry parsing, frequency
+classification (imaginary sign dropped WARN), excited-state verdicts against a
+stubbed reference, `ok:false` for a valid request FAILs.
+
+`test_verify_spec.py` / `test_verify_values.py`: strict parsing (unknown,
+inapplicable and invalid keys, dangling and optional-from-required
+references, regexes, schema-1 normalisation, requirement grouping, `select` on
+a call result) and value reading (`select` modes, structured-output
+unwrapping, string/number chaining, geometry comparison).
+
+`test_verify_evidence.py`: event shapes from real `codex exec --json` runs
+(codex-cli 0.159.2): the Codex extractor (call ids, server/tool, text results,
+image media type without image data, failed and unfinished calls), arguments
+and results surviving persistence, single-tool and scan → plot runs passing,
+Codex's own resource listing not counting, direct backend use in a
+`command_execution`, failed calls, uncopied answers, reformatted inputs (WARN),
+a broken chain, a plot without an image, JSON-string arguments,
+trajectory-only evidence, the stdout parser following `agent_name` (unknown
+agents try each format; an unparseable log falls back to the trajectory) and a
+lookalike server's tool not being the required tool.
+
+`test_task_<task>.py`: seeded generator determinism and selection rules,
+scorer credit curves and submission vs evaluator failures, and verifier
+scenarios on Claude stream-json (and Codex JSONL where recorded): a genuine run
+passes every check; the task's characteristic mistakes fail the right check
+(pyscf_rhf_energy: direct PySCF, unavailable server vs uncalled tool, uncopied
+answer; pyscf_bond_stretch: missing plot, retyped plot data, plot without
+image, old trajectories WARN; arxiv_search_snippets: paper not from the search,
+default cap, WebFetch/shell HTTP bypass, workspace trap; jsbsim_engine_run:
+chunked steps WARN, another session id, no state read, trim WARN;
+s4_grating_spectrum: default harmonics, uncopied spectrum values, RCWA code
+WARN; psi4_opt_freq: reformatted geometry still chains, frequencies at the
+start geometry, in-band `ok:false`, default method). With PySCF and geomeTRIC
+installed (`uv run --with pyscf==2.14.0 --with geometric==1.1.1 ...`) the psi4
+file also regenerates seed 31415 and compares with the recorded reference.
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
-then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke_pyscf.py --config
+then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke.py pyscf --config
 ~/mcp/pyscf.mcp.json`. It calls all seven tools and checks the results against
 PySCF, RDKit and geomeTRIC run in the smoke process; expected outcome on the
 pinned revision is `PASS` with 0 FAIL and 7–8 WARN (upstream defects listed in
-`scripts/mcp/e2e/README.md`; the benzene symmetry probe is intermittent).
+`scripts/mcp/e2e/e2e_smoke/servers/pyscf.py`; the benzene symmetry probe is intermittent).
 For arxiv: `python3 scripts/mcp/e2e/setup.py arxiv`, then
-`~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke_arxiv.py --config
+`~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke.py arxiv --config
 ~/mcp/arxiv.mcp.json` (needs access to export.arxiv.org and arxiv.org, ~90 s).
 Expected outcome on the pinned revision: `PASS` with 0 FAIL and 8 WARN (OR +
 date precedence, three in-band errors plus a missing-paper one, `truncated`
 flag, old-style ID, workspace-dependent tool filter).
 For jsbsim: `python3 scripts/mcp/e2e/setup.py jsbsim`, then
-`~/mcp/jsbsim/.venv/bin/python scripts/mcp/e2e/smoke_jsbsim.py --config
+`~/mcp/jsbsim/.venv/bin/python scripts/mcp/e2e/smoke.py jsbsim --config
 ~/mcp/jsbsim.mcp.json` (no network, ~2 s). Expected outcome on the pinned
 revision: `PASS` with 0 FAIL and 17 WARN (dead telemetry fields, `cl` naming,
 missing property, no-IC session, zero step, partial IC, unknown IC key, trim,
@@ -661,14 +729,14 @@ error, `execute_script` literal + temp file + stock-script segfault, and the two
 launch-env probes).
 For s4 (Linux x86-64 with AVX2/FMA/BMI2 and `libblas3 liblapack3`):
 `python3 scripts/mcp/e2e/setup.py s4`, then `~/mcp/s4/.venv/bin/python
-scripts/mcp/e2e/smoke_s4.py --config ~/mcp/s4.mcp.json` (no network, ~10 s).
+scripts/mcp/e2e/smoke.py s4 --config ~/mcp/s4.mcp.json` (no network, ~10 s).
 Expected outcome on the pinned revision: `PASS` with 0 FAIL and 7 WARN
 (swapped incidence/substrate, inner incidence layer, unknown layer material,
 θ = 90° and 120°, negative thickness, duplicate layer names); a locally built
 `libS4.so` adds an eighth WARN for the binary's SHA-256.
 For psi4 (Linux x86-64 or aarch64, `micromamba` on `PATH`):
 `python3 scripts/mcp/e2e/setup.py psi4`, then `~/mcp/psi4/.venv/bin/python
-scripts/mcp/e2e/smoke_psi4.py --config ~/mcp/psi4.mcp.json` (no network,
+scripts/mcp/e2e/smoke.py psi4 --config ~/mcp/psi4.mcp.json` (no network,
 ~20 s). Expected outcome on the pinned revision: `PASS` with 0 FAIL and 11 WARN
 (null `single_point` fields, in-band invalid multiplicity, `optimize`
 `n_iterations` 0, zero IR intensities, ignored `temperature_K`, saddle-point
@@ -676,118 +744,8 @@ imaginary mode returned as real, `n_states` split between spins,
 `optimize_excited_state` returning the ground-state minimum and the starting
 geometry's excitation energy, stdout lines, `timer.dat` in the cwd).
 
-`tests/test_mcp_e2e_jsbsim.py` covers `mcp_e2e.jsbsim_engine_run` and the
-verify_run extensions it needs, without JSBSim: deterministic, varied seeded
-scenarios with all seven initial conditions and the engine/mixture/throttle
-order, exact ft/s→kt conversion in the reference, every reference key the
-checks use present in a generated reference (JSBSim stubbed), B1-only tool
-naming with the procedure rules at every level, scorers (tool values and
-two-decimal telemetry score 100, procedure errors lose credit, submission vs
-evaluator failures), and the verifier on Claude stream-json and Codex JSONL
-built from recorded server outputs: a genuine run passes every check; telemetry
-reads and initial conditions passed to `create_session` pass; chunked steps
-WARN; steps on another `session_id` break `tool_chain`; no state read fails
-`tool_called`; recomputed answers fail `answer_from_tool`; `trim` is a WARN;
-`import jsbsim`, installs, the `jsbsim` CLI and the server's Python are bypass.
-It also checks string chaining (`_same_link`) and optional-call grouping.
-
-`tests/test_mcp_e2e_s4.py` covers `mcp_e2e.s4_grating_spectrum` and the
-verify_run answer `select`, without S4 or the server: deterministic, varied
-seeded gratings that meet every selection rule (Rayleigh clearance, unique
-interior maximum, report point ≠ maximum, bypass margin ≥ 1e-3, θ > 0, TM),
-harmonic counts that are complete shells and never the server default, the
-generator's RCWA identical to the smoke's, tool arguments that follow the B1
-recipe, every reference key the checks use, agent-neutral prompts (the tool is
-named only at B1/B2), scorers (tool values score 100; a converged home-made
-RCWA, the default 51 harmonics, the neighbouring sweep point and rounded values
-lose credit; submission vs evaluator failures), and the verifier on Claude
-stream-json and Codex JSONL: a genuine run passes every check with or without
-the optional sanity call; the default harmonic count fails `tool_correct`;
-recomputed answers fail `answer_from_tool`; numbers as strings pass while an
-omitted `theta_deg` WARNs; `import S4`, RCWA package installs, loading
-`libS4.so` and the server's Python are bypass, RCWA-like code is a WARN; plus
-every `select` mode.
-
-`tests/test_mcp_e2e_psi4.py` covers `mcp_e2e.psi4_opt_freq` and the verify_run
-extensions it needs, without psi4 or the server: deterministic, varied seeded
-cases (all six molecules, STO-3G/cc-pVDZ only, distortion within ±0.04 Å),
-every reference key the checks use, agent-neutral prompts (server named at
-B1/B2, tools only at B1), scorers (tool values score 100 in any order;
-frequencies at the starting geometry, a loose optimisation and the server's
-default method lose credit; submission vs evaluator failures), and the verifier
-on Claude stream-json (structured or text block) and Codex JSONL built from
-recorded server outputs: a genuine run passes every check; a reformatted or
-rounded geometry still chains; frequencies at the starting geometry fail
-`tool_chain`, `tool_correct` and `answer_from_tool`; an in-band `ok:false`
-result and the PySCF reference values typed in by hand fail; the default method
-fails `tool_correct`; `import psi4`/`pyscf`, installs, the `psi4` CLI, the
-server's Python or module are bypass and `optimize_excited_state` is a WARN;
-plus dotted keys (`_field`) and geometry comparison. With PySCF and geomeTRIC
-installed (`uv run --with pyscf==2.14.0 --with geometric==1.1.1 ...`) it also
-regenerates seed 31415 and compares with the recorded reference.
-
-MCP E2E fake tasks and run verifier (offline, no MCP server or PySCF):
-
-```bash
-uv run --frozen pytest tests/test_mcp_e2e_tasks.py -q
-```
-
-Checks that `examples/mcp-e2e-tasks` tasks are `status: test` and invisible to
-`tasks/`, seeded instances are deterministic and perturbed, only B1 names the
-tool, the custom scorer's log-linear credit, submission-vs-evaluator failure
-split, and that `verify_run.py` passes a genuine MCP run but fails direct PySCF
-use, an unavailable server, an uncalled tool, and an answer not returned by the
-tool.
-
-`tests/test_mcp_e2e_bond_stretch.py` covers `mcp_e2e.pyscf_bond_stretch` and
-`verify_run.py` schema 2 offline: deterministic seeded cases within range, rigid
-molecules only, B1-only tool naming, energy/minimum scorers (log-linear credit,
-grid mismatch, submission vs evaluator failures), the Claude extractor keeping
-image results observable (`content_types`, `image_media_types`), a genuine
-scan → plot run passing every check, and failures for a missing plot call, a
-plot drawn from retyped data (`tool_chain`), a plot without an image, answers
-not copied from the tool, plus WARN-only handling of older trajectories and
-schema-1 normalisation.
-
-`tests/test_mcp_e2e_codex.py` covers Codex CLI evidence offline, with event
-shapes taken from real `codex exec --json` runs (codex-cli 0.159.2): the Codex
-extractor recording `mcp_tool_call` items (call id, server/tool, text results,
-image media type without image data, failed and unfinished calls), tool
-arguments and results surviving run persistence, genuine single-tool and
-scan → plot runs passing every check, Codex's own resource-listing calls not
-counting as tool calls, direct backend use in a `command_execution`, failed MCP
-calls, answers not copied from the tool, reformatted inputs (WARN), a broken
-chain, a plot without an image, JSON-string arguments, and trajectory-only
-evidence.
-
-```bash
-uv run --frozen pytest tests/test_mcp_e2e_codex.py -q
-```
-
-`tests/test_mcp_e2e_arxiv.py` covers `mcp_e2e.arxiv_search_snippets` and the
-non-numeric verifier checks offline (no MCP server, no network): deterministic
-case selection over all curated cases, no `OR` in curated queries (the tool's
-date clause has no parentheses), the selection tie rule, snippet counting with
-the tool's semantics and cap, Atom parsing, B1-only tool naming and the ban on
-web tools/HTTP in every prompt; the scorers (ID normalisation, order, pick,
-per-term credit, submission vs evaluator failures); and `verify_run.py` with
-named extractors: a genuine Claude run and a Codex run pass every check,
-snippets by `pdf_url` and per-term calls pass (inputs WARN), a paper not
-returned by the search breaks the chain, the default per-term cap gives wrong
-counts, answers must equal tool-returned values, in-band tool errors are not
-results, `WebFetch` of arxiv.org and shell HTTP/arXiv libraries are bypass
-(FAIL) while web search and writing the answer with Python are not, Codex
-`web_search` items are recorded (WARN), and extra server tools (the
-ToolUniverse workspace trap) WARN in `mcp_connected`.
-
-```bash
-uv run --frozen pytest tests/test_mcp_e2e_arxiv.py -q
-```
-
 The live agent run (generate → run → score → verify) is documented in
-`examples/mcp-e2e-tasks/README.md`. Verifier fixtures are persisted through the
-real run redaction and Claude trajectory extractor, so tool results are only
-recoverable from the trajectory, as in real runs.
+`examples/mcp-e2e-tasks/README.md`.
 
 Local scoring of runs that produced no files:
 `tests/test_local_scoring.py::test_run_that_recorded_no_outputs_is_a_scored_submission_failure`

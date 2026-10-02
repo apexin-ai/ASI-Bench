@@ -1293,3 +1293,205 @@
   (`gpt-5.6-sol`): local score 400/400 per harness and verifier 4/4 PASS per
   harness.
 - Implementation commit: `f4c48de`.
+
+## 2026-10-02: MCP E2E chore — README condensation and verifier golden snapshot
+
+- Context: before the next MCP server, `setup.py` / `verify_run.py` are to be
+  refactored (they grew by per-server patches). Branch `chore-mcp-e2e-docs`.
+- Docs: `scripts/mcp/e2e/README.md` (397 → 139 lines) and
+  `examples/mcp-e2e-tasks/README.md` (515 → ~140) now hold only tables and
+  author-relevant bullets. Per-server L1 detail stays in `smoke_<id>.py`
+  docstrings, task design in `generate_gt.py` / `task_eval.yaml`, the
+  `e2e_check.json` format in the `verify_run.py` docstring (completed to match
+  the six real files).
+- Safety net for the refactor: `tests/mcp_e2e_golden.py` (pytest plugin from
+  `tests/conftest.py`) wraps `verify.verify_one` in every `test_mcp_e2e_*`
+  module and compares the stable outcome of each call with
+  `tests/golden/mcp_e2e_verify.json` (94 tests, 100 calls). Mismatches, missing
+  and stale entries fail; `MCP_E2E_GOLDEN=update` only writes after a green
+  run of whole files.
+- Lesson: a mutation run showed that the existing assertions already caught
+  every verdict/check-level change tried, except one: an *ungrouped optional*
+  call returning a wrong result (it must fail `tool_correct`) was not covered
+  by any test, and the golden could not catch it either because no fixture
+  exercised that path. Added
+  `test_wrong_optional_sanity_result_fails_tool_correct`. The golden's own
+  value is in fields no test asserts (per-call statuses, tool sequence: 27–41
+  tests turned red only through the golden). A snapshot pins only paths that
+  fixtures exercise — check coverage of a branch before relying on it.
+- Lesson: errors raised in an autouse fixture's teardown are reported by
+  pytest as ERROR, not FAILED; count both when assessing a test run.
+- Commits: docs `fe3651e`; golden snapshot `b47c4f7`.
+
+## 2026-10-02: MCP E2E chore — verifier split into `e2e_verify/`, strict spec
+
+- Problem: `verify_run.py` (1020 lines) grew a patch per server. The three
+  value checks each had their own way to read and compare values, so `extract`
+  existed in three copies, `select` only for answers, `geometry` only for
+  chains; `e2e_check.json` was read with `.get()`, so a typo (`abs_toll`,
+  `bypass_pattern`, `inputs_from_cal`) silently loosened the audit; tool names
+  matched fuzzily (`server in name and name.endswith(tool)`); the log format
+  was guessed by trial.
+- Resolution: package `scripts/mcp/e2e/e2e_verify/` (stdlib only):
+  `spec` (frozen dataclasses, strict parser: unknown / inapplicable keys,
+  enums, duplicate names, dangling or optional-from-required chain references,
+  regexes), `extractors` (arXiv IDs, term counts), `values` (one `Selector`
+  read for call results, chained inputs and answers; shared comparators),
+  `evidence` (`ToolCall` dataclass, Claude / Codex / trajectory parsers,
+  parser chosen by `agent_name` with format sniffing for unknown agents),
+  `checks` (six check functions in an ordered registry, `verify_one`).
+  `verify_run.py` is the CLI plus the format docstring. `select` now also
+  works on call results. Tool names must equal `mcp__<server>__<tool>`.
+- Verification: the golden snapshot stayed byte-identical for all 100
+  existing `verify_one` calls; the only golden diff is the entry of the new
+  lookalike-server test. Helper tests moved to the module API.
+- Lesson: a delegated sub-agent was interrupted after adding `parse_spec`
+  but before wiring it into `verify_one`; tests stayed green because nothing
+  called it. After any delegation, grep that new code is actually reached.
+- Lesson: modules loaded with `spec_from_file_location` must be put in
+  `sys.modules` before `exec_module` or dataclasses fail on Python 3.14;
+  `verify_run.py` puts its own directory on `sys.path` so every test loader
+  shares one `e2e_verify` package.
+- Commit: `8ffc458`.
+
+## 2026-10-02: MCP E2E chore — `setup.py` installer registry, strict manifest
+
+- Problem: every install mode added pairwise "X only applies to Y" checks to
+  `_check_install_fields`, and one mode's logic was spread over
+  `INSTALL_MODES`, field checks, a `build_env` branch and `--lock`. Unknown
+  top-level keys were ignored, so a misspelt `host_requirement` would have
+  skipped the s4 host check silently.
+- Resolution: `Installer` subclasses (`UvSyncFrozen`, `UvPipPinned`,
+  `CondaExplicit`) in `INSTALLERS` each own their fields (validator per field,
+  also called when absent, so it decides "required"), `install()` and an
+  optional `lock()`. One generic rule replaces the pairwise checks: allowed =
+  `COMMON_KEYS` + the mode's fields; another mode's field is reported as
+  "only apply to install <mode>", anything else as unknown. Common keys
+  (revision hex, python 3.x, launch shape, sorted expected_tools, smoke name)
+  and the document keys are validated too. `host_requirements` checks are a
+  probe table (`HOST_PROBES`). Manifest format unchanged; entries stay dicts
+  (smoke scripts read the same JSON).
+- Verification: all existing setup tests passed unchanged except one message
+  (`conda only applies` → `['conda'] only apply to install conda-explicit`);
+  new tests cover unknown keys, disjoint field owners, and a stub installer
+  registered without touching any other code.
+- Commit: `e24e8fc`.
+
+## 2026-10-02: MCP E2E chore — smoke scripts into `e2e_smoke/` with a shared runner
+
+- Problem: each `smoke_<id>.py` (590–770 lines) carried a ~90-line copy of
+  `main()` (config/manifest load, revision, temp dirs, handshake, tools/list,
+  alive, stdout purity, cwd leftovers, report) plus copies of `server_env`,
+  `quiet_fds`, distance/PNG helpers, four "call → JSON" wrappers, five variants
+  of "invalid input: isError PASS / in-band WARN / accepted FAIL", five copies of
+  "unknown tool is an error" and four hand-written
+  "launch env in config" checks. Every new server would copy all of it again.
+- Resolution: `scripts/mcp/e2e/smoke.py <id>` + package `e2e_smoke/`:
+  `runner.py` (one run; `Smoke` declaration with `run_l1` and optional
+  `prepare` / `after` / `extra_env` / `pass_proxies` / `expected_cwd_files` /
+  `add_arguments` / `report_fields`; `Session.spawn` for probe servers;
+  `Caller.json`, `json_result`, `check_rejected`, `check_unknown_tool`),
+  `client.py` (was `stdio_client.py`), `helpers.py`, `servers/<id>.py`. The
+  per-env checks are replaced by one generic L0 "config matches manifest"
+  (the `--config` entry must equal `setup.render_config`); the unknown-tool
+  check runs once in the runner. The manifest `smoke` field is gone (module =
+  id; ids must be identifiers). Package named `e2e_smoke`, not `smoke`, so it
+  cannot shadow `smoke.py`.
+- Verification: an AST comparison against the old scripts shows 95 per-server
+  functions unchanged; the changed ones are exactly the converted wrappers,
+  error checks, `run_l1` and probe servers. New end-to-end runner tests drive a
+  fake stdio server from a pinned scratch checkout through `runner.main`.
+  Not yet re-run against the real servers (needs the AWS host).
+- Behaviour changes to expect in the next real smoke reports: check
+  "config matches manifest" replaces "launch env in config" / "result cache
+  disabled in config"; pyscf now has its own HOME/cwd/TMPDIR (the visualize HTML
+  is a declared cwd artefact); arxiv now gets a TMPDIR; "unknown tool is an
+  error" runs after the server's own checks for all five servers.
+- AWS re-run (amd64, 2026-10-02) of all five smokes on the new layout: all
+  PASS, no FAIL; per server the only status differences against the previous
+  reports are the expected ones ("config matches manifest" PASS replacing the
+  per-server env checks; pyscf's new "cwd untouched" PASS). pyscf 21/8/0,
+  arxiv 16/8/0, jsbsim 17/17/0, s4 41/7/0, psi4 14/11/0 (PASS/WARN/FAIL).
+- Lesson: for a refactor of scripts that only run on a remote host, an AST
+  comparison of same-named functions against `git show HEAD:` plus a
+  per-check status diff of old vs new reports is a cheap, complete parity
+  check; keep the old reports and write new ones beside them.
+- Commit: `cbf026f`.
+
+## 2026-10-02: MCP E2E chore — tests regrouped into `tests/mcp_e2e/` with one support module
+
+- Problem: the eight `tests/test_mcp_e2e_*.py` files grew one per server by
+  copying the previous one. File names did not say what they tested
+  (`_tasks.py` was only pyscf_rhf_energy, `_codex.py` mixed framework extractor
+  and verifier tests, `_scripts.py` was 1552 lines of setup + five smokes +
+  runner + spec), verifier helper unit tests sat in task files, ~580 lines of
+  helpers were copied 4–8 times (`_run` ×7, `_stream` ×7, `_persist_like_run`
+  ×7, `_dirs` ×6, `_load` ×8, `_codex` ×4), and task-wide conventions were
+  re-asserted per task with drifting wording (only psi4 checked
+  `server_tools` against the manifest).
+- Resolution: `tests/mcp_e2e/` with `support.py` (loaders, `claude`/`codex`
+  log builders, `persist_like_run`, `Task.verify` → `verify_one`,
+  `score_dirs`, smoke stubs), `test_setup`, `test_smoke_runner`,
+  `test_smoke_<id>`, `test_verify_{spec,values,evidence}`, `test_task_<task>`
+  and `test_task_contract.py` (parametrized over every fake task: status and
+  discovery, agent-neutral prompts, strict e2e_check vs manifest tools, and
+  that each task has its own test module covering generator determinism,
+  submission/evaluator failures and a genuine run). Golden plugin and data
+  moved to `tests/mcp_e2e/golden.py` / `golden.json`, keyed on the directory.
+- Verification: inventory before/after (374 → 393 items = 374 − 7 replaced +
+  26 contract/runtime); 230 moved test bodies AST-identical to `git HEAD`
+  (smoke stub renames applied); the old golden snapshots were carried over
+  with renamed keys only and pass unchanged, and an update-mode regeneration
+  reproduces the file byte for byte; a corrupted snapshot is still caught.
+- Finding (not fixed here): six of seven `_persist_like_run` copies modelled
+  Claude persistence as redaction only, while real runs also scrub absolute
+  paths in the persisted stdout. With realistic persistence 7 bypass
+  expectations fail (4 FAIL → missed: server venv Python, `ctypes.CDLL` of
+  `libS4.so`), because the verifier reads Bash commands from the persisted
+  stream; the trajectory, built from the raw stdout, keeps them. Codex runs
+  are persisted the same way.
+- Lesson: when a test helper says "exactly as the real code does", call the
+  real code path — a hand re-implementation of one step hid a verifier blind
+  spot. Carrying golden values over with renamed keys (instead of
+  regenerating) turns a test move into a proof that no outcome changed.
+- Commit: `9fe5843`.
+
+## 2026-10-02: MCP E2E fix — path-scrubbed shell commands hid bypasses; Claude extractor crash
+
+- Problem 1: `asibench run` saves the raw stdout through
+  `_sanitize_raw_artifact_text`, which redacts user events and replaces
+  absolute host paths with `<abs_path>` (`~/mcp/s4/.venv/bin/python` →
+  `~<abs_path>`, `ctypes.CDLL('/…/libS4.so')` → `ctypes.CDLL('<abs_path>')`).
+  The verifier read shell commands from that saved log, so path-based
+  `bypass_patterns` (server venv Python, `libS4`, `ls` of a server checkout)
+  could never match in a real Claude or Codex run. Tests did not notice: six
+  `_persist_like_run` copies modelled persistence as redaction only.
+  Realistic persistence turned 7 bypass expectations red (4 missed FAILs).
+- Problem 2: `claude_extractor` raised `AttributeError` on an event whose
+  `message` is a string; `_compute_trajectory_data` then silently re-parsed
+  the Claude log with the Codex extractor and the trajectory (and every tool
+  result the verifier recovers from it) was lost. The verifier test for such
+  payloads used `persist=False` and so never built a trajectory.
+- Resolution: `e2e_verify/evidence.py` keeps each shell command as a
+  `Command(id, text, raw)`; `enrich_commands_from_trajectory` attaches the
+  trajectory's `key_args.command` by call id (`tool_call_id` / Codex
+  `item_id`); `no_bypass` scans the raw text and reports a scrubbed command it
+  cannot restore as a WARN coverage gap; rows gain `raw_bash_commands`.
+  `claude_extractor` skips non-object messages / non-list content
+  (`_message_blocks`). `tests/mcp_e2e/support.persist_like_run` now calls the
+  real `_sanitize_raw_artifact_text` for both harnesses, Codex scenarios are
+  persisted, and the string-payload test builds a trajectory.
+- Verification: red first (7 bypass cases + string payload + 4 new tests),
+  then green; golden diff is 3 added entries only — all 95 existing snapshots
+  unchanged under realistic persistence. Framework tests touching the
+  extractor/orchestrator pass apart from the known VM artefact
+  (`test_save_result_sanitizes_host_paths…`, TMPDIR under HOME).
+- Open: MCP tool inputs are scrubbed the same way and the Claude trajectory
+  keeps only `path`/`file_path`/`command`/`pattern`/`url` arguments, so a
+  future task whose tools take absolute paths (CAD) needs its own plan for
+  `inputs_from_reference` / `tool_chain`.
+- Lesson: test fixtures that stand in for a production code path must call
+  it; a partial re-implementation encoded the same blind spot as the code
+  under test. A test that skips a pipeline step to dodge a crash is a bug
+  report waiting to be filed.
+- Commit: `879dfc0`.

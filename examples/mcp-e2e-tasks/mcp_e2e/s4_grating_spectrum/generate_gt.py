@@ -13,7 +13,7 @@ the reciprocal-lattice vectors inside a circle, so for a complete shell of the
 square lattice (21 / 37 / 81 harmonics) and a grating that is uniform along y
 it couples exactly the x-axis orders -M..M (M = 2 / 3 / 5). The 1D RCWA with
 Laurent's rule and the same M agrees with the server to ~1e-14
-(scripts/mcp/e2e/smoke_s4.py checks this on every L1 run).
+(scripts/mcp/e2e/e2e_smoke/servers/s4.py checks this on every L1 run).
 
 The cases are chosen so that the tool is the only practical source of the
 numbers: at the reported point, the converged answer (Li's inverse rule, many
@@ -60,7 +60,7 @@ SANITY_N = 3.47                     # check_engine_sanity: air / n = 3.47, norma
 
 
 # --------------------------------------------------------------------------
-# Independent 1D RCWA (numpy only; same code as scripts/mcp/e2e/smoke_s4.py)
+# Independent 1D RCWA (numpy only; same code as scripts/mcp/e2e/e2e_smoke/servers/s4.py)
 # --------------------------------------------------------------------------
 
 def _eps_fourier(eps_bg: complex, eps_ridge: complex, halfwidth: float, center: float,

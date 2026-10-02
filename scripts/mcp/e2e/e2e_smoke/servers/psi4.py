@@ -2,7 +2,7 @@
 
 Run with the server's own conda prefix (it provides psi4 for the references)::
 
-    ~/mcp/psi4/.venv/bin/python scripts/mcp/e2e/smoke_psi4.py --config ~/mcp/psi4.mcp.json
+    ~/mcp/psi4/.venv/bin/python scripts/mcp/e2e/smoke.py psi4 --config ~/mcp/psi4.mcp.json
 
 No network is needed. References are computed here, in this process (never
 in the server), by calling psi4 directly with the same physical settings the
@@ -10,9 +10,8 @@ tools document (density-fitted SCF, C1 symmetry, RHF/UHF by multiplicity) but
 through a different code path: wavefunction objects, ``psi4.variable`` and
 ``tdscf_excitations`` instead of the server's output-log parsers.
 
-Levels reported:
-  L0  initialize + tools/list (stable, matches manifest), launch environment
-  L1  real tools/call of all five tools:
+L1 (the shared L0/L1 checks are in ``e2e_smoke/runner.py``): real tools/call
+of all five tools:
       single_point  HF / UHF / DFT-D3(BJ) / MP2 energies and documented fields
       optimize      HF/STO-3G water minimum from a distorted start
       frequency     at that minimum (frequencies, ZPE, thermochemistry, IR),
@@ -22,7 +21,7 @@ Levels reported:
       optimize_excited_state  checked for consistency with an excited state:
                     returned energy = E(S_n) at the returned geometry, and
                     the S_n gradient vanishes there
-      plus in-band validation errors, unknown tool, stdout / cwd hygiene
+      plus in-band validation errors
 
 Classification: wrong numbers for a correctly used tool in its documented
 regime (minimum geometries, ground-state properties) are FAIL. Upstream
@@ -31,28 +30,17 @@ exactly — a documented field that is always null/zero, an ignored argument,
 an imaginary frequency reported as real, an "excited-state" optimisation
 that returns the ground-state minimum — and FAIL when it matches neither the
 correct answer nor the recognised defect.
-
-The server runs from a temporary cwd, HOME and TMPDIR with a minimal
-environment and no operator credentials.
 """
 from __future__ import annotations
 
-import argparse
 import contextlib
-import datetime as dt
 import json
 import math
-import os
 from pathlib import Path
-import subprocess
-import sys
-import tempfile
-from collections import Counter
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-from smoke_common import Caller, Report, package_versions  # noqa: E402
-from stdio_client import MCPError, StdioMCP, text_of  # noqa: E402
+from ..client import text_of
+from ..helpers import Atoms, max_abs_diff, quiet_fds, sorted_distances
+from ..runner import Caller, Report, Session, Smoke, check_rejected
 
 # Distorted water (the server docstrings' style of input: bare atom lines, Å).
 H2O_START = ("O 0.000000 0.000000 0.117790\n"
@@ -88,9 +76,6 @@ AU2DEBYE = 2.541746473         # psi4.constants.dipmom_au2debye
 # Pure helpers (stdlib only; unit-tested offline)
 # --------------------------------------------------------------------------
 
-Atoms = list[tuple[str, tuple[float, float, float]]]
-
-
 def parse_geometry(text: str) -> Atoms:
     """Atom lines 'Sym x y z'; skips a psi4 'charge multiplicity' header and an XYZ count/comment."""
     atoms: Atoms = []
@@ -112,16 +97,6 @@ def parse_geometry(text: str) -> Atoms:
 
 def atom_lines(atoms: Atoms) -> str:
     return "\n".join(f"{sym} {x:.10f} {y:.10f} {z:.10f}" for sym, (x, y, z) in atoms)
-
-
-def sorted_distances(atoms: Atoms) -> list[float]:
-    return sorted(math.dist(atoms[i][1], atoms[j][1]) for i in range(len(atoms)) for j in range(i + 1, len(atoms)))
-
-
-def max_abs_diff(a: list[float], b: list[float]) -> float:
-    if len(a) != len(b):
-        return math.inf
-    return max((abs(x - y) for x, y in zip(a, b)), default=0.0)
 
 
 def payload(result: dict) -> dict:
@@ -184,26 +159,6 @@ def compare_states(server: list[dict], reference: list[tuple[float, float]]):
 # --------------------------------------------------------------------------
 # Independent references: psi4 in THIS process
 # --------------------------------------------------------------------------
-
-@contextlib.contextmanager
-def quiet_fds():
-    """Silence fd 1/2 while psi4 runs (it prints to the process streams directly)."""
-    sys.stdout.flush()
-    sys.stderr.flush()
-    saved = os.dup(1), os.dup(2)
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    try:
-        os.dup2(devnull, 1)
-        os.dup2(devnull, 2)
-        yield
-    finally:
-        sys.stdout.flush()
-        sys.stderr.flush()
-        os.dup2(saved[0], 1)
-        os.dup2(saved[1], 2)
-        for fd in (*saved, devnull):
-            os.close(fd)
-
 
 class Psi4Ref:
     """Fresh psi4 state per reference calculation; output goes to a scratch log."""
@@ -368,19 +323,21 @@ def check_single_point(call: Caller, report: Report, ref: Psi4Ref) -> None:
         report.add("L1", "single_point[documented fields]", "PASS", "n_basis/gap/dipole match the reference")
 
     name = "single_point[invalid multiplicity]"
-    result = call(name, "single_point", {"geometry_xyz": H2O_START, "method": "HF", "basis": "sto-3g",
-                                         "multiplicity": 2, **COMMON}, allow_error=True)
-    if result is not None:
-        try:
-            data = payload(result)
-        except (ValueError, json.JSONDecodeError):
-            data = {}
-        if result.get("isError"):
-            report.add("L1", name, "PASS", f"isError=true: {text_of(result)[:120]!r}")
-        elif data.get("ok") is False and data.get("error_code") == "INVALID_MULTIPLICITY":
-            report.add("L1", name, "WARN", "rejected in-band (ok=false, INVALID_MULTIPLICITY) with isError=false")
-        else:
-            report.add("L1", name, "FAIL", f"closed-shell water accepted as a doublet: {text_of(result)[:200]!r}")
+    check_rejected(call, name, "single_point", {"geometry_xyz": H2O_START, "method": "HF", "basis": "sto-3g",
+                                                "multiplicity": 2, **COMMON},
+                   in_band=_invalid_multiplicity,
+                   on_accept=lambda result: ("FAIL", "closed-shell water accepted as a doublet: "
+                                                     f"{text_of(result)[:200]!r}"))
+
+
+def _invalid_multiplicity(result: dict) -> str | None:
+    try:
+        data = payload(result)
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if data.get("ok") is False and data.get("error_code") == "INVALID_MULTIPLICITY":
+        return "ok=false, INVALID_MULTIPLICITY"
+    return None
 
 
 def check_optimize(call: Caller, report: Report, ref: Psi4Ref) -> Atoms | None:
@@ -558,114 +515,24 @@ def check_excited_state_opt(call: Caller, report: Report, ref: Psi4Ref, minimum:
                    "the server parses the first TDSCF block of the log (the starting geometry)")
 
 
-def run_l1(client: StdioMCP, report: Report, ref: Psi4Ref) -> Caller:
-    call = Caller(client, report)
+def run_l1(session: Session) -> None:
+    call, report, ref = session.call, session.report, session.state["ref"]
     check_single_point(call, report, ref)
     minimum = check_optimize(call, report, ref)
     check_frequency(call, report, ref, minimum)
     check_tddft(call, report, ref, minimum)
     check_excited_state_opt(call, report, ref, minimum)
-    try:
-        bad = client.call_tool("__nonexistent__", {})
-        ok = "error" in bad or bad.get("result", {}).get("isError") is True
-        report.add("L1", "unknown tool is an error", "PASS" if ok else "FAIL", "" if ok else f"got success: {bad}")
-    except MCPError as exc:
-        report.add("L1", "unknown tool is an error", "FAIL", str(exc))
-    return call
 
 
-def server_env(server: dict, home: Path, tmpdir: Path) -> dict:
-    venv_bin = str(Path(server["command"]).parent)
-    env = {"HOME": str(home), "TMPDIR": str(tmpdir), "PATH": f"{venv_bin}:/usr/bin:/bin",
-           "PYTHONNOUSERSITE": "1", "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8"}
-    env.update(server.get("env", {}))
-    return env
+def prepare(session: Session) -> None:
+    refdir = session.tmp / "reference"
+    refdir.mkdir()
+    session.state["ref"] = Psi4Ref(refdir)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True, help="generated <root>/psi4.mcp.json")
-    parser.add_argument("--server", default="psi4")
-    parser.add_argument("--report", default="psi4-smoke-report.json")
-    args = parser.parse_args(argv)
-
-    config = json.loads(Path(args.config).expanduser().read_text(encoding="utf-8"))
-    server = config["mcpServers"][args.server]
-    manifest = {e["id"]: e for e in json.loads((HERE / "manifest.json").read_text())["servers"]}
-    entry = manifest[args.server]
-    checkout = Path(server["cwd"])
-    try:
-        revision = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"],
-                                  capture_output=True, text=True, check=True).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        revision = None
-
-    report = Report()
-    if revision != entry["revision"]:
-        report.add("L0", "pinned revision", "FAIL", f"checkout at {revision}, manifest pins {entry['revision']}")
-    got_path = server.get("env", {}).get("PYTHONPATH")
-    report.add("L0", "launch env in config", "PASS" if got_path == str(checkout) else "FAIL",
-               f"PYTHONPATH={got_path}" + ("" if got_path == str(checkout) else f" (expected {checkout})"))
-
-    call = None
-    stderr_tail = ""
-    with tempfile.TemporaryDirectory(prefix="mcp-e2e-psi4-") as tmp:
-        tmp_path = Path(tmp)
-        home, cwd, scratch, refdir = (tmp_path / d for d in ("home", "cwd", "tmpdir", "reference"))
-        for d in (home, cwd, scratch, refdir):
-            d.mkdir()
-        ref = Psi4Ref(refdir)
-        stderr_path = tmp_path / "server.stderr.log"
-        client = StdioMCP(server["command"], server["args"], cwd=cwd, env=server_env(server, home, scratch),
-                          stderr_path=stderr_path)
-        try:
-            try:
-                info = client.initialize()
-                report.add("L0", "initialize", "PASS",
-                           f"server={info.get('serverInfo')} protocol={info.get('protocolVersion')}")
-                names = sorted(t["name"] for t in client.list_tools())
-                expected = sorted(entry["expected_tools"])
-                report.add("L0", "tools/list", "PASS" if names == expected else "FAIL",
-                           f"{len(names)} tools" + ("" if names == expected else f"; expected {expected}, got {names}"))
-                again = sorted(t["name"] for t in client.list_tools())
-                report.add("L0", "tools/list stable", "PASS" if again == names else "FAIL")
-            except MCPError as exc:
-                report.add("L0", "handshake", "FAIL", str(exc))
-            else:
-                call = run_l1(client, report, ref)
-            alive = client.proc.poll() is None
-            report.add("L1", "server alive after calls", "PASS" if alive else "FAIL",
-                       "" if alive else f"exit code {client.proc.returncode}")
-        finally:
-            client.close()
-            stderr_tail = stderr_path.read_text(encoding="utf-8", errors="replace")[-4000:]
-
-        polluted = client.non_json_stdout
-        per_tool = {k: v for k, v in sorted(call.stdout_by_tool.items()) if v} if call else {}
-        report.add("L1", "stdout is pure JSON-RPC", "WARN" if polluted else "PASS",
-                   f"{len(polluted)} non-JSON line(s), per tool {per_tool}, e.g. {polluted[:3]}" if polluted else "",
-                   non_json_stdout=polluted[:50], non_json_stdout_by_tool=per_tool)
-        leftovers = sorted(p.name for p in cwd.iterdir())
-        report.add("L1", "server leaves cwd untouched", "WARN" if leftovers else "PASS",
-                   f"created {leftovers}" if leftovers else "")
-
-    document = {
-        "server": args.server,
-        "repository": entry["repository"],
-        "revision": revision,
-        "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "environment": package_versions(("psi4", "mcp", "numpy", "scipy", "pint", "qcelemental", "optking",
-                                         "dftd3-python")),
-        "result": "FAIL" if report.failed else "PASS",
-        "summary": dict(Counter(c["status"] for c in report.checks)),
-        "checks": report.checks,
-        "server_stderr_tail": stderr_tail,
-    }
-    Path(args.report).write_text(json.dumps(document, indent=2, ensure_ascii=False, default=str) + "\n",
-                                 encoding="utf-8")
-    print(f"\n{document['result']} {document['summary']}  report -> {Path(args.report).resolve()}")
-    return 1 if report.failed else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+SMOKE = Smoke(
+    server="psi4",
+    run_l1=run_l1,
+    packages=("psi4", "mcp", "numpy", "scipy", "pint", "qcelemental", "optking", "dftd3-python"),
+    prepare=prepare,
+)

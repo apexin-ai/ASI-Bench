@@ -12,7 +12,6 @@
         "command": ".venv/bin/python",
         "args": ["{checkout}/main.py"]
       },
-      "smoke": "smoke_pyscf.py",
       "expected_tools": [
         "generate_pyscf_geom_input",
         "optimize_molecule_mcp",
@@ -43,7 +42,6 @@
           "TOOLUNIVERSE_CACHE_PERSIST": "false"
         }
       },
-      "smoke": "smoke_arxiv.py",
       "expected_tools": [
         "ArXiv_get_pdf_snippets",
         "ArXiv_search_papers"
@@ -66,7 +64,6 @@
           "JSBSIM_DEBUG": "0"
         }
       },
-      "smoke": "smoke_jsbsim.py",
       "expected_tools": [
         "close_session",
         "create_session",
@@ -102,7 +99,6 @@
           "PYTHONPATH": "{checkout}/src"
         }
       },
-      "smoke": "smoke_s4.py",
       "expected_tools": [
         "check_engine_sanity",
         "simulate_stack_spectrum"
@@ -131,7 +127,6 @@
           "PYTHONPATH": "{checkout}"
         }
       },
-      "smoke": "smoke_psi4.py",
       "expected_tools": [
         "frequency",
         "optimize",

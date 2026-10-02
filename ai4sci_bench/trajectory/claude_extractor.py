@@ -8,6 +8,19 @@ from pathlib import Path
 from ai4sci_bench.core.trajectory import Trajectory, TrajectoryStep, TrajectorySummary
 
 
+def _message_blocks(event: dict) -> tuple[dict, list[dict]]:
+    """(message, content blocks) of an assistant/user event. A message that is not an
+    object, or content that is not a list, yields no blocks instead of raising: one odd
+    event must not cost the whole trajectory."""
+    message = event.get("message")
+    if not isinstance(message, dict):
+        return {}, []
+    content = message.get("content")
+    if not isinstance(content, list):
+        return message, []
+    return message, [block for block in content if isinstance(block, dict)]
+
+
 def extract_from_jsonl(jsonl_text: str, instance_id: str = "") -> Trajectory:
     """Parse Claude Code JSONL into a Trajectory object."""
     steps: list[TrajectoryStep] = []
@@ -46,9 +59,9 @@ def extract_from_jsonl(jsonl_text: str, instance_id: str = "") -> Trajectory:
         etype = event.get("type", "")
 
         if etype == "assistant":
-            message = event.get("message", {})
+            message, blocks = _message_blocks(event)
             assistant_turn_had_response = False
-            for block in message.get("content", []):
+            for block in blocks:
                 btype = block.get("type", "")
                 if btype == "text":
                     assistant_turn_had_response = True
@@ -105,9 +118,7 @@ def extract_from_jsonl(jsonl_text: str, instance_id: str = "") -> Trajectory:
                 step_idx += 1
 
         elif etype == "user":
-            for block in event.get("message", {}).get("content", []):
-                if not isinstance(block, dict):
-                    continue
+            for block in _message_blocks(event)[1]:
                 if block.get("type") == "tool_result":
                     inner = block.get("content", "")
                     # Non-text blocks (e.g. MCP images) are not copied into the

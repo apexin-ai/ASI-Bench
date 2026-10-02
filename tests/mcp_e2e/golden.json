@@ -1,0 +1,302 @@
+{
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_answer_values_must_come_from_the_tools": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"search": "FAIL", "snippets": "PASS"}, "tool_sequence": ["mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"},
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_codex_run_passes_and_web_search_items_are_recorded": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "PASS"},
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["web_search", "mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_default_cap_gives_wrong_counts": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"search": "PASS", "snippets": "FAIL"}, "tool_sequence": ["mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_extra_server_tools_warn_about_the_workspace_trap": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "WARN", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_genuine_search_and_snippets_run_passes": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["Bash", "mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_in_band_tool_errors_are_not_results": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"search": "PASS", "snippets": "FAIL"}, "tool_sequence": ["mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_shell_access_to_arxiv_is_a_bypass[curl -s 'http://export.arxiv.org/api/query?search_query=ti:graphene']": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["Bash", "mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_shell_access_to_arxiv_is_a_bypass[pip install arxiv]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["Bash", "mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_shell_access_to_arxiv_is_a_bypass[python3 - <<'EOF'\\nimport feedparser\\nEOF]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["Bash", "mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_shell_access_to_arxiv_is_a_bypass[python3 -c \"import urllib.request; urllib.request.urlopen('https://arxiv.org/pdf/1103.0576')\"]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["Bash", "mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_shell_access_to_arxiv_is_a_bypass[uv run --with arxiv python search.py]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["Bash", "mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_snippets_by_pdf_url_and_split_per_term_calls_pass": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "WARN"}, "failure": null, "per_call": {"search": "PASS", "snippets": "WARN"}, "tool_sequence": ["mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_snippets_for_a_paper_not_in_the_search_results_break_the_chain": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "FAIL", "tool_correct": "PASS"}, "failure": "tool_chain", "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_web_fetch_of_arxiv_is_a_bypass_and_web_search_a_warning": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["WebFetch", "mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "FAIL"},
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["WebSearch", "mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_arxiv_search_snippets.py::test_writing_the_answer_with_python_is_not_a_bypass": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"search": "PASS", "snippets": "PASS"}, "tool_sequence": ["Bash", "mcp__arxiv__ArXiv_search_papers", "mcp__arxiv__ArXiv_get_pdf_snippets"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_answers_must_be_copied_from_a_tool": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_chunked_steps_pass_with_a_warning_on_inputs": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "WARN"}, "failure": null, "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "WARN", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_codex_run_passes_without_reading_telemetry": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_genuine_b1_run_passes_every_check": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_no_state_read_is_an_uncalled_requirement": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "FAIL", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_called", "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "SKIP", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_shell_access_to_jsbsim[jsbsim --script=scripts/c1722.xml-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["Bash", "mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_shell_access_to_jsbsim[ls ~/mcp/jsbsim/jsbsim_data/aircraft-WARN]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["Bash", "mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_shell_access_to_jsbsim[pip install jsbsim==1.3.1-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["Bash", "mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_shell_access_to_jsbsim[python3 -c \"import json; json.dump({'altitude_ft': 1}, open('result.json','w'))\"-PASS]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["Bash", "mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_shell_access_to_jsbsim[python3 -c 'import jsbsim; print(jsbsim.__version__)'-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["Bash", "mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_shell_access_to_jsbsim[uv run --with jsbsim python fly.py-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["Bash", "mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_shell_access_to_jsbsim[~/mcp/jsbsim/.venv/bin/python -c 'print(1)'-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["Bash", "mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_steps_on_another_session_break_the_chain": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "FAIL", "tool_correct": "PASS"}, "failure": "tool_chain", "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_telemetry_only_and_create_session_initial_conditions_pass": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "SKIP", "step": "PASS", "telemetry": "PASS", "throttle": "PASS"}, "tool_sequence": ["mcp__jsbsim__create_session", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__step", "mcp__jsbsim__get_telemetry"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_trim_is_flagged_for_review": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__trim", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_answers_must_be_copied_from_tool_results": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_codex_run_passes": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_default_method_warns_on_inputs_and_fails_on_values": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"freq": "PASS", "opt": "FAIL"}, "tool_sequence": ["mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_excited_state_tool_is_only_suspicious": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["mcp__psi4__optimize_excited_state", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_frequencies_at_the_starting_geometry_break_the_chain": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"freq": "FAIL", "opt": "PASS"}, "tool_sequence": ["mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_genuine_b1_run_passes_every_check[False]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_genuine_b1_run_passes_every_check[True]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_in_band_error_is_not_a_correct_result": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"freq": "PASS", "opt": "FAIL"}, "tool_sequence": ["mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_reformatted_geometry_still_chains": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_shell_access_to_psi4[ls ~/mcp/psi4-WARN]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["Bash", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_shell_access_to_psi4[micromamba install -c conda-forge psi4-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["Bash", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_shell_access_to_psi4[pip install pyscf-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["Bash", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_shell_access_to_psi4[psi4 input.dat-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["Bash", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_shell_access_to_psi4[python3 -c \"import json; json.dump({'zpe_hartree': 1}, open('result.json','w'))\"-PASS]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["Bash", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_shell_access_to_psi4[python3 -c 'from pyscf import gto'-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["Bash", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_shell_access_to_psi4[python3 -c 'import psi4'-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["Bash", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_shell_access_to_psi4[python3 -m chemaster.mcp.calc_psi4.server-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["Bash", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_shell_access_to_psi4[uv run --with pyscf python opt.py-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["Bash", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_shell_access_to_psi4[~/mcp/psi4/.venv/bin/python -c 'print(1)'-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["Bash", "mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_bond_stretch.py::test_answer_must_copy_tool_values": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"plot": "PASS", "scan": "PASS"}, "tool_sequence": ["mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_bond_stretch.py::test_genuine_scan_and_plot_run_passes": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"plot": "PASS", "scan": "PASS"}, "tool_sequence": ["Bash", "mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_bond_stretch.py::test_missing_plot_call_fails": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "FAIL", "tool_chain": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_called", "per_call": {"plot": "FAIL", "scan": "PASS"}, "tool_sequence": ["Bash", "mcp__pyscf__run_bond_stretch_calculation_mcp"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_bond_stretch.py::test_numeric_inputs_passed_as_strings_still_match": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"plot": "PASS", "scan": "PASS"}, "tool_sequence": ["mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_bond_stretch.py::test_old_trajectories_without_block_types_only_warn": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "WARN"}, "failure": null, "per_call": {"plot": "WARN", "scan": "PASS"}, "tool_sequence": ["mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_bond_stretch.py::test_plot_with_retyped_data_breaks_the_chain": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "FAIL", "tool_correct": "PASS"}, "failure": "tool_chain", "per_call": {"plot": "PASS", "scan": "PASS"}, "tool_sequence": ["mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_bond_stretch.py::test_plot_without_image_fails_tool_correct": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"plot": "FAIL", "scan": "PASS"}, "tool_sequence": ["mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_bond_stretch.py::test_wrong_scan_inputs_fail": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "WARN"}, "failure": null, "per_call": {"plot": "PASS", "scan": "WARN"}, "tool_sequence": ["mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_rhf_energy.py::test_verifier_distinguishes_unavailable_server_from_uncalled_tool": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "FAIL", "no_bypass": "PASS", "tool_called": "FAIL", "tool_correct": "FAIL"}, "failure": "mcp_connected", "per_call": {"pyscf_rhf_energy": "FAIL"}, "tool_sequence": [], "verdict": "FAIL"},
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_called", "per_call": {"pyscf_rhf_energy": "FAIL"}, "tool_sequence": [], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_rhf_energy.py::test_verifier_flags_direct_pyscf_even_with_correct_answer": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["Bash", "mcp__pyscf__pyscf_rhf_energy"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_rhf_energy.py::test_verifier_passes_a_genuine_mcp_run": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["Bash", "mcp__pyscf__pyscf_rhf_energy"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_rhf_energy.py::test_verifier_reads_unredacted_stream_too": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__pyscf_rhf_energy"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_rhf_energy.py::test_verifier_reports_missing_outputs_as_answer_failure": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__pyscf_rhf_energy"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_rhf_energy.py::test_verifier_requires_answer_to_come_from_tool": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__pyscf_rhf_energy"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_rhf_energy.py::test_verifier_tolerates_string_message_payloads": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__pyscf_rhf_energy"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_pyscf_rhf_energy.py::test_verifier_warns_when_tool_inputs_were_reformatted": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "WARN"}, "failure": null, "per_call": {"pyscf_rhf_energy": "WARN"}, "tool_sequence": ["mcp__pyscf__pyscf_rhf_energy"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_answers_must_be_copied_from_the_returned_spectrum": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_codex_run_passes": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "PASS", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__check_engine_sanity", "mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_default_harmonics_give_a_wrong_spectrum": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"sanity": "SKIP", "spectrum": "FAIL"}, "tool_sequence": ["mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_genuine_b1_run_passes_every_check": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_home_made_rcwa_file_is_flagged": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"},
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_other_inputs_warn_when_the_result_is_still_right": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"},
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "WARN"}, "failure": null, "per_call": {"sanity": "SKIP", "spectrum": "WARN"}, "tool_sequence": ["mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_plain_text_results_pass_too": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "PASS", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__check_engine_sanity", "mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_sanity_call_is_judged_when_made": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "PASS", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__check_engine_sanity", "mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_scrubbed_command_without_trajectory_is_a_coverage_gap": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"sanity": "SKIP", "spectrum": "FAIL"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_scrubbed_paths_in_the_log_are_checked_against_the_trajectory": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_shell_access_to_s4[echo 'values from S4 via MCP'-WARN]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_shell_access_to_s4[ls ~/mcp/s4/src/mcp_s4_rcwa/s4lib-WARN]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_shell_access_to_s4[pip install grcwa-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_shell_access_to_s4[python3 -c \"import ctypes; ctypes.CDLL('/home/e2e/mcp/s4/src/mcp_s4_rcwa/s4lib/libS4.so')\"-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_shell_access_to_s4[python3 -c \"import json; json.dump({'R_max': 1}, open('result.json','w'))\"-PASS]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_shell_access_to_s4[python3 -c 'import S4'-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_shell_access_to_s4[python3 -c 'import numpy as np; np.linalg.eig(np.eye(2))'-WARN]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_shell_access_to_s4[uv run --with rcwa python solve.py-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_shell_access_to_s4[~/mcp/s4/.venv/bin/python -c 'print(1)'-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["Bash", "mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_wrong_optional_sanity_result_fails_tool_correct": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"sanity": "FAIL", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__check_engine_sanity", "mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_answer_must_copy_the_tool_value": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__pyscf_rhf_energy"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_arguments_serialised_as_json_string_are_parsed": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__pyscf_rhf_energy"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_codex_commands_keep_their_unscrubbed_text_from_the_trajectory": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__pyscf_rhf_energy", "command_execution"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_direct_backend_use_in_a_shell_command_is_flagged": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__pyscf_rhf_energy", "command_execution"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_failed_mcp_call_fails_tool_correct": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "WARN", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"pyscf_rhf_energy": "FAIL"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__pyscf_rhf_energy"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_genuine_codex_rhf_run_passes": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"pyscf_rhf_energy": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "command_execution", "mcp__pyscf__pyscf_rhf_energy", "command_execution"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_genuine_codex_scan_and_plot_run_passes": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"plot": "PASS", "scan": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_plot_with_retyped_data_breaks_the_chain": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "FAIL", "tool_correct": "PASS"}, "failure": "tool_chain", "per_call": {"plot": "PASS", "scan": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_plot_without_image_fails": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"plot": "FAIL", "scan": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_reformatted_inputs_only_warn": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "WARN"}, "failure": null, "per_call": {"pyscf_rhf_energy": "WARN"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__pyscf_rhf_energy"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_resource_listing_is_not_a_tool_call": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "WARN", "no_bypass": "PASS", "tool_called": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_called", "per_call": {"pyscf_rhf_energy": "FAIL"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_tool_of_a_lookalike_server_is_not_the_required_tool": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "WARN", "no_bypass": "PASS", "tool_called": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_called", "per_call": {"pyscf_rhf_energy": "FAIL"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf_extra__pyscf_rhf_energy"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_verify_evidence.py::test_trajectory_alone_is_enough_for_calls_and_results": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "WARN", "tool_correct": "PASS"}, "failure": null, "per_call": {"plot": "PASS", "scan": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp", "command_execution"], "verdict": "PASS"}
+  ]
+}
