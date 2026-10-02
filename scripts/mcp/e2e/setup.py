@@ -12,6 +12,10 @@ Stdlib only. For the server ``<id>`` listed in ``manifest.json`` this:
 3. writes a portable ``<root>/<id>.mcp.json`` for ``asibench run --mcp-config``
    (``{checkout}`` in launch args / env values becomes the absolute checkout).
 
+Servers that vendor prebuilt native code declare ``host_requirements``
+(machine, CPU flags, loadable system libraries); these are checked before
+anything is cloned and are never installed by this script.
+
 It never installs anything into the ASI-Bench environment, never touches
 operator credentials and never runs business tool calls; use the matching
 ``smoke_<id>.py`` afterwards.
@@ -21,13 +25,16 @@ Usage::
     python3 scripts/mcp/e2e/setup.py pyscf [--root ~/mcp]
     python3 scripts/mcp/e2e/setup.py arxiv [--root ~/mcp]
     python3 scripts/mcp/e2e/setup.py jsbsim [--root ~/mcp]
+    python3 scripts/mcp/e2e/setup.py s4 [--root ~/mcp]
 """
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import shutil
 import subprocess
@@ -43,6 +50,8 @@ CHECKOUT = "{checkout}"
 INSTALL_MODES = ("uv-sync-frozen", "uv-pip-pinned")
 PIN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9._,-]+\])?==[A-Za-z0-9][A-Za-z0-9.+!_-]*")
 TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+# Optional per-server host checks for upstreams that vendor prebuilt native code.
+HOST_REQUIREMENT_KEYS = ("machine", "cpu_flags", "shared_libraries")
 
 
 class SetupError(RuntimeError):
@@ -68,6 +77,53 @@ def _check_install_fields(sid: str, entry: dict) -> None:
     if not isinstance(entry.get("exclude_newer"), str) or not TIMESTAMP_RE.fullmatch(entry["exclude_newer"]):
         raise SetupError(f"{sid}: uv-pip-pinned needs exclude_newer as YYYY-MM-DDTHH:MM:SSZ "
                          "(fixes the transitive resolution)")
+
+
+def _check_host_requirements(sid: str, entry: dict) -> None:
+    if "host_requirements" not in entry:
+        return
+    req = entry["host_requirements"]
+    if not isinstance(req, dict) or not req or set(req) - set(HOST_REQUIREMENT_KEYS) - {"reason"}:
+        raise SetupError(f"{sid}: host_requirements may only contain {', '.join(HOST_REQUIREMENT_KEYS)} and reason")
+    for key in HOST_REQUIREMENT_KEYS:
+        values = req.get(key, [])
+        if not isinstance(values, list) or not all(isinstance(v, str) and v and v.strip() == v for v in values):
+            raise SetupError(f"{sid}: host_requirements.{key} must be a list of non-empty strings")
+    if not isinstance(req.get("reason", ""), str):
+        raise SetupError(f"{sid}: host_requirements.reason must be a string")
+
+
+def check_host(entry: dict, *, machine: str | None = None, cpuinfo: Path = Path("/proc/cpuinfo"),
+               loader=ctypes.CDLL) -> None:
+    """Fail fast when the host cannot run a server's prebuilt native code.
+
+    Only checks; never installs system packages (that needs an administrator).
+    """
+    req = entry.get("host_requirements")
+    if not req:
+        return
+    problems = []
+    machine = machine or platform.machine()
+    if req.get("machine") and machine not in req["machine"]:
+        problems.append(f"machine {machine!r} is not one of {req['machine']}")
+    if req.get("cpu_flags"):
+        try:
+            text = cpuinfo.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        flags = {f for line in text.splitlines() if line.split(":", 1)[0].strip() == "flags"
+                 for f in line.split(":", 1)[1].split()}
+        missing = [f for f in req["cpu_flags"] if f not in flags]
+        if missing:
+            problems.append(f"CPU lacks {missing} (read from {cpuinfo})")
+    for lib in req.get("shared_libraries", []):
+        try:
+            loader(lib)
+        except OSError as exc:
+            problems.append(f"cannot load {lib}: {exc}")
+    if problems:
+        reason = f" ({req['reason']})" if req.get("reason") else ""
+        raise SetupError(f"{entry['id']}: host requirements not met{reason}:\n  - " + "\n  - ".join(problems))
 
 
 def load_manifest(path: Path = MANIFEST) -> dict[str, dict]:
@@ -96,6 +152,7 @@ def load_manifest(path: Path = MANIFEST) -> dict[str, dict]:
         if any(CHECKOUT in v and not v.startswith(CHECKOUT + "/") for v in env.values()):
             raise SetupError(f"{sid}: {CHECKOUT} may only prefix a path value in launch.env")
         _check_install_fields(sid, entry)
+        _check_host_requirements(sid, entry)
         servers[sid] = entry
     return servers
 
@@ -182,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
         entry = servers[args.server]
         root = Path(args.root).expanduser().resolve()
         dest = root / entry["id"]
+        check_host(entry)
         ensure_checkout(entry, dest)
         python = build_env(entry, dest)
         config_path = root / f"{entry['id']}.mcp.json"

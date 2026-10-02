@@ -124,6 +124,8 @@
   revision 与各 server 自己的 Python 版本（忽略调用方 `UV_PYTHON`），可声明 launch
   `env`、额外 `uv_sync_args` 与 `{checkout}` 路径占位（args 与 env 值）；无 lockfile 的
   上游用 `uv-pip-pinned`（只允许 `==` 精确 pin，并以 `exclude_newer` 固定传递依赖）；
+  vendor 预编译原生库的上游声明 `host_requirements`（machine/cpu_flags/shared_libraries），
+  `setup.py` 在 clone 前只检查、不安装系统包；
   只 clone 不 vendor 上游；
   smoke 用 server 自身 venv 在进程外独立计算参考值，L0/L1 分级，
   smoke 必须覆盖 manifest 列出的全部工具：数值错误为 FAIL，上游缺陷（in-band 错误、

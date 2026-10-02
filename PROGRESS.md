@@ -1140,3 +1140,36 @@
   harness and verifier 4/4 PASS per harness.
 - Implementation commit: `6015365`.
 
+## 2026-10-02: s4 (S4 RCWA) MCP smoke (L1) and host requirements
+
+- Problem: `prof-davifr/mcp-s4-rcwa` ships S4 as a prebuilt `libS4.so` in the
+  repository: x86-64 only, compiled with `-march=native` (AVX2/FMA/BMI2) and
+  linked against the system BLAS/LAPACK, which `uv` cannot install. Without a
+  check, a wrong host fails at server start with an opaque ctypes or SIGILL
+  error. The upstream has no lockfile either.
+- Resolution: optional manifest `host_requirements` (`machine`, `cpu_flags`,
+  `shared_libraries`, `reason`), checked by `setup.py` before cloning and never
+  installed; manifest entry `s4` (`uv-pip-pinned`, run as `python -m
+  mcp_s4_rcwa.server` with `PYTHONPATH={checkout}/src`, no package build).
+  `smoke_s4.py` compares both tools with numpy-only references that share
+  nothing with S4: a transfer-matrix method for planar stacks and a 1D RCWA
+  for lamellar gratings; it reports the binary's SHA-256.
+- Lesson: S4's default formulation is Laurent's rule with circular truncation.
+  With a complete square-lattice shell (21/49/81 harmonics) and a grating
+  uniform along y, an independent 1D RCWA with the same rule and orders agrees
+  to ~1e-14, which is a much sharper test than comparing converged values (TM
+  is still 1e-3 away from Li's-rule convergence at 201 harmonics).
+- Lesson: keep RCWA wavelength grids off Rayleigh anomalies; a grid point at
+  λ = period alone produced a 3e-9 disagreement.
+- Lesson: upstream defects (WARN): the incidence side is always S4's last
+  layer, and `incidence_layer`/`substrate_layer` only pick where fluxes are
+  read, so swapped or inner layers give R=0/T>1 or meaningless spectra without
+  an error; unknown layer materials become vacuum; θ ≥ 90° reports A=1;
+  negative thickness and duplicate layer names are accepted.
+- Verification: Linux aarch64 with a locally built S4 (victorliu/S4 7fd00a2):
+  40 PASS / 8 WARN / 0 FAIL, four runs; the upstream binary's Fresnel
+  self-test on AWS was bit-identical to that build. Offline tests in
+  `tests/test_mcp_e2e_scripts.py` (stubbed servers built from the references
+  catch a TE/TM swap and a Li-vs-Laurent formulation change). AWS amd64 smoke
+  pending.
+- Implementation commit: pending.
