@@ -191,6 +191,26 @@ also wrong for Codex).
 
 ## Results
 
+### `mcp_e2e.s4_grating_spectrum` (Claude Code and Codex CLI)
+
+2026-10-02, AWS Linux amd64 with the pinned upstream `libS4.so`, seed 31415
+(TiO₂ ridges 0.27 µm wide and 0.4 µm high, period 0.9 µm, TM at 5°, 37
+harmonics, 13 points from 1.075 to 1.255 µm; report point 0, maximum at
+1.15 µm), one run per level. Claude Code with `claude-opus-5-5`; Codex CLI
+with `gpt-5.6-sol` through the custom gateway (`codex_home`), effort `medium`:
+
+| Harness | Level | Local score | Verified PASS | Notes |
+|---|---|---|---|---|
+| Claude Code | B1–B4 | 4 × 100 | 4/4 | layer order and 1D pattern right without the recipe at B3/B4; also ran `check_engine_sanity` every time |
+| Codex CLI | B1–B4 | 4 × 100 | 4/4 | tool found without being named at B3/B4 |
+
+The first verification of the Claude runs failed `tool_correct` and
+`answer_from_tool` on all four levels although the answers were right: Claude
+Code shows the FastMCP `structuredContent` wrapper (`{"result": ...}`) instead
+of the text block (see the evidence note above). After the verifier fix the
+same artefacts passed every check; the agents were not re-run. One run per
+level shows the path works, not a pass rate.
+
 ### `mcp_e2e.jsbsim_engine_run` (Claude Code and Codex CLI)
 
 2026-10-02, AWS Linux amd64, seed 31415 (Chicago, 5500 ft, 159.85 ft/s,

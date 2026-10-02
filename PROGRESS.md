@@ -1212,6 +1212,11 @@
   ≤ 1.1e-12. `asibench generate --sandbox task` + an oracle `--agent-cmd` that
   follows B1 through the real server scored 100/100 and `verify_run.py` failed
   it for lack of agent evidence; Claude and Codex streams built from those real
-  server outputs pass every check. AWS agent runs pending.
-- Implementation commit: pending.
+  server outputs pass every check. AWS Linux amd64 (pinned upstream
+  `libS4.so`), seed 31415, B1–B4 ×1 each for Claude Code (`claude-opus-5-5`)
+  and Codex CLI (`gpt-5.6-sol`): local score 400/400 per harness and verifier
+  4/4 PASS per harness (Claude after the structured-output fix, re-verified on
+  the same run artefacts without re-running the agent).
+- Implementation commits: `29ba5a5` (task, verifier `select`), `7b78b11`
+  (structured-output unwrapping).
 
