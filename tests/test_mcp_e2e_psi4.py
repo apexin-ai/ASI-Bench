@@ -372,22 +372,26 @@ def test_excited_state_tool_is_only_suspicious(tmp_path):
 
 def test_field_walks_nested_objects_and_prefers_literal_keys():
     data = {"result": {"zpe": {"value": 0.05}}, "a.b": 1, "a": {"b": 2}}
-    assert verify._field(data, "result.zpe.value") == 0.05
-    assert verify._field(data, "a.b") == 1
-    assert verify._field(data, "result.missing.value") is None
-    assert verify._field(data, "result.zpe.value.more") is None
-    assert verify._field([1], "x") is None and verify._field(data, None) is None
-    call = {"result_text": json.dumps(OPT_PAYLOAD), "is_error": False}
-    assert verify._result_value(call, "result.final_energy.value") == -39.72701072
-    assert verify._source_value(call, {"result_key": "result.final_energy.value"}, {}) == -39.72701072
+    assert verify.values.field(data, "result.zpe.value") == 0.05
+    assert verify.values.field(data, "a.b") == 1
+    assert verify.values.field(data, "result.missing.value") is None
+    assert verify.values.field(data, "result.zpe.value.more") is None
+    assert verify.values.field([1], "x") is None and verify.values.field(data, None) is None
+    call = verify.evidence.ToolCall(result_text=json.dumps(OPT_PAYLOAD), is_error=False)
+    assert verify.values.read(call, verify.spec.Selector(key="result.final_energy.value")) == -39.72701072
+    raw = verify.spec.Selector(key="result.optimized_geometry_xyz", raw=True)
+    assert verify.values.read(call, raw) == OPT_PAYLOAD["result"]["optimized_geometry_xyz"]
 
 
 def test_same_geometry():
     plain = "O 0 0 0.1\nH 0 0.75 -0.47\nH 0 -0.75 -0.47"
-    assert verify._same_geometry("0 1\n" + plain + "\nsymmetry c1\n", "3\nwater\n" + plain, 1e-4)
-    assert verify._same_geometry(plain.replace("0.75", "0.75004"), plain, 1e-4)
-    assert not verify._same_geometry(plain.replace("0.75", "0.7502"), plain, 1e-4)
-    assert not verify._same_geometry(plain.replace("O", "S", 1), plain, 1e-4)
-    assert not verify._same_geometry("\n".join(plain.splitlines()[:2]), plain, 1e-4)
-    assert not verify._same_geometry("no atoms here", plain, 1e-4) and not verify._same_geometry(None, plain, 1e-4)
-    assert verify._link_comparator({})("abc", "abc") and not verify._link_comparator({})("0.1", "0.2")
+    assert verify.values.same_geometry("0 1\n" + plain + "\nsymmetry c1\n", "3\nwater\n" + plain, 1e-4)
+    assert verify.values.same_geometry(plain.replace("0.75", "0.75004"), plain, 1e-4)
+    assert not verify.values.same_geometry(plain.replace("0.75", "0.7502"), plain, 1e-4)
+    assert not verify.values.same_geometry(plain.replace("O", "S", 1), plain, 1e-4)
+    assert not verify.values.same_geometry("\n".join(plain.splitlines()[:2]), plain, 1e-4)
+    assert not verify.values.same_geometry("no atoms here", plain, 1e-4) and not verify.values.same_geometry(None, plain, 1e-4)
+    link = verify.spec.Binding(("g",), verify.spec.Selector(key="g", raw=True))
+    assert verify.values.link_comparator(link)("abc", "abc") and not verify.values.link_comparator(link)("0.1", "0.2")
+    geo = verify.spec.Binding(("g",), verify.spec.Selector(key="g", raw=True), "geometry", 1e-4)
+    assert verify.values.link_comparator(geo)(plain.replace("0.75", "0.75004"), plain)

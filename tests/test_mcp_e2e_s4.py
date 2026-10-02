@@ -333,14 +333,15 @@ def test_plain_text_results_pass_too(tmp_path, reference):
 
 def test_unwrap_structured_output():
     payload = {"R": 0.3, "ok": True}
-    assert verify._unwrap_structured({"result": json.dumps(payload)}) == payload
+    assert verify.values.unwrap_structured({"result": json.dumps(payload)}) == payload
     blocks = [{"type": "text", "text": json.dumps(payload), "annotations": None}, {"type": "image", "data": "x"}]
-    assert verify._unwrap_structured({"result": blocks}) == payload
-    assert verify._unwrap_structured({"result": 1.5}) == 1.5
-    assert verify._unwrap_structured({"result": "not json"}) == "not json"
-    assert verify._unwrap_structured({"result": [{"url": "a"}]}) == [{"url": "a"}]   # not content blocks
-    assert verify._unwrap_structured({"result": 1, "other": 2}) == {"result": 1, "other": 2}
-    assert verify._result_value({"result_text": json.dumps({"result": "0.25"})}, None) == 0.25
+    assert verify.values.unwrap_structured({"result": blocks}) == payload
+    assert verify.values.unwrap_structured({"result": 1.5}) == 1.5
+    assert verify.values.unwrap_structured({"result": "not json"}) == "not json"
+    assert verify.values.unwrap_structured({"result": [{"url": "a"}]}) == [{"url": "a"}]   # not content blocks
+    assert verify.values.unwrap_structured({"result": 1, "other": 2}) == {"result": 1, "other": 2}
+    call = verify.evidence.ToolCall(result_text=json.dumps({"result": "0.25"}))
+    assert verify.values.read(call, verify.spec.Selector()) == 0.25
 
 
 def test_sanity_call_is_judged_when_made(tmp_path, reference):
@@ -417,23 +418,26 @@ def test_home_made_rcwa_file_is_flagged(tmp_path, reference):
 # --- verify_run: answer `select` ----------------------------------------------
 
 def _call(payload):
-    return {"result_text": json.dumps(payload), "is_error": False}
+    return verify.evidence.ToolCall(result_text=json.dumps(payload), is_error=False)
+
+
+def _pick(call, key, ref, **select):
+    selector = verify.spec.Selector(key=key, select=verify.spec.SelectSpec(**select) if select else None)
+    return verify.values.read(call, selector, ref)
 
 
 def test_source_value_select_modes():
     call = _call({"wavelength": [1.0, 1.1, 1.2], "R": [0.1, 0.3, 0.2], "T": [0.9, 0.7, 0.8]})
     ref = {"lam": 1.1, "far": 1.15}
-    assert verify._source_value(call, {"result_key": "R", "select": {"reduce": "max"}}, ref) == 0.3
-    assert verify._source_value(call, {"result_key": "T", "select": {"reduce": "min"}}, ref) == 0.7
-    assert verify._source_value(call, {"result_key": "wavelength", "select": {"argmax_of": "R"}}, ref) == 1.1
-    assert verify._source_value(call, {"result_key": "T", "select": {"argmin_of": "R"}}, ref) == 0.9
-    where = {"where_key": "wavelength", "equals_reference_key": "lam"}
-    assert verify._source_value(call, {"result_key": "T", "select": where}, ref) == 0.7
-    assert verify._source_value(call, {"result_key": "T", "select": {**where, "equals_reference_key": "far"}},
-                                ref) is None
-    assert verify._source_value(call, {"result_key": "A", "select": {"reduce": "max"}}, ref) is None
-    assert verify._source_value(call, {"result_key": "R", "select": {"argmax_of": "missing"}}, ref) is None
-    assert verify._source_value(_call({"R": 0.5}), {"result_key": "R", "select": {"reduce": "max"}}, ref) is None
-    assert verify._source_value(_call({"R": 0.5}), {"result_key": "R"}, ref) == 0.5
-    assert verify._source_value({"result_text": "not json"}, {"result_key": "R", "select": {"reduce": "max"}},
-                                ref) is None
+    assert _pick(call, "R", ref, reduce="max") == 0.3
+    assert _pick(call, "T", ref, reduce="min") == 0.7
+    assert _pick(call, "wavelength", ref, argmax_of="R") == 1.1
+    assert _pick(call, "T", ref, argmin_of="R") == 0.9
+    assert _pick(call, "T", ref, where_key="wavelength", equals_reference_key="lam") == 0.7
+    assert _pick(call, "T", ref, where_key="wavelength", equals_reference_key="far") is None
+    assert _pick(call, "A", ref, reduce="max") is None
+    assert _pick(call, "R", ref, argmax_of="missing") is None
+    assert _pick(call, "R", ref) == [0.1, 0.3, 0.2]
+    assert _pick(_call({"R": 0.5}), "R", ref, reduce="max") is None
+    assert _pick(_call({"R": 0.5}), "R", ref) == 0.5
+    assert _pick(verify.evidence.ToolCall(result_text="not json"), "R", ref, reduce="max") is None

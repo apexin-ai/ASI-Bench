@@ -102,8 +102,10 @@ that is what `no_bypass` is for. `--mcp-config` also turns on web search
 2. Copy the closest existing task. Keep `status: test` and seed 31415, and
    compute the reference independently of the server.
 3. Write `e2e_check.json` (schema 2: `calls`, `answers`, bypass patterns). The
-   format is documented in the `verify_run.py` docstring. Copy from an existing
-   task:
+   format is documented in the `verify_run.py` docstring and checked strictly
+   when loaded (a typo fails with `invalid_spec`). A new non-numeric result
+   type is a named extractor in `scripts/mcp/e2e/e2e_verify/extractors.py`.
+   Copy from an existing task:
 
    | Pattern | Task |
    |---|---|

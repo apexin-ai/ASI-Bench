@@ -273,3 +273,40 @@ def test_non_agent_logs_are_not_mistaken_for_codex(tmp_path):
     path = tmp_path / "log.jsonl"
     path.write_text('{"type": "message", "role": "assistant", "content": "hi"}\nplain text\n')
     assert verify.parse_codex_stream(path) is None
+
+
+# --- evidence selection and tool matching -------------------------------------------
+
+def test_stdout_parser_follows_the_agent_adapter(tmp_path):
+    path = tmp_path / "agent_stdout.jsonl"
+    path.write_text(_stream(_rhf_call()))
+    parse = verify.evidence.parse_stdout
+    assert parse(path, "CodexCLIAdapter").source.startswith("codex exec JSONL")
+    assert parse(path, None).source.startswith("codex exec JSONL")          # unknown agent: try each format
+    assert parse(path, "SomeFutureAdapter").source.startswith("codex exec JSONL")
+    assert parse(path, "ClaudeCodeCLIAdapter") is None                     # not a Claude stream
+
+
+def test_known_agent_with_unparseable_stdout_falls_back_to_the_trajectory(tmp_path):
+    instance_id = f"{RHF_TASK}__seed31415"
+    task_out = tmp_path / "out" / RHF_TASK
+    task_out.mkdir(parents=True)
+    _persisted, steps = _persist_like_run(_stream(_rhf_call()), tmp_path)
+    task_out.joinpath("t.trajectory.json").write_text(json.dumps(steps))
+    task_out.joinpath("s.jsonl").write_text("not a Codex log\n")
+    result = {"agent_name": "CodexCLIAdapter",
+              "agent_output": {"raw_stdout_file": "s.jsonl", "trajectory_file": "t.trajectory.json"}}
+    ev = verify.evidence.load_evidence(task_out / f"{instance_id}__b1.json", result)
+    assert ev.source.startswith("trajectory")
+    assert "mcp__pyscf__pyscf_rhf_energy" in [c.name for c in ev.calls]
+
+
+def test_tool_of_a_lookalike_server_is_not_the_required_tool(tmp_path):
+    # mcp__pyscf_extra__pyscf_rhf_energy contains the server name and ends with the
+    # tool name, but is another server's tool: names must match exactly.
+    lookalike = [json.loads(json.dumps(e).replace('"server": "pyscf"', '"server": "pyscf_extra"'))
+                 for e in _rhf_call()]
+    row = _rhf(tmp_path, _stream(lookalike))
+    assert row["tool_call_counts"] == {"mcp__pyscf__list_mcp_resources": 1,
+                                       "mcp__pyscf_extra__pyscf_rhf_energy": 1}
+    assert _status(row)["tool_called"] == "FAIL" and row["verdict"] == "FAIL"

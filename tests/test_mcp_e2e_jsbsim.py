@@ -359,16 +359,17 @@ def test_codex_run_passes_without_reading_telemetry(tmp_path, reference):
 # --- verify_run helpers -------------------------------------------------------
 
 def test_same_link_compares_strings_exactly_and_numbers_to_print_precision():
-    assert verify._same_link("b03a88ab5beb", "b03a88ab5beb")
-    assert not verify._same_link("b03a88ab5beb", "b03a88ab5bec")
-    assert verify._same_link("123456789012", 123456789012)
-    assert verify._same_link([1.0, 2.0], [1.0, 2.0 + 1e-13])
-    assert not verify._same_link(None, None) and not verify._same_link("", "")
-    assert not verify._same_link({"a": 1}, {"a": 1})
+    assert verify.values.same_link("b03a88ab5beb", "b03a88ab5beb")
+    assert not verify.values.same_link("b03a88ab5beb", "b03a88ab5bec")
+    assert verify.values.same_link("123456789012", 123456789012)
+    assert verify.values.same_link([1.0, 2.0], [1.0, 2.0 + 1e-13])
+    assert not verify.values.same_link(None, None) and not verify.values.same_link("", "")
+    assert not verify.values.same_link({"a": 1}, {"a": 1})
 
 
 def test_requirements_group_optional_calls():
-    spec = {"calls": [{"name": "a", "tool": "A"}, {"name": "b", "tool": "B", "optional": True, "group": "g"},
-                      {"name": "c", "tool": "C", "optional": True, "group": "g"},
-                      {"name": "d", "tool": "D", "optional": True}]}
-    assert [[cs["name"] for cs in req] for req in verify._requirements(spec)] == [["a"], ["b", "c"]]
+    CallSpec = verify.spec.CallSpec
+    spec = verify.spec.Spec(2, "s", "r.json", "p.json", answers=(), calls=(
+        CallSpec("a", "A"), CallSpec("b", "B", optional=True, group="g"),
+        CallSpec("c", "C", optional=True, group="g"), CallSpec("d", "D", optional=True)))
+    assert [[cs.name for cs in req] for req in spec.requirements()] == [["a"], ["b", "c"]]

@@ -147,6 +147,11 @@
   数值答案可用 `from_calls` 多来源，非数值串联值（如 `session_id`）按字符串精确比对，
   `"compare": "geometry"` 按原子行在 `abs_tol` Å 内比对；结果/答案 key 可用点路径取嵌套 JSON）
   读取 run 产物判定，框架评分契约不变。
+  verifier 实现在 `scripts/mcp/e2e/e2e_verify/`（spec/extractors/values/evidence/checks，仅标准库），
+  `verify_run.py` 只是 CLI：`e2e_check.json` 加载时严格校验（未知键、非法枚举、悬空调用引用、
+  不适用的键均报 `invalid_spec`）；所有取值走同一 `Selector`（key/select/extract），比较器共用，
+  新值类型只加 extractor 或 comparator，不在单个检查里打补丁；工具名按 `mcp__<server>__<tool>`
+  精确匹配；日志解析器按结果的 `agent_name` 选择，未知 agent 依次试探。
   verifier 行为由 `tests/golden/mcp_e2e_verify.json` 快照锁定（每个 `verify_one` 调用的
   verdict/各项检查/per-call 状态）；有意改变判定时用 `MCP_E2E_GOLDEN=update` 整文件重生成并在 diff 中审阅。
   `--mcp-config` 强制 search mode，Claude 有 WebSearch/WebFetch、Codex 有 web_search，

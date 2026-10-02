@@ -353,14 +353,16 @@ def test_codex_run_passes_and_web_search_items_are_recorded(tmp_path):
 # --- extractors -----------------------------------------------------------------
 
 def test_extractors_canonicalise_ids_and_counts():
-    assert verify._canon_ids(["https://arxiv.org/abs/1103.0291v1", "arXiv:1103.0212", "solv-int/9901001v2",
-                              "http://arxiv.org/pdf/1206.1177.pdf"]) == \
+    ext, values = verify.extractors, verify.values
+    assert ext.canon_ids(["https://arxiv.org/abs/1103.0291v1", "arXiv:1103.0212", "solv-int/9901001v2",
+                          "http://arxiv.org/pdf/1206.1177.pdf"]) == \
         ["1103.0291", "1103.0212", "solv-int/9901001", "1206.1177"]
-    assert verify._canon_ids([]) is None and verify._canon_ids(3) is None
-    assert verify._canon_counts({"Arecibo ": "3"}) == {"arecibo": 3}
-    assert verify._canon_counts({"a": 1.5}) is None and verify._canon_counts({}) is None
-    assert verify._matches({"a": 1}, {"a": 1, "b": 2}, "subset")
-    assert not verify._matches({"a": 1, "c": 0}, {"a": 1, "b": 2}, "subset")
-    assert verify._matches(["x", "y"], "y", "member") and not verify._matches(None, "y", "member")
+    assert ext.canon_ids([]) is None and ext.canon_ids(3) is None
+    assert ext.canon_counts({"Arecibo ": "3"}) == {"arecibo": 3}
+    assert ext.canon_counts({"a": 1.5}) is None and ext.canon_counts({}) is None
+    assert values.matches({"a": 1}, {"a": 1, "b": 2}, "subset")
+    assert not values.matches({"a": 1, "c": 0}, {"a": 1, "b": 2}, "subset")
+    assert values.matches(["x", "y"], "y", "member") and not values.matches(None, "y", "member")
     truncated = json.dumps({"data": json.loads(_search_result()), "_truncated": True})
-    assert verify._extracted({"result_text": truncated}, "arxiv_ids") == IDS
+    call = verify.evidence.ToolCall(result_text=truncated)
+    assert values.read(call, verify.spec.Selector(extract="arxiv_ids")) == IDS

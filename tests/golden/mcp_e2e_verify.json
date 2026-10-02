@@ -101,6 +101,9 @@
   "tests/test_mcp_e2e_codex.py::test_resource_listing_is_not_a_tool_call": [
     {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "WARN", "no_bypass": "PASS", "tool_called": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_called", "per_call": {"pyscf_rhf_energy": "FAIL"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources"], "verdict": "FAIL"}
   ],
+  "tests/test_mcp_e2e_codex.py::test_tool_of_a_lookalike_server_is_not_the_required_tool": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "WARN", "no_bypass": "PASS", "tool_called": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_called", "per_call": {"pyscf_rhf_energy": "FAIL"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf_extra__pyscf_rhf_energy"], "verdict": "FAIL"}
+  ],
   "tests/test_mcp_e2e_codex.py::test_trajectory_alone_is_enough_for_calls_and_results": [
     {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "WARN", "tool_correct": "PASS"}, "failure": null, "per_call": {"plot": "PASS", "scan": "PASS"}, "tool_sequence": ["mcp__pyscf__list_mcp_resources", "mcp__pyscf__run_bond_stretch_calculation_mcp", "mcp__pyscf__plot_energy_scan_image_mcp", "command_execution"], "verdict": "PASS"}
   ],

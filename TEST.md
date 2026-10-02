@@ -588,7 +588,16 @@ intended verifier change, regenerate and review the diff:
 MCP_E2E_GOLDEN=update uv run --frozen pytest -q tests/test_mcp_e2e_*.py
 ```
 
-The update refuses `-k` / `file::test` selections and red runs.
+The update refuses `-k` / `file::test` selections and red runs. The verifier
+lives in `scripts/mcp/e2e/e2e_verify/`; tests reach its modules through the
+loaded CLI module (`verify.spec`, `verify.values`, `verify.evidence`,
+`verify.checks`, `verify.extractors`). `test_mcp_e2e_scripts.py` parses every
+`e2e_check.json` strictly and rejects unknown, inapplicable or invalid keys
+(e.g. `key` on a `number` result, `group` on a required call, `abs_tol` on a
+non-geometry link) and dangling call references; `test_mcp_e2e_codex.py`
+checks that the stdout parser follows the result's `agent_name` (unknown agents
+try each format; an unparseable log falls back to the trajectory) and that a
+lookalike server's tool (`mcp__pyscf_extra__…`) is not the required tool.
 
 Offline checks (no network, no upstream installs):
 

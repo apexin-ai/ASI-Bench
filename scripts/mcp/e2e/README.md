@@ -17,7 +17,7 @@ involved. Upstream code is cloned, never vendored; upstream licenses apply.
 | `manifest.json` | per server: repository, 40-char revision, Python, install mode, launch command/env (`{checkout}` placeholder), expected tools |
 | `setup.py` | clone, pin, build `<root>/<id>/.venv`, write `<root>/<id>.mcp.json` (stdlib only) |
 | `smoke_<id>.py` | L0/L1 checks for one server, JSON report; `smoke_common.py` and `stdio_client.py` are shared |
-| `verify_run.py` | L2 verifier for agent runs |
+| `verify_run.py` | L2 verifier CLI for agent runs; implementation in `e2e_verify/` (spec, extractors, values, evidence, checks) |
 | `locks/` | committed conda `@EXPLICIT` locks (psi4) |
 
 Install modes:

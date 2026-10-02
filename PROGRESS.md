@@ -1321,4 +1321,35 @@
   fixtures exercise — check coverage of a branch before relying on it.
 - Lesson: errors raised in an autouse fixture's teardown are reported by
   pytest as ERROR, not FAILED; count both when assessing a test run.
-- Commits: docs `fe3651e`; golden snapshot (pending).
+- Commits: docs `fe3651e`; golden snapshot `b47c4f7`.
+
+## 2026-10-02: MCP E2E chore — verifier split into `e2e_verify/`, strict spec
+
+- Problem: `verify_run.py` (1020 lines) grew a patch per server. The three
+  value checks each had their own way to read and compare values, so `extract`
+  existed in three copies, `select` only for answers, `geometry` only for
+  chains; `e2e_check.json` was read with `.get()`, so a typo (`abs_toll`,
+  `bypass_pattern`, `inputs_from_cal`) silently loosened the audit; tool names
+  matched fuzzily (`server in name and name.endswith(tool)`); the log format
+  was guessed by trial.
+- Resolution: package `scripts/mcp/e2e/e2e_verify/` (stdlib only):
+  `spec` (frozen dataclasses, strict parser: unknown / inapplicable keys,
+  enums, duplicate names, dangling or optional-from-required chain references,
+  regexes), `extractors` (arXiv IDs, term counts), `values` (one `Selector`
+  read for call results, chained inputs and answers; shared comparators),
+  `evidence` (`ToolCall` dataclass, Claude / Codex / trajectory parsers,
+  parser chosen by `agent_name` with format sniffing for unknown agents),
+  `checks` (six check functions in an ordered registry, `verify_one`).
+  `verify_run.py` is the CLI plus the format docstring. `select` now also
+  works on call results. Tool names must equal `mcp__<server>__<tool>`.
+- Verification: the golden snapshot stayed byte-identical for all 100
+  existing `verify_one` calls; the only golden diff is the entry of the new
+  lookalike-server test. Helper tests moved to the module API.
+- Lesson: a delegated sub-agent was interrupted after adding `parse_spec`
+  but before wiring it into `verify_one`; tests stayed green because nothing
+  called it. After any delegation, grep that new code is actually reached.
+- Lesson: modules loaded with `spec_from_file_location` must be put in
+  `sys.modules` before `exec_module` or dataclasses fail on Python 3.14;
+  `verify_run.py` puts its own directory on `sys.path` so every test loader
+  shares one `e2e_verify` package.
+- Commit: (pending).
