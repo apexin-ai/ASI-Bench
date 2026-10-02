@@ -1170,6 +1170,7 @@
   40 PASS / 8 WARN / 0 FAIL, four runs; the upstream binary's Fresnel
   self-test on AWS was bit-identical to that build. Offline tests in
   `tests/test_mcp_e2e_scripts.py` (stubbed servers built from the references
-  catch a TE/TM swap and a Li-vs-Laurent formulation change). AWS amd64 smoke
-  pending.
-- Implementation commit: pending.
+  catch a TE/TM swap and a Li-vs-Laurent formulation change). AWS Linux amd64
+  with the pinned upstream binary (SHA-256 verified): 41 PASS / 7 WARN /
+  0 FAIL, the same seven defect WARNs and values.
+- Implementation commit: `b513672`.

@@ -60,11 +60,10 @@ airspeed after the 10 s run are bit-identical on both architectures, attitude
 angles differ by < 1e-12 deg. Where `execute_script` segfaults varies between
 runs (during the call, the next `step` or `close_session`).
 
-The s4 smoke passed on Linux aarch64 on 2026-10-02 against a locally built
-`libS4.so` (40 PASS, 8 WARN including the expected "not the upstream binary",
-0 FAIL, ~10 s, four consecutive runs); the pinned upstream binary is x86-64
-only, so the evidence run is AWS amd64 (pending). The upstream binary's
-Fresnel self-test on AWS was bit-identical to the local build.
+The s4 smoke passed on AWS Linux amd64 with the pinned upstream `libS4.so` on
+2026-10-02 (41 PASS, 7 WARN, 0 FAIL, ~10 s). On Linux aarch64 it passed
+against a locally built `libS4.so` with the same values (40 PASS, 8 WARN: the
+extra one is "not the upstream binary", four consecutive runs).
 
 ## Run (Linux, as the unprivileged E2E user)
 
