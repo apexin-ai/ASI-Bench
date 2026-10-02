@@ -1140,3 +1140,83 @@
   harness and verifier 4/4 PASS per harness.
 - Implementation commit: `6015365`.
 
+## 2026-10-02: s4 (S4 RCWA) MCP smoke (L1) and host requirements
+
+- Problem: `prof-davifr/mcp-s4-rcwa` ships S4 as a prebuilt `libS4.so` in the
+  repository: x86-64 only, compiled with `-march=native` (AVX2/FMA/BMI2) and
+  linked against the system BLAS/LAPACK, which `uv` cannot install. Without a
+  check, a wrong host fails at server start with an opaque ctypes or SIGILL
+  error. The upstream has no lockfile either.
+- Resolution: optional manifest `host_requirements` (`machine`, `cpu_flags`,
+  `shared_libraries`, `reason`), checked by `setup.py` before cloning and never
+  installed; manifest entry `s4` (`uv-pip-pinned`, run as `python -m
+  mcp_s4_rcwa.server` with `PYTHONPATH={checkout}/src`, no package build).
+  `smoke_s4.py` compares both tools with numpy-only references that share
+  nothing with S4: a transfer-matrix method for planar stacks and a 1D RCWA
+  for lamellar gratings; it reports the binary's SHA-256.
+- Lesson: S4's default formulation is Laurent's rule with circular truncation.
+  With a complete square-lattice shell (21/49/81 harmonics) and a grating
+  uniform along y, an independent 1D RCWA with the same rule and orders agrees
+  to ~1e-14, which is a much sharper test than comparing converged values (TM
+  is still 1e-3 away from Li's-rule convergence at 201 harmonics).
+- Lesson: keep RCWA wavelength grids off Rayleigh anomalies; a grid point at
+  λ = period alone produced a 3e-9 disagreement.
+- Lesson: upstream defects (WARN): the incidence side is always S4's last
+  layer, and `incidence_layer`/`substrate_layer` only pick where fluxes are
+  read, so swapped or inner layers give R=0/T>1 or meaningless spectra without
+  an error; unknown layer materials become vacuum; θ ≥ 90° reports A=1;
+  negative thickness and duplicate layer names are accepted.
+- Verification: Linux aarch64 with a locally built S4 (victorliu/S4 7fd00a2):
+  40 PASS / 8 WARN / 0 FAIL, four runs; the upstream binary's Fresnel
+  self-test on AWS was bit-identical to that build. Offline tests in
+  `tests/test_mcp_e2e_scripts.py` (stubbed servers built from the references
+  catch a TE/TM swap and a Li-vs-Laurent formulation change). AWS Linux amd64
+  with the pinned upstream binary (SHA-256 verified): 41 PASS / 7 WARN /
+  0 FAIL, the same seven defect WARNs and values.
+- Implementation commit: `b513672`.
+
+## 2026-10-02: L2 s4 grating-spectrum task, answers selected from returned arrays
+
+- Problem: an L2 task must show that the answer came from the MCP tool, but
+  for planar stacks any agent can reproduce S4 exactly with a few lines of
+  transfer-matrix code, and the s4 server's only other tool takes no input,
+  so there is no real chain. The answers are elements of returned arrays (R at
+  one wavelength, the maximum, its wavelength), which `verify_run.py` could
+  not express.
+- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/s4_grating_spectrum`: one
+  `simulate_stack_spectrum` call of a seeded TM lamellar grating with a given
+  harmonic count (21/37/81, never equivalent to the default 51). The reference
+  is the smoke's independent numpy 1D RCWA with S4's default formulation
+  (Laurent's rule, same truncation), computed in `generate --sandbox task`
+  with numpy only. Instances are selected so that the converged answer (Li's
+  rule) and the next truncation differ from the tool's R at the reported point
+  by ≥ 1e-3, the scorer's zero-credit tolerance. `verify_run.py` answer sources
+  gained `select` (`reduce` max/min, `argmax_of`/`argmin_of`, `where_key` +
+  `equals_reference_key`); `check_engine_sanity` is an optional call.
+- Lesson: pick L2 cases where the tool's specific numerical method is what
+  makes the answer unique; a physically exact quantity proves nothing about
+  provenance. Also keep the angle non-zero and the harmonic count away from
+  the default, so that omitted arguments change the result or show up as an
+  input mismatch.
+- Lesson: in the shared VM `/tmp/e2e` belonged to another session's user; use
+  a scratch directory under the session home.
+- Lesson: the first AWS Claude run scored 400/400 but every verifier
+  `tool_correct`/`answer_from_tool` failed, even for `check_engine_sanity`.
+  Both s4 tools have return annotations, so FastMCP declares an `outputSchema`
+  and sends `structuredContent = {"result": <str or content blocks>}`; Claude
+  Code passes that object instead of the text block. `verify_run.py` now
+  unwraps it everywhere it parses a result. The offline streams had used the
+  text block only; build test streams from what the client really shows.
+- Verification: `tests/test_mcp_e2e_s4.py` (34 offline tests); over 61 seeds
+  the server (S4 built from source, Linux aarch64) matched the reference to
+  ≤ 1.1e-12. `asibench generate --sandbox task` + an oracle `--agent-cmd` that
+  follows B1 through the real server scored 100/100 and `verify_run.py` failed
+  it for lack of agent evidence; Claude and Codex streams built from those real
+  server outputs pass every check. AWS Linux amd64 (pinned upstream
+  `libS4.so`), seed 31415, B1–B4 ×1 each for Claude Code (`claude-opus-5-5`)
+  and Codex CLI (`gpt-5.6-sol`): local score 400/400 per harness and verifier
+  4/4 PASS per harness (Claude after the structured-output fix, re-verified on
+  the same run artefacts without re-running the agent).
+- Implementation commits: `29ba5a5` (task, verifier `select`), `7b78b11`
+  (structured-output unwrapping).
+

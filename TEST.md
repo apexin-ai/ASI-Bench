@@ -610,6 +610,17 @@ the `aircraft/<name>/<name>.xml` scan, in-band errors, telemetry comparison
 trim-mode digests, the missing-property/unknown-session/unknown-aircraft
 classification, `list_aircraft` against a directory scan, and that a server
 crash anywhere in the stock-script probe is a WARN, not a FAIL.
+For s4 it checks `host_requirements` (machine, CPU flags from
+`/proc/cpuinfo`, loadable shared libraries; every problem listed with the
+reason; malformed fields rejected; checked before cloning), the
+`python -m` + `PYTHONPATH={checkout}/src` launch, and the numpy-only references
+of `smoke_s4.py`: TMM against closed forms (Fresnel, Brewster, quarter-wave AR
+coating and mirror), energy conservation and absorption, the 1D RCWA's uniform
+limit against the TMM, energy conservation with diffraction, Li vs Laurent
+convergence, the square-lattice shell → order mapping, that every smoke grid
+avoids Rayleigh anomalies, the spectrum shape/grid checks, and that stubbed
+servers answering from the references PASS while a TE/TM swap or a Li-rule
+grating FAILs; defect probes WARN only when a misuse is accepted.
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
@@ -632,6 +643,13 @@ missing property, no-IC session, zero step, partial IC, unknown IC key, trim,
 three in-band unknown-session errors, stdout lines of the unknown-aircraft
 error, `execute_script` literal + temp file + stock-script segfault, and the two
 launch-env probes).
+For s4 (Linux x86-64 with AVX2/FMA/BMI2 and `libblas3 liblapack3`):
+`python3 scripts/mcp/e2e/setup.py s4`, then `~/mcp/s4/.venv/bin/python
+scripts/mcp/e2e/smoke_s4.py --config ~/mcp/s4.mcp.json` (no network, ~10 s).
+Expected outcome on the pinned revision: `PASS` with 0 FAIL and 7 WARN
+(swapped incidence/substrate, inner incidence layer, unknown layer material,
+θ = 90° and 120°, negative thickness, duplicate layer names); a locally built
+`libS4.so` adds an eighth WARN for the binary's SHA-256.
 
 `tests/test_mcp_e2e_jsbsim.py` covers `mcp_e2e.jsbsim_engine_run` and the
 verify_run extensions it needs, without JSBSim: deterministic, varied seeded
@@ -647,6 +665,23 @@ WARN; steps on another `session_id` break `tool_chain`; no state read fails
 `tool_called`; recomputed answers fail `answer_from_tool`; `trim` is a WARN;
 `import jsbsim`, installs, the `jsbsim` CLI and the server's Python are bypass.
 It also checks string chaining (`_same_link`) and optional-call grouping.
+
+`tests/test_mcp_e2e_s4.py` covers `mcp_e2e.s4_grating_spectrum` and the
+verify_run answer `select`, without S4 or the server: deterministic, varied
+seeded gratings that meet every selection rule (Rayleigh clearance, unique
+interior maximum, report point ≠ maximum, bypass margin ≥ 1e-3, θ > 0, TM),
+harmonic counts that are complete shells and never the server default, the
+generator's RCWA identical to the smoke's, tool arguments that follow the B1
+recipe, every reference key the checks use, agent-neutral prompts (the tool is
+named only at B1/B2), scorers (tool values score 100; a converged home-made
+RCWA, the default 51 harmonics, the neighbouring sweep point and rounded values
+lose credit; submission vs evaluator failures), and the verifier on Claude
+stream-json and Codex JSONL: a genuine run passes every check with or without
+the optional sanity call; the default harmonic count fails `tool_correct`;
+recomputed answers fail `answer_from_tool`; numbers as strings pass while an
+omitted `theta_deg` WARNs; `import S4`, RCWA package installs, loading
+`libS4.so` and the server's Python are bypass, RCWA-like code is a WARN; plus
+every `select` mode.
 
 MCP E2E fake tasks and run verifier (offline, no MCP server or PySCF):
 

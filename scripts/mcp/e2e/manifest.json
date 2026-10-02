@@ -79,6 +79,34 @@
         "step",
         "trim"
       ]
+    },
+    {
+      "id": "s4",
+      "catalog_id": "s4",
+      "repository": "https://github.com/prof-davifr/mcp-s4-rcwa.git",
+      "revision": "d0b5ecd90b9f311e4ff9b30322d71485076c4eaa",
+      "python": "3.12",
+      "install": "uv-pip-pinned",
+      "requirements": ["matplotlib==3.11.2", "mcp==1.30.0", "numpy==2.5.3", "pydantic==2.13.5"],
+      "exclude_newer": "2026-10-01T00:00:00Z",
+      "host_requirements": {
+        "machine": ["x86_64"],
+        "cpu_flags": ["avx2", "bmi2", "fma"],
+        "shared_libraries": ["libblas.so.3", "liblapack.so.3"],
+        "reason": "upstream vendors a prebuilt x86-64 libS4.so compiled with -march=native (AVX2/FMA/BMI2) that links the system BLAS/LAPACK; on Debian/Ubuntu an administrator installs libblas3 liblapack3"
+      },
+      "launch": {
+        "command": ".venv/bin/python",
+        "args": ["-m", "mcp_s4_rcwa.server"],
+        "env": {
+          "PYTHONPATH": "{checkout}/src"
+        }
+      },
+      "smoke": "smoke_s4.py",
+      "expected_tools": [
+        "check_engine_sanity",
+        "simulate_stack_spectrum"
+      ]
     }
   ]
 }

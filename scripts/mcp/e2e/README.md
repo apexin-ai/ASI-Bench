@@ -21,14 +21,18 @@ upstream licenses apply.
   `uv-sync-frozen` uses the upstream lockfile (optional extra `uv_sync_args`);
   `uv-pip-pinned` is for upstreams without one and needs `requirements` (exact
   `name==version` pins only) and `exclude_newer` (a UTC timestamp that fixes
-  the transitive resolution).
+  the transitive resolution). Servers that vendor prebuilt native code declare
+  `host_requirements` (`machine`, `cpu_flags`, loadable `shared_libraries`,
+  plus a human-readable `reason`).
 - `setup.py` — stdlib only. Clones into `<root>/<id>` (`--filter=blob:none`),
   detaches at the pinned revision (refuses dirty checkouts or foreign remotes),
   builds `<root>/<id>/.venv` with the manifest's Python (ignoring the caller's
   `UV_PYTHON`) — `uv sync --frozen [uv_sync_args]`, or `uv venv --clear` +
   `uv pip install --exclude-newer <exclude_newer> <pins>` — and writes
   `<root>/<id>.mcp.json` for `--mcp-config` (including the manifest's launch
-  `env` with `{checkout}` resolved).
+  `env` with `{checkout}` resolved). `host_requirements` are checked before
+  anything is cloned; system packages are never installed (that needs an
+  administrator).
 - `stdio_client.py` — stdlib-only JSON-RPC stdio client. It reads raw server
   stdout so non-JSON lines are **recorded**, not swallowed by an SDK.
 - `smoke_<id>.py` — per-server L0/L1 checks; writes a JSON report with versions,
@@ -56,6 +60,11 @@ airspeed after the 10 s run are bit-identical on both architectures, attitude
 angles differ by < 1e-12 deg. Where `execute_script` segfaults varies between
 runs (during the call, the next `step` or `close_session`).
 
+The s4 smoke passed on AWS Linux amd64 with the pinned upstream `libS4.so` on
+2026-10-02 (41 PASS, 7 WARN, 0 FAIL, ~10 s). On Linux aarch64 it passed
+against a locally built `libS4.so` with the same values (40 PASS, 8 WARN: the
+extra one is "not the upstream binary", four consecutive runs).
+
 ## Run (Linux, as the unprivileged E2E user)
 
 ```sh
@@ -74,6 +83,12 @@ python3 scripts/mcp/e2e/setup.py jsbsim --root ~/mcp
 ~/mcp/jsbsim/.venv/bin/python scripts/mcp/e2e/smoke_jsbsim.py \
   --config ~/mcp/jsbsim.mcp.json --report ~/mcp/jsbsim-smoke-report.json
 uv run asibench mcp check --config ~/mcp/jsbsim.mcp.json
+
+# s4 needs x86-64 and the system BLAS/LAPACK (admin, once: apt-get install libblas3 liblapack3)
+python3 scripts/mcp/e2e/setup.py s4 --root ~/mcp
+~/mcp/s4/.venv/bin/python scripts/mcp/e2e/smoke_s4.py \
+  --config ~/mcp/s4.mcp.json --report ~/mcp/s4-smoke-report.json
+uv run asibench mcp check --config ~/mcp/s4.mcp.json
 ```
 
 The smoke script must run with the server's own virtualenv so that its
@@ -246,3 +261,68 @@ L2 coverage: `create_session` → `set_initial_conditions` → `set_property` ×
 `step` → `get_property`/`get_telemetry` on one session
 (`mcp_e2e.jsbsim_engine_run`). `list_aircraft`, `close_session`, `trim` and
 `execute_script` are L1 only; the last two are unusable on the pinned revision.
+
+### s4 (`prof-davifr/mcp-s4-rcwa`)
+
+FastMCP (MCP SDK 1.x) stdio server over S4, the Stanford Stratified Structure
+Solver (RCWA). Upstream drives a **prebuilt `libS4.so` committed to the
+repository** through its own ctypes wrapper (the `S4` Python binding is
+Python-2 only). That binary is x86-64 only, was built with GCC 13.3 on Ubuntu
+24.04 with `-march=native` (it uses AVX2, FMA and BMI2, no AVX-512), links the
+system `libblas.so.3`/`liblapack.so.3` and needs glibc ≥ 2.35; the S4 source
+revision it was built from is not recorded (S4's last upstream commit is from
+2018). Hence the manifest's `host_requirements`; on Debian/Ubuntu an
+administrator installs `libblas3 liblapack3` once. The smoke reports the
+binary's SHA-256 and WARNs when it is not the upstream one.
+
+Upstream has a `pyproject.toml` (hatchling) but no lockfile, so the manifest
+uses `uv-pip-pinned` (Python 3.12, `matplotlib==3.11.2`, `mcp==1.30.0`,
+`numpy==2.5.3`, `pydantic==2.13.5`, `exclude_newer` 2026-10-01) and runs the
+package from the checkout instead of building it: `python -m
+mcp_s4_rcwa.server` with launch `env` `PYTHONPATH={checkout}/src`. No network
+or credentials are needed.
+
+For development on other platforms (e.g. Linux aarch64) S4 can be built from
+<https://github.com/victorliu/S4> (`make build/libS4.a` with
+`-DHAVE_BLAS -DHAVE_LAPACK`, then link it as a shared library against the
+system BLAS/LAPACK) and copied over the vendored binary in a scratch checkout;
+`setup.py` refuses such a modified checkout, and the smoke marks the run as
+not representative.
+
+References are computed in the smoke process with numpy only, sharing nothing
+with S4 or the server: a transfer-matrix method (TMM) for unpatterned stacks,
+and a 1D RCWA (enhanced transmittance matrix) for lamellar gratings. S4's
+default formulation uses Laurent's rule for both polarisations and keeps the
+reciprocal-lattice vectors inside a circle; for a complete shell of the
+square lattice (21, 49, 81 harmonics → orders ±2, ±4, ±5 on the x axis) and a
+grating uniform along y, the 1D RCWA with Laurent's rule and the same orders
+must agree to rounding. Grating wavelength grids avoid Rayleigh anomalies.
+
+| Tool | L1 check (FAIL if wrong) | Known WARN on the pinned revision |
+|---|---|---|
+| `check_engine_sanity` | default, `n_harmonics` 1 and 51: `ok`, R/T vs the exact Fresnel value for air/n=3.47 (1e-9) | — (`expected_R` 0.3055 is a rounded value; the tool's own tolerance is 0.01) |
+| `simulate_stack_spectrum` — planar stacks | upstream README example; quarter-wave mirror (glass \| (HL)×4 \| air) in TE and TM at 0/30/60°; absorbing film (n+ik) in TE/TM at 0/45°: R, T, A vs TMM ≤ 1e-9 (observed ~1e-15); eps notation equals n/k; wavelength grid is `linspace(start, stop, points)` | — |
+| `simulate_stack_spectrum` — gratings | TE/TM at normal incidence (diffracting below the period), TE 20°, TM 20°, TM 10° with an absorbing ridge: R, T, A vs the 1D RCWA with matching truncation ≤ 1e-9 (observed ≤ 2e-14); a 2D rectangle rotated by 90° with TE↔TM gives the same spectrum; shifting the pattern centre changes nothing; identical calls are bit-identical | — |
+| convergence (informational) | vs the converged 1D RCWA (Li's rule, ±60 orders) at 51 and 201 harmonics: TE 7e-5 / 1e-5, TM 2e-3 / 1e-3; WARN only above 5e-3 at 201 | S4's default TM formulation converges slowly; results must be checked against `n_harmonics`, as the tool description says |
+| validation | `wavelength_points < 2`, `stop <= start`, unknown `incidence_layer`, polarisation `XY`, unknown pattern material: `isError` | the unknown pattern material is reported only as `'nope'` (a bare `KeyError`) |
+| PNG plot | `include_plot` (default true) adds one valid `image/png` (720×480); `false` returns the same spectrum as text only | — |
+| defect probes | — | swapped `incidence_layer`/`substrate_layer` returns R=0, T>1, A<0; an inner layer as `incidence_layer` returns a wavelength-independent, meaningless spectrum (S4 always illuminates from the **last** layer; the names only select where fluxes are read); a layer material missing from `materials` silently becomes vacuum (material id −1); `theta_deg` 90 or 120 returns R=T=0, **A=1**; negative thickness and duplicate layer names are accepted |
+| server | unknown tool is an error; stdout is pure JSON-RPC; cwd left untouched; process alive after all calls | — |
+
+Implications for agent runs:
+
+- Layers must be ordered substrate first, incidence medium last, and
+  `incidence_layer`/`substrate_layer` must name exactly those two; nothing
+  else is validated, and wrong choices give plausible-looking numbers.
+- Every material named by a layer must be in `materials` (a typo makes the
+  layer disappear without an error).
+- `n_harmonics` counts 2D harmonics of a square lattice, so 51 keeps only
+  orders ±4 for a 1D grating; TM gratings need many harmonics to converge.
+- With the default `include_plot=true` every call also returns a PNG, which
+  costs context; fake tasks should ask for `include_plot=false` unless the
+  plot is the point.
+
+L2 coverage: `simulate_stack_spectrum` of a TM grating with a given harmonic
+count, answers taken from the returned spectrum (`mcp_e2e.s4_grating_spectrum`);
+`check_engine_sanity` is judged when an agent calls it, otherwise L1 only.
+

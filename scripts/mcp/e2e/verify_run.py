@@ -30,7 +30,10 @@ term) and compares canonical values with ``match`` = equal / subset / member.
 A call spec with ``"optional": true`` is only judged if called; optional specs
 sharing a ``"group"`` count as one requirement (at least one of them must be
 called and correct), e.g. reading a state with either of two tools. A numeric
-answer may list several sources in ``from_calls``. Chained inputs that are not
+answer may list several sources in ``from_calls``; a source with ``select``
+takes one element of a list field (``reduce`` max/min, ``argmax_of``/``argmin_of``
+another field, or ``where_key`` equal to a reference value, e.g. R at a given
+wavelength of a returned spectrum). Chained inputs that are not
 numbers (e.g. a ``session_id``) compare as exact strings.
 Stdlib only.
 
@@ -361,25 +364,85 @@ def _same_link(given, source) -> bool:
     return str(given).strip() != "" and str(given).strip() == str(source).strip()
 
 
+def _unwrap_structured(data):
+    """Undo FastMCP's structured-output wrapper.
+
+    A FastMCP tool with a return annotation declares an ``outputSchema`` and
+    returns ``structuredContent = {"result": <value>}``; clients that show the
+    structured content (Claude Code does) put that object in the tool result
+    instead of the text block. ``<value>`` is the original string, or for a tool
+    returning content blocks a list of ``{"type": "text", "text": ...}`` blocks.
+    Anything else is returned unchanged.
+    """
+    if not (isinstance(data, dict) and set(data) == {"result"}):
+        return data
+    inner = data["result"]
+    if isinstance(inner, list) and inner and all(isinstance(b, dict) and "type" in b for b in inner):
+        inner = "\n".join(str(b.get("text", "")) for b in inner if b.get("type") == "text")
+    if isinstance(inner, str):
+        try:
+            return json.loads(inner)
+        except json.JSONDecodeError:
+            return inner
+    return inner
+
+
+def _parsed_result(call: dict):
+    """The call's result text parsed as JSON (structured-output wrapper removed), or None."""
+    try:
+        return _unwrap_structured(json.loads(call.get("result_text") or ""))
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
 def _result_value(call: dict, key: str | None):
     """Numeric value of a text result, or of field `key` of a JSON-object result."""
     text = call.get("result_text")
     if text is None:
         return None
     if key is None:
-        return _values(text)
-    try:
-        data = json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        return None
+        value = _values(text)
+        if value is None:
+            unwrapped = _parsed_result(call)
+            value = _values(unwrapped) if isinstance(unwrapped, (str, int, float, list)) else None
+        return value
+    data = _parsed_result(call)
     return _values(data.get(key)) if isinstance(data, dict) else None
 
 
-def _json_result(call: dict) -> dict | None:
-    try:
-        data = json.loads(call.get("result_text") or "")
-    except (json.JSONDecodeError, TypeError):
+def _source_value(call: dict, source: dict, reference: dict):
+    """The value an answer may be copied from: field `result_key` of the call's result, or,
+    with `select`, one element of that (list) field: {"reduce": "max"|"min"}, {"argmax_of": key}
+    / {"argmin_of": key} (element at the extreme of another list field of the same result), or
+    {"where_key": key, "equals_reference_key": ref} (element where list field `key` equals the
+    reference value, e.g. R at a given wavelength of a returned spectrum)."""
+    select = source.get("select")
+    if not select:
+        return _result_value(call, source.get("result_key"))
+    data = _json_result(call)
+    values = _values(data.get(source.get("result_key"))) if data else None
+    if not isinstance(values, list):
         return None
+    if select.get("reduce") in ("max", "min"):
+        return max(values) if select["reduce"] == "max" else min(values)
+    for mode, pick in (("argmax_of", max), ("argmin_of", min)):
+        if select.get(mode):
+            other = _values(data.get(select[mode]))
+            if not isinstance(other, list) or len(other) != len(values):
+                return None
+            return values[other.index(pick(other))]
+    if select.get("where_key"):
+        keys = _values(data.get(select["where_key"]))
+        target = _float(reference.get(select.get("equals_reference_key")))
+        if not isinstance(keys, list) or len(keys) != len(values) or target is None:
+            return None
+        hits = [v for k, v in zip(keys, values) if abs(k - target) <= 1e-9 * max(1.0, abs(target))]
+        return hits[0] if hits else None
+    return None
+
+
+def _json_result(call: dict) -> dict | None:
+    data = _parsed_result(call)
     return data if isinstance(data, dict) else None
 
 
@@ -444,9 +507,8 @@ EXTRACTORS = {
 def _extracted(call: dict, name: str):
     """Canonical extracted value of a call's JSON result, or None."""
     extract, canon = EXTRACTORS[name]
-    try:
-        data = json.loads(call.get("result_text") or "")
-    except (json.JSONDecodeError, TypeError):
+    data = _parsed_result(call)
+    if data is None:
         return None
     raw = extract(data)
     return None if raw is None else canon(raw)
@@ -673,7 +735,7 @@ def _check_answers(spec: dict, by_spec: dict[str, list[dict]], reference: dict, 
         pred = _values(prediction.get(answer["prediction_key"]))
         ref = _values(reference.get(answer["reference_key"]))
         sources = answer.get("from_calls") or [{"call": answer["from_call"], "result_key": answer.get("result_key")}]
-        returned = [_result_value(c, src.get("result_key")) for src in sources
+        returned = [_source_value(c, src, reference) for src in sources
                     for c in by_spec.get(src["call"], []) if not c["is_error"]]
         from_tool = any(_same(pred, v) for v in returned if v is not None)
         err = _diff(pred, ref)
