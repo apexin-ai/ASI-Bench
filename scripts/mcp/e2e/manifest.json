@@ -167,6 +167,33 @@
         "mol_to_pdb", "mol_to_sdf", "mol_to_smiles", "pdb_contents_to_mol", "pdb_to_mol",
         "sdf_contents_to_mol", "sdf_to_mol", "smarts_to_mol", "smiles_to_mol"
       ]
+    },
+    {
+      "id": "build123d",
+      "catalog_id": "build123d",
+      "repository": "https://github.com/pzfreo/build123d-mcp.git",
+      "revision": "ed7602e1c94e03d4ea6bf921a6d0d81074858b88",
+      "python": "3.12",
+      "install": "uv-sync-frozen",
+      "uv_sync_args": ["--no-dev"],
+      "launch": {
+        "command": ".venv/bin/build123d-mcp",
+        "args": [],
+        "env": {
+          "BUILD123D_EXEC_TIMEOUT": "120"
+        }
+      },
+      "expected_tools": [
+        "analyze_printability", "compare", "crop_drawing", "cross_sections", "design_audit",
+        "destroy_session", "execute", "execute_file", "export", "find_bored_bosses",
+        "find_bosses", "find_countersinks", "find_hole_patterns", "find_holes", "health_check",
+        "import_cad_file", "inspect_drawing", "inspect_part", "install_skill", "last_error",
+        "lint_drawing", "list_sessions", "locate_gate_defects", "measure", "prepare_drawing",
+        "recognise_features", "render_drawing", "render_view", "repair_advice", "repair_hints",
+        "reset", "resolve", "restore_snapshot", "save_drawing_annotations", "save_snapshot",
+        "script", "session_state", "suggest_view_layout", "validate", "version",
+        "view_axes", "workflow_hints"
+      ]
     }
   ]
 }

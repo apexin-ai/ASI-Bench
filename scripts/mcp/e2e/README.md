@@ -77,6 +77,7 @@ re-implementing them.
 | `s4` | `prof-davifr/mcp-s4-rcwa` | uv-pip-pinned, Py 3.12 | x86-64 (AVX2/FMA/BMI2), `libblas3 liblapack3` | 41 / 7 / 0, amd64, 2026-10-02 |
 | `psi4` | `Keith9922/chemaster` (`calc_psi4`) | conda-explicit | `micromamba` on `PATH` | 14 / 11 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
 | `rdkit` | `tandemai-inc/rdkit-mcp-server` (catalog `rdkit_tandem`) | uv-pip-pinned, Py 3.12 | — | 125 / 28 / 0, amd64, 2026-10-03 (aarch64 identical 2026-10-02) |
+| `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, aarch64, 2026-10-03 |
 
 Install the prerequisites before running `setup.py`:
 
@@ -185,3 +186,25 @@ known defects is in each smoke script.
     `filename` may contain `../`. Default PNG names have one-second
     resolution.
   - Unknown arguments are ignored.
+
+**build123d**
+
+- The session is stateful: `execute` keeps a build123d namespace and `show()`
+  names, so a task can chain build → measure → export. `reset()` and
+  `execute_file()` clear it; `destroy_session` is refused in stdio mode.
+- `execute` needs an explicit `from build123d import *`, and its failures come
+  back **in band** (`isError: false`, body starting `Error: …`). `validate` and
+  `restore_snapshot` answer the same way for unknown names.
+- `validate` returns PASS with `n_solids: 2` for a part a bore cut in two — the
+  disjoint bodies are only a warning, so a task gate must check `n_solids`.
+- Writes are limited to the server's cwd (the checkout, as `setup.py` renders
+  the config) and `TMPDIR`. A task must export under `/tmp` with an
+  instance-unique name and copy the file into the submission directory.
+- `export` without `object_name` loses the `show()` label; STL import yields a
+  shell with `volume: 0`; `design_audit` reports failed ±ε rebuilds as
+  `coupling`, never `brittle`.
+- The 2D drawing tools are deprecated at this revision (#465) and the suite
+  needs `draft_preset()`, not the `Draft` class their docstrings mention — do
+  not build a task on them.
+- No display, Xvfb, network or CAD application is needed: `render_view` and
+  `health_check` pass headless.
