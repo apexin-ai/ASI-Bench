@@ -195,6 +195,40 @@
         "script", "session_state", "suggest_view_layout", "validate", "version",
         "view_axes", "workflow_hints"
       ]
+    },
+    {
+      "id": "gpaw",
+      "catalog_id": "gpaw",
+      "repository": "https://github.com/Crystalhihihi/matmcp.git",
+      "revision": "378f50512a987dedd5533f98979775e0f4efe474",
+      "python": "3.12",
+      "install": "conda-explicit",
+      "conda": {
+        "channel": "conda-forge",
+        "specs": ["python=3.12.14", "gpaw=26.7.0", "gpaw-data=1.0.1", "ase=3.29.0", "fastmcp=2.13.3", "matplotlib-base=3.11.2", "mp-api=0.46.5"],
+        "locks": {
+          "linux-64": "locks/gpaw-linux-64.txt",
+          "linux-aarch64": "locks/gpaw-linux-aarch64.txt"
+        }
+      },
+      "launch": {
+        "command": ".venv/bin/python",
+        "args": ["-m", "matmcp.server"],
+        "env": {
+          "MATMCP_REPO": "{checkout}",
+          "OMP_NUM_THREADS": "1",
+          "PYTHONPATH": "{checkout}/src"
+        }
+      },
+      "expected_tools": [
+        "calc_band_dos",
+        "check_convergence",
+        "fetch_structure",
+        "get_run_artifacts",
+        "relax_structure",
+        "run_verified_workflow",
+        "verify_run"
+      ]
     }
   ]
 }

@@ -694,7 +694,15 @@ confinement, `batch_map` item unpacking and the `fail_fast` / default image
 name / `(*args, **kwargs)` / lost-property verdicts, tool tables covering the
 manifest without overlap, hand anchors, and stubbed servers: descriptor checks
 FAIL when an option is ignored, oxidation-number and invalid-input probes,
-the coverage check.
+the coverage check; gpaw — the k-grid policy (hexagonal ×3 rule, vacuum by
+atom span, wrap-around gap), the convergence recommendation on the recorded
+MoS2 sweep (tolerance dependence, metallic fallback, sweep ceiling, wrong
+arithmetic), gap analysis (direct/indirect/metallic, ties, k-point labels),
+the `verify_run` state machine (three gap tolerances, missing results,
+metastability, skipped reference), in-band errors and text/structuredContent
+disagreement, and stubbed servers: the convergence gate FAILs when the
+rejected run leaks a `summary.json`, a figure or a gap, the ignored `query`
+and shared `gs.gpw` probes WARN, stdout pollution is attributed per tool.
 
 `test_verify_spec.py` / `test_verify_values.py`: strict parsing (unknown,
 inapplicable and invalid keys, dangling and optional-from-required
@@ -779,6 +787,21 @@ names, two `GetSubstructMatch` cases, six property tools plus the SDF
 follow-up, unordered `batch_map` results and `fail_fast`). Upstream
 mutations (MolWt → ExactMolWt, rounded TPSA, ignored `includeHs`, swapped
 image size, dropped `useRandomCoords`, disabled pruning) each FAIL.
+For gpaw (Linux x86-64 or aarch64, `micromamba` on `PATH`):
+`python3 scripts/mcp/e2e/setup.py gpaw`, then `~/mcp/gpaw/.venv/bin/python
+scripts/mcp/e2e/smoke.py gpaw --config ~/mcp/gpaw.mcp.json` (no network, no
+Materials Project key, ~9 min on four aarch64 cores: it runs one relaxation,
+a convergence sweep, three band calculations, two one-call workflows and one
+relaxation plus three SCFs as references). Expected outcome on the pinned revision: `PASS` with 0 FAIL
+and 13 WARN (ignored `query`, MP query without credentials, three in-band
+errors from `relax_structure`, fixed sweep range, path traversal, unknown run,
+unpersisted `verification_note`, overwritten `gs.gpw`, the whole chain behind
+one `run_verified_workflow` call, `calc_band_dos` stdout lines and the shared
+stdout check). The first full single-process run is still to be recorded; every
+individual check was validated against the live server on aarch64 (2026-10-03),
+where GPAW reproduced the server's energies, Fermi level and gap bit for bit
+(MoS2 monolayer: gap 1.6754359249486146 eV direct K→K, E = -22.0734417 eV,
+recommended ecut 300 eV / density 15).
 
 The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`.
