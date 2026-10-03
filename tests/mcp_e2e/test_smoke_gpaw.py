@@ -395,7 +395,17 @@ def test_check_stdout_attributes_the_pollution(tmp_path, by_tool, status):
 def test_smoke_declares_the_manifest_server_and_its_packages():
     assert g.SMOKE.server == "gpaw" and g.SMOKE.prepare is not None
     assert {"gpaw", "ase", "fastmcp"} <= set(g.SMOKE.packages)
+    assert g.SMOKE.call_timeout >= 3600         # a loaded host must not time out a correct call
     entry = support.setup.load_manifest()["gpaw"]
     assert entry["install"] == "conda-explicit"
     assert entry["launch"]["env"]["OMP_NUM_THREADS"] == "1"          # references assume one thread
     assert math.isclose(g.MOS2_BUILDER["a"], 3.18)
+
+
+def test_tool_ok_records_the_wall_clock_time_of_every_call(tmp_path):
+    g.TIMINGS.clear()
+    session = session_for({"verify_run": rpc({"ok": True, "verdict": "pass"})}, tmp_path)
+    g.tool_ok(session.call, "verify_run[gap_tol_ev=0.3]", "verify_run", {})
+    assert list(g.TIMINGS) == ["call verify_run[gap_tol_ev=0.3]"]
+    assert g.TIMINGS["call verify_run[gap_tol_ev=0.3]"] >= 0
+    assert g.report_fields(session)["seconds_by_step"] == g.TIMINGS

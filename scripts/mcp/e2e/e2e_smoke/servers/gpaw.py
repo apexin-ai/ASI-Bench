@@ -46,6 +46,7 @@ import json
 import math
 import os
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -90,6 +91,30 @@ GAP_DRIFT_NOTE = 2e-3         # eV, gap difference between gpaw releases (26.7 v
 # verify_run thresholds: |gap - MP ref| is about 0.015 eV, so these three
 # tolerances select the three verdicts of the state machine.
 GAP_TOL_FAIL, GAP_TOL_WARN, GAP_TOL_PASS = 0.005, 0.012, 0.3
+
+# Plane-wave DFT is minutes per call, and a loaded or throttled host multiplies
+# that: the tools/call timeout must never be what fails a correct result. The
+# longest call is run_verified_workflow (relax + a ten-point sweep + bands).
+CALL_TIMEOUT = 7200.0         # seconds
+
+# Wall-clock seconds per step, filled as the run proceeds and written to the
+# report: this is the only record of how slow a host was, and what an L2 task
+# has to budget for.
+TIMINGS: dict[str, float] = {}
+
+
+def progress(what: str) -> None:
+    """A single step here can take minutes; say what is running before it starts."""
+    print(f"[ .. ] L1 {what}", flush=True)
+
+
+def timed(label: str, call, *args, **kwargs):
+    """Run ``call``, record its wall-clock time under ``label`` in :data:`TIMINGS`."""
+    started = time.monotonic()
+    try:
+        return call(*args, **kwargs)
+    finally:
+        TIMINGS[label] = round(time.monotonic() - started, 1)
 
 
 # --------------------------------------------------------------------------
@@ -349,6 +374,8 @@ class GpawRef:
 
     def relax(self, source: Path, ecut: float, kpts, tag: str = "ref_relax") -> dict:
         from ase.optimize import BFGS
+        progress(f"reference: GPAW relaxation at {ecut} eV on {list(kpts)}")
+        started = time.monotonic()
         atoms = self.read(source)
         atoms.calc = self._calc(ecut, kpts, self.scratch / f"{tag}.txt")
         with quiet_fds():
@@ -357,12 +384,15 @@ class GpawRef:
             opt.run(fmax=FMAX, steps=MAX_STEPS)
             forces = atoms.get_forces()
             energy = float(atoms.get_potential_energy())
+        TIMINGS[f"reference {tag}"] = round(time.monotonic() - started, 1)
         return {"converged": bool(opt.converged()), "n_steps": int(opt.get_number_of_steps()),
                 "energy_ev": energy,
                 "max_force_ev_per_a": max(math.dist(f, (0, 0, 0)) for f in forces),
                 "geometry": self.geometry(atoms)}
 
     def scf(self, source: Path, ecut: float, kpts, tag: str) -> dict:
+        progress(f"reference: GPAW SCF at {ecut} eV on {list(kpts)}")
+        started = time.monotonic()
         atoms = self.read(source)
         atoms.calc = self._calc(ecut, kpts, self.scratch / f"{tag}.txt")
         with quiet_fds():
@@ -371,6 +401,7 @@ class GpawRef:
             fermi = float(calc.get_fermi_level())
             kpts_ibz = [[float(c) for c in k] for k in calc.get_ibz_k_points()]
             eigvals = [[float(e) for e in calc.get_eigenvalues(kpt=k)] for k in range(len(kpts_ibz))]
+        TIMINGS[f"reference {tag}"] = round(time.monotonic() - started, 1)
         return {"energy_ev": energy, "fermi_ev": fermi, "kpts_ibz": kpts_ibz, "eigvals": eigvals,
                 **gap_reference(eigvals, fermi, kpts_ibz)}
 
@@ -396,7 +427,8 @@ class GpawRef:
 
 def tool_ok(call: Caller, name: str, tool: str, arguments: dict) -> dict | None:
     """A successful call returning ``ok=true``; anything else FAILs a valid request."""
-    result = call(name, tool, arguments)
+    progress(f"{name}: calling {tool}")
+    result = timed(f"call {name}", call, name, tool, arguments)
     if result is None:
         return None
     try:
@@ -1147,13 +1179,15 @@ def report_fields(session: Session) -> dict:
         "note": "PBE/PAW plane-wave values of this gpaw build; they drift by a few meV "
                 f"between gpaw releases (>{GAP_DRIFT_NOTE} eV against gpaw 25.7), so a task's "
                 "ground truth must pin the conda lock",
-    }}
+    }, "seconds_by_step": dict(TIMINGS),
+        "seconds_total_measured": round(sum(TIMINGS.values()), 1)}
 
 
 SMOKE = Smoke(
     server="gpaw",
     run_l1=run_l1,
     packages=("gpaw", "ase", "fastmcp", "mcp", "numpy", "scipy", "matplotlib", "mp-api"),
+    call_timeout=CALL_TIMEOUT,
     prepare=prepare,
     report_fields=report_fields,
 )

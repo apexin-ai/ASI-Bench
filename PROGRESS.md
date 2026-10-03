@@ -1037,6 +1037,15 @@ Lessons — smoke tests:
   be the one that dies; tolerances must be absolute rather than scaled by the
   value; and a defect that depends on scheduling order needs repeated probes (12
   calls before `batch_map`'s `fail_fast` race showed up reliably).
+- A tool that computes for minutes needs its own `tools/call` timeout: the
+  client default of 300 s turned a correct `run_verified_workflow` result into a
+  FAIL on a loaded host (gpaw L1, 22cd6b1). Declare `Smoke.call_timeout`, print
+  each step before it starts and record `seconds_by_step` in the report —
+  otherwise a 30-minute smoke is indistinguishable from a hung one.
+- Reference values from the same library and conda lock agree to ~1e-10 eV
+  across aarch64 and amd64 (GPAW plane-wave DFT), so cross-platform drift is not
+  what a ground truth has to tolerate — upstream *releases* are (2-3 meV between
+  gpaw 25.7 and 26.7).
 
 Lessons — process:
 
