@@ -308,15 +308,20 @@ def test_annotations_require_a_mutagen_block():
     assert "no MUTAGEN block" in session.report.checks[-1]["detail"]
 
 
-def test_overridden_type_is_a_warning_and_a_rejection_is_a_pass():
+def test_undeclared_type_is_a_pass_when_rejected_and_a_warning_when_overridden():
+    """Live, FastMCP rejects the undeclared `type` (PASS); a server that lets it
+    through and silently swaps in MUTAGEN is the WARN this check exists for."""
     session = session_for({afdb.ANNOTATIONS: rpc_json(wrapped(ANNOTATION))})
     afdb.check_overridden_type(session)
     assert session.report.checks[-1]["status"] == "WARN"
-    assert "overwritten by the tool's auto_query_params" in session.report.checks[-1]["detail"]
+    assert "overwritten by its auto_query_params" in session.report.checks[-1]["detail"]
 
-    session = session_for({afdb.ANNOTATIONS: rpc_json({"status": "error", "error": "AlphaFold API returned 422"})})
-    afdb.check_overridden_type(session)
-    assert session.report.checks[-1]["status"] == "PASS"
+    for rejection in (rpc_json({"status": "error", "error": "AlphaFold API returned 422"}),
+                      rpc_text("Unexpected keyword argument [type=unexpected_keyword_argument]",
+                               is_error=True)):
+        session = session_for({afdb.ANNOTATIONS: rejection})
+        afdb.check_overridden_type(session)
+        assert session.report.checks[-1]["status"] == "PASS"
 
 
 def test_alias_and_ignored_parameter_checks():

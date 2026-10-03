@@ -702,7 +702,8 @@ per-position means, isoform accessions (`P04637-2`) accepted while a mismatched
 `entryId` FAILs, summary selected by `model_identifier` (index 0 would be the
 wrong model), the pLDDT mean tolerance and the one-residue bin-edge WARN, the
 documented empty annotation state WARNing while an HTTP 500 or an
-`isError=true` sentinel FAILs, the overwritten-`type` WARN, and the
+`isError=true` sentinel FAILs, the undeclared-`type` three-state (the MCP layer
+rejecting it is a PASS, a silent `auto_query_params` override a WARN), and the
 `return_schema` drift check read from a fake checkout; ncbi — `gene_table`
 parsing for both strands, the 0-based → 1-based locus shift (comparing the raw
 values is the mistake the test pins), the reference-assembly entry chosen over

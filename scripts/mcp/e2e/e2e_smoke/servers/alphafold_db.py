@@ -32,10 +32,11 @@ asserted**: AlphaFold DB is at model v6 today and pLDDT changes with every
 model version, so only recomputation can stay correct.
 
 Upstream defects that do not make a correctly used tool wrong (errors returned
-in-band with ``isError=false``, a caller's ``type`` silently overwritten, a
-declared parameter that is forwarded as an unsupported query param, a
-``return_schema`` and a tool description that no longer match the live API) are
-WARN; wrong values for correct inputs are FAIL.
+in-band with ``isError=false``, a declared parameter that is forwarded as an
+unsupported query param, a ``return_schema`` and a tool description that no
+longer match the live API) are WARN; wrong values for correct inputs are FAIL.
+An argument the MCP layer rejects outright, and an identifier upstream starts
+supporting, are reported as what they are and never as a wrong result.
 """
 from __future__ import annotations
 
@@ -576,7 +577,13 @@ def check_annotations(session: Session, entry: dict | None) -> None:
 
 
 def check_overridden_type(session: Session) -> None:
-    """A caller's ``type`` is overwritten by the config's auto_query_params."""
+    """An undeclared ``type`` argument: rejected by the MCP layer, or silently overwritten.
+
+    The tool config applies ``auto_query_params`` after the caller's arguments, so a
+    Python caller's ``type`` is replaced by ``MUTAGEN`` without a word. Over MCP that
+    defect is normally unreachable, because ``type`` is not in the tool's input schema
+    and FastMCP rejects undeclared arguments (measured 2026-10-03: a validation
+    error). Both outcomes are fine for a caller; only the silent override is a WARN."""
     call, report = session.call, session.report
     name = f"{ANNOTATIONS}[type=NONSENSE]"
     payload = call_json(call, name, ANNOTATIONS, {"qualifier": MONOMER, "type": "NONSENSE"}, allow_error=True)
@@ -589,8 +596,9 @@ def check_overridden_type(session: Session) -> None:
     blocks = (data.get("annotation") or []) if isinstance(data, dict) else []
     types = [b.get("type") for b in blocks]
     report.add("L1", name, "WARN",
-               "the caller's `type` is overwritten by the tool's auto_query_params (which are applied last), "
-               f"so an unsupported annotation type silently returns MUTAGEN data instead of an error: {types}")
+               "the caller's `type` reached the tool and was overwritten by its auto_query_params "
+               "(which are applied last), so an unsupported annotation type silently returns MUTAGEN "
+               f"data instead of an error: {types}")
 
 
 def check_declared_schema(session: Session, entry: dict | None) -> None:

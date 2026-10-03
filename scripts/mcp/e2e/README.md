@@ -96,8 +96,8 @@ re-implementing them.
 |---|---|---|---|---|
 | `pyscf` | `lixin19/mcp2pyscf` | uv-sync-frozen, Py 3.13 | — | 21 / 8 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-09-29) |
 | `arxiv` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to arxiv.org | 16 / 8 / 0, amd64, 2026-10-02 (pre-shared-checkout layout; aarch64 PASS 2026-09-30) |
-| `alphafold_db` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to alphafold.ebi.ac.uk | not run yet (dry run against live payloads: 7 / 8 / 0, 2026-10-03) |
-| `ncbi` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to eutils.ncbi.nlm.nih.gov and api.ncbi.nlm.nih.gov | not run yet (dry run against live payloads: 5 / 5 / 0, 2026-10-03) |
+| `alphafold_db` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to alphafold.ebi.ac.uk | 16 / 7 / 0, amd64, 2026-10-03 |
+| `ncbi` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to eutils.ncbi.nlm.nih.gov and api.ncbi.nlm.nih.gov | 13 / 5 / 0, amd64, 2026-10-03 |
 | `jsbsim` | `flyintothesky/jsbsim-mcp` | uv-pip-pinned, Py 3.12 | — | 17 / 17 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
 | `s4` | `prof-davifr/mcp-s4-rcwa` | uv-pip-pinned, Py 3.12 | x86-64 (AVX2/FMA/BMI2), `libblas3 liblapack3` | 41 / 7 / 0, amd64, 2026-10-02 |
 | `psi4` | `Keith9922/chemaster` (`calc_psi4`) | conda-explicit | `micromamba` on `PATH` | 14 / 11 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
@@ -166,9 +166,12 @@ known defects is in each smoke script.
 - `alphafold_get_annotations` returns AlphaMissense scores (`description:
   "AM score"`), not the "experimental mutagenesis data mapped from UniProt"
   its description claims, and the description's "returns empty for every
-  accession" note is stale. A caller's `type` is silently overwritten with
-  `MUTAGEN`, and `sequence_checksum` is forwarded as a query parameter the API
-  ignores.
+  accession" note is stale.
+- Only *declared* parameters reach the tool: FastMCP rejects an undeclared
+  argument, so the config's `auto_query_params` silently overwriting a caller's
+  `type` (a real defect of the Python API) cannot be triggered over MCP —
+  `type=NONSENSE` is a validation error. `sequence_checksum` is declared, so it
+  does get through and is forwarded as a query parameter the API ignores.
 - Every failure is in-band: an entry name (`HBA_HUMAN`) or a malformed
   accession is HTTP 400 upstream, which the tool reports as
   `{"status": "error"}` with `isError: false`.

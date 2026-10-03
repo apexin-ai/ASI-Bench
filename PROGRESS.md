@@ -1058,3 +1058,37 @@ Lessons — process:
   rebased with a throwaway identity and resolve append-only conflicts (PROGRESS,
   README) by keeping both sides; keep scratch directories under the session home,
   since `/tmp/...` can belong to another session's user.
+
+## 2026-10-03: alphafold_db and ncbi smokes (L1) on the shared ToolUniverse checkout
+
+- Two more tool faces of the ToolUniverse pin (`33ea0be`), so both manifest
+  entries only declare `checkout: "tooluniverse"`: no clone, no second venv.
+  Measured on AWS amd64: `alphafold_db` 16 / 7 / 0, `ncbi` 13 / 5 / 0.
+- A networked API with no date window to pin needs immutable identifiers plus
+  recomputation: compare the payload field by field with a raw query of the same
+  endpoint made by the smoke (internal consistency alone passes a stale payload),
+  recompute pLDDT from the model file's CA B-factors, recompute MUTAGEN values
+  from the AlphaMissense CSV the annotation links to, and address NCBI proteins
+  by GI number. Everything that moves with a model or annotation version is
+  reported, not asserted.
+- Rules this run added (all in CLAUDE.md or the module docstrings): `unwrap` must
+  treat the runner's `{"_isError": True}` sentinel as an error, otherwise a server
+  that *starts* validating input is reported FAIL; every "upstream should reject
+  this" probe needs `check_rejected(..., on_accept=…)` so an upstream improvement
+  lands as WARN; an empty E-utilities result set is a legitimate "no hits", not
+  "invalid input accepted"; a reference the smoke cannot parse is its own `
+  [reference]` FAIL with the dependent comparisons skipped, never a value compared
+  against `None`; and an in-band error may only be a WARN when its message
+  matches the documented empty state (an HTTP 500 is a FAIL).
+- Traps that cost a round each: the model file carries two decimals and truncates,
+  so a recomputed pLDDT mean needs a ~0.02 tolerance (P04637: 75.0501 vs a
+  reported 75.06) and a residue at a bin edge is a WARN; `esummary`
+  `chrstart/chrstop` are 0-based with `start > stop` for the minus strand while
+  `gene_table` is 1-based; an isoform model carries the isoform accession
+  (`P04637-2`), so asserting the base accession accuses the server; `esummary`
+  reports an unusable id in a *third* shape (top-level `error`, empty `uids`);
+  and `efetch db=gene retmode=xml` is 34 MB for TP53 — use `rettype=gene_table`.
+- A stub-server dry run cannot model the client: it predicted a WARN for
+  `auto_query_params` overwriting a caller's `type`, but FastMCP rejects
+  undeclared arguments, so over MCP that defect is unreachable and the real run
+  PASSed. Only a tri-state check survived the difference.
