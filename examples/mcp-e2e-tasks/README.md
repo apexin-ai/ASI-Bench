@@ -55,7 +55,7 @@ works; it is not a pass rate.
 | `jsbsim_engine_run` | 2026-10-02 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `s4_grating_spectrum` | 2026-10-02 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `psi4_opt_freq` | 2026-10-02 | 4 × 100, 4/4 | 4 × 100, 4/4 |
-| `rdkit_conformer` | pending | pending | pending |
+| `rdkit_conformer` | 2026-10-03 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 
 In every run at B3/B4 the agent found the tools without being told their names.
 
