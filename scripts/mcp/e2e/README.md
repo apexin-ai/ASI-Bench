@@ -96,7 +96,7 @@ re-implementing them.
 | `rdkit` | `tandemai-inc/rdkit-mcp-server` (catalog `rdkit_tandem`) | uv-pip-pinned, Py 3.12 | — | 125 / 28 / 0, amd64, 2026-10-03 (aarch64 identical 2026-10-02) |
 | `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, amd64 and aarch64, 2026-10-03 |
 | `gpaw` | `Crystalhihihi/matmcp` | conda-explicit | `micromamba` on `PATH` | 38 / 13 / 0, amd64, 2026-10-03 (24 min single-threaded) |
-| `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | L0 only: 16 / 0 / 0, aarch64, 2026-10-03 |
+| `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | L0 only: 16 / 0 / 0, amd64 and aarch64, 2026-10-03 |
 
 `quantum_espresso` is at L0: the environment checks and `qe_status` run, the
 numerical references for the other 18 tools are not written yet.
@@ -319,10 +319,13 @@ known defects is in each smoke script.
   `bands.x`, `dos.x` and `projwfc.x` (`qe=7.5`, openmpi build). The launch env
   pins `QE_RUNNER=local`, `QE_USE_DOCKER=false` and `QE_NPROCS=1`, so
   executables are run directly, never through `mpirun`, Docker or Globus. A
-  singleton `pw.x` needs no `OMPI_MCA_*` settings (verified on aarch64).
-- Both platform locks pin `qe` 7.5, but different conda-forge builds
-  (`h19104ac_2` on linux-64, `hc91ee90_1` on linux-aarch64), so energies are
-  not expected to agree bit for bit across platforms.
+  singleton `pw.x` needs no `OMPI_MCA_*` settings and writes nothing to stderr
+  (measured on amd64 and aarch64).
+- The two platform locks pin `qe` 7.5 in different conda-forge builds
+  (`h19104ac_2` on linux-64, `hc91ee90_1` on linux-aarch64), yet a Si SCF
+  (2 atoms, 30/120 Ry, 4×4×4, cold smearing) agreed **bit for bit** across
+  them: `-15.75077338 Ry`, Fermi `6.5233 eV`, 3 s single-threaded. Tolerances
+  can be tight; the drift to watch is the QE version, not the platform.
 - `mcp` must stay below 2: this revision imports `mcp.server.fastmcp`, which
   mcp 2.x replaced with `mcp.server.mcpserver.MCPServer`. The manifest pins
   `mcp=1.28.1`. `spglib` is declared by upstream but never imported.
@@ -339,7 +342,10 @@ known defects is in each smoke script.
   actual pick from `qe_list_pseudopotentials` → `details.<El>.filename` (a bare
   file name, so path scrubbing leaves it intact) and generate its ground truth
   on the host that runs the agent, or score only quantities that do not depend
-  on the pseudopotential version.
+  on the pseudopotential version. Measured on two hosts whose directory orders
+  differ completely: Si got `1.2` (the newest) on both, O and Fe got `1.0` (not
+  the newest) on both, and Ag diverged — `1.2` on amd64, `1.0` on aarch64. So
+  a Si task happens to be reproducible; that is luck, not a guarantee.
 - `qe_read_bands(output_dir)` and `qe_read_dos(output_dir)` want a **file**
   path (`bands.dat.gnu`, the dos `.dat`), not a directory, despite the
   parameter name; a directory gives `File not found`.

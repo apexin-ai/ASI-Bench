@@ -1111,3 +1111,31 @@ Lessons — process:
   rebased with a throwaway identity and resolve append-only conflicts (PROGRESS,
   README) by keeping both sides; keep scratch directories under the session home,
   since `/tmp/...` can belong to another session's user.
+
+## 2026-10-03: quantum_espresso MCP E2E, stage L0
+
+- Shipped (`aaa6dd0`): manifest entry + `locks/quantum_espresso-linux-{64,aarch64}.txt`
+  (174 packages, `qe=7.5`), `e2e_smoke/servers/quantum_espresso.py` with the
+  environment checks and `qe_status`, `tests/mcp_e2e/test_smoke_quantum_espresso.py`,
+  and the committed-lock test generalised from psi4 to every conda-explicit
+  server × platform. 16 PASS / 0 WARN / 0 FAIL on amd64 and aarch64.
+- `mcp` must stay below 2 and the pin is load-bearing, not hygiene: conda-forge
+  now resolves `mcp` to 2.x, where `mcp.server.fastmcp` is a stub that raises
+  `ModuleNotFoundError` (renamed to `MCPServer`). Check this before pinning any
+  server that imports `mcp.server.fastmcp`; rdkit hit the same wall.
+- Do not assume a conda `qe` needs MPI coaxing: the openmpi build exec'd
+  directly with `QE_NPROCS=1` ran clean on both platforms, empty stderr, no
+  `OMPI_MCA_*`. And different conda-forge builds of the same `qe` version gave
+  bit-identical energies across amd64/aarch64 — platform is not the drift source,
+  the package version is.
+- Leaving a work-directory variable unset can beat pinning it: with `QE_WORKDIR`
+  unset the server writes under its cwd, which is the smoke's temporary directory
+  (self-cleaning) and the checkout under an agent run (gitignored upstream).
+- Upstream indexes pseudopotentials by raw `glob` order, so which file an element
+  gets is host-dependent. Measured on two hosts: Si got the newest on both, Ag
+  diverged. A ground truth that depends on the pick must be generated on the host
+  that runs the agent — verify the pick, do not assume the highest version.
+- `test_smoke_runner.py::test_smoke_covers_every_manifest_tool[quantum_espresso]`
+  FAILs by design at this stage: it greps the smoke module for every
+  `expected_tool`, and an L0 smoke only calls `qe_status`. Resolve it when L1
+  lands (or by declaring the stage on `Smoke`), not by weakening the grep.
