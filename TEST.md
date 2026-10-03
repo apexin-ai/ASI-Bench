@@ -792,20 +792,20 @@ For gpaw (Linux x86-64 or aarch64, `micromamba` on `PATH`):
 `python3 scripts/mcp/e2e/setup.py gpaw`, then `~/mcp/gpaw/.venv/bin/python
 scripts/mcp/e2e/smoke.py gpaw --config ~/mcp/gpaw.mcp.json`. No credentials,
 and only one check reaches the network (a Materials Project query without a
-key, expected to fail with 401). Plan for 20-40 min: one relaxation, a
-convergence sweep, three band calculations, two one-call workflows and one
-relaxation plus three SCFs as references. Each step prints before it starts and
-the report's `seconds_by_step` says where the time went; the smoke raises the
-tools/call timeout to 2 h because the client default of 300 s failed a correct
-`run_verified_workflow` call on a loaded amd64 host (2026-10-03). Expected
-outcome on the pinned revision: `PASS` with 0 FAIL
+key, expected to fail with 401). It takes 24 min of single-threaded plane-wave
+DFT (amd64, 2026-10-03): one relaxation, a convergence sweep, three band
+calculations, two one-call workflows and one relaxation plus three SCFs as
+references. Each step prints before it starts and the report's
+`seconds_by_step` says where the time went; the smoke raises the tools/call
+timeout to 2 h because the client default of 300 s failed a correct
+`run_verified_workflow` call. Outcome on the pinned revision: `PASS` with
+38 PASS, 0 FAIL
 and 13 WARN (ignored `query`, MP query without credentials, three in-band
 errors from `relax_structure`, fixed sweep range, path traversal, unknown run,
 unpersisted `verification_note`, overwritten `gs.gpw`, the whole chain behind
 one `run_verified_workflow` call, `calc_band_dos` stdout lines and the shared
-stdout check). Recorded so far: 32 PASS / 10 WARN / 0 FAIL up to the workflow
-call on amd64, and every check individually on aarch64 (2026-10-03). The two
-hosts agree to ~1e-10 eV on the same conda lock (MoS2 monolayer: gap
+stdout check). The two platforms agree on the same conda lock to ~1e-10 eV on
+energies and the gap and ~1e-8 eV on the Fermi level (MoS2 monolayer: gap
 1.6754359249486146 eV on aarch64, 1.6754359250622177 eV on amd64, direct K→K,
 E = -22.0734417 eV, recommended ecut 300 eV / density 15), so an L2 tolerance
 of 1e-6 eV is safe across platforms; it is GPAW *releases* that shift the

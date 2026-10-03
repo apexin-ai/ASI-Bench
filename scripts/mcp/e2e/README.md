@@ -94,7 +94,7 @@ re-implementing them.
 | `psi4` | `Keith9922/chemaster` (`calc_psi4`) | conda-explicit | `micromamba` on `PATH` | 14 / 11 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
 | `rdkit` | `tandemai-inc/rdkit-mcp-server` (catalog `rdkit_tandem`) | uv-pip-pinned, Py 3.12 | — | 125 / 28 / 0, amd64, 2026-10-03 (aarch64 identical 2026-10-02) |
 | `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, amd64 and aarch64, 2026-10-03 |
-| `gpaw` | `Crystalhihihi/matmcp` | conda-explicit | `micromamba` on `PATH` | 32 / 10 / 0 up to `run_verified_workflow`, amd64, 2026-10-03 (that call hit the old 300 s client timeout, since raised; full run pending) |
+| `gpaw` | `Crystalhihihi/matmcp` | conda-explicit | `micromamba` on `PATH` | 38 / 13 / 0, amd64, 2026-10-03 (24 min single-threaded) |
 
 Install the prerequisites before running `setup.py`:
 
@@ -265,17 +265,18 @@ known defects is in each smoke script.
   including path traversal, unknown runs, `engine="qe"` (no pseudopotentials)
   and unknown engines. The `traceback_tail` contains host paths.
 - Keep `OMP_NUM_THREADS=1` (the launch env does): the thread count moves the
-  last digits of the energies. Across hosts the numbers agree to ~1e-10 eV
-  (aarch64 vs amd64, same conda lock), but they drift by a few meV between GPAW
-  releases, so ground truth has to pin the conda lock. The FastMCP banner on
-  stderr cannot be switched off when the server is started as
-  `python -m matmcp.server`; it does not touch the transport.
-- Budget time, not just correctness: one call is minutes of plane-wave DFT, and
-  `run_verified_workflow` is a whole chain. The smoke declares
-  `call_timeout` (2 h) because the client default of 300 s turned a correct
-  workflow call into a FAIL on a loaded host, prints each step before it starts
-  and records `seconds_by_step` in the report — use those numbers for an L2
-  task's `--timeout`.
+  last digits of the energies. Across hosts the same conda lock agrees to
+  ~1e-10 eV on energies and the gap and ~1e-8 eV on the Fermi level (aarch64 vs
+  amd64), but values drift by a few meV between GPAW releases, so ground truth
+  has to pin the lock. The FastMCP banner on stderr cannot be switched off when
+  the server is started as `python -m matmcp.server`; it does not touch the
+  transport.
+- Budget time, not just correctness: the whole smoke is 24 min of
+  single-threaded plane-wave DFT (amd64, 2026-10-03), one `run_verified_workflow`
+  call alone being several minutes. The smoke declares `call_timeout` (2 h)
+  because the client default of 300 s turned a correct workflow call into a
+  FAIL, prints each step before it starts and records `seconds_by_step` in the
+  report — use those numbers for an L2 task's `--timeout`.
 - The built-in path needs no network and no credentials, but one check
   deliberately asks for a Materials Project structure without a key and expects
   it to fail (HTTP 401, or a connection error on an offline host): that is the
