@@ -23,7 +23,8 @@ from pathlib import Path
 from ai4sci_bench.core.scorer import Scorer, register_scorer
 from ai4sci_bench.core.types import ScoreDetail
 
-MEASUREMENTS = ("volume_mm3", "surface_area_mm2", "mass_g", "izz_g_mm2")
+MEASUREMENTS = ("volume_mm3", "surface_area_mm2", "mass_g", "izz_g_mm2",
+                "reimported_volume_mm3")
 NUMBERS = (*MEASUREMENTS, "bolt_hole_diameter_mm")
 COUNTS = ("hole_count", "n_solids")
 
@@ -285,7 +286,8 @@ class PlateSchema(Scorer):
 
 @register_scorer("build123d_e2e_measurements")
 class Measurements(Scorer):
-    """volume, surface area, mass and Izz from measure(), relative to the closed form."""
+    """volume, surface area, mass and Izz from measure(), plus the volume the written STEP
+    reports when it is imported back, all relative to the closed form."""
 
     def score(self, pred_dir: Path, ref_dir: Path, config: dict) -> ScoreDetail:
         name = "build123d_e2e_measurements"

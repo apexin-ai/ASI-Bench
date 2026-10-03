@@ -1,6 +1,6 @@
 # Bolted cover plate: model, gate, measure and export
 
-Build the cover plate specified in `data/plate.json` as a CAD solid, check it against a validity gate, measure its mass properties and hole table for the material given there, and hand the geometry over as STEP and STL. Use the CAD modelling tools available in this session; register the part under its name, export to the stem given in the file (the server writes only under its own working directory or the temporary directory) and copy both files into the current working directory unchanged.
+Build the cover plate specified in `data/plate.json` as a CAD solid, check it against a validity gate, measure its mass properties and hole table for the material given there, and hand the geometry over as STEP and STL. Use the CAD modelling tools available in this session; register the part under its name, export to the stem given in the file (the server writes only under its own working directory or the temporary directory), read the written STEP back into the session to confirm it holds the solid, and copy both files into the current working directory unchanged.
 
 Background: a validity gate asks whether the result is a single well-formed, watertight, manifold solid — the condition a STEP or STL consumer needs. Mass properties follow from the geometry and the material density; the inertia tensor's `Izz` is the mass moment about the plate's own Z axis. Feature recognisers read holes and bolt circles back out of the finished solid instead of trusting the construction parameters, and a tessellated STL approximates curved faces, so its volume differs slightly from the exact solid.
 
@@ -18,6 +18,7 @@ Three files must end up in the current working directory:
   "surface_area_mm2": <float>,
   "mass_g": <float>,
   "izz_g_mm2": <float>,
+  "reimported_volume_mm3": <float>,
   "bbox_mm": [<float>, <float>, <float>],
   "hole_count": <int>,
   "bolt_hole_diameter_mm": <float>,
@@ -28,6 +29,7 @@ Three files must end up in the current working directory:
 
 - `volume_mm3`, `surface_area_mm2`, `mass_g`: the solid's volume (mm³), surface area (mm²) and mass (g) as measured.
 - `izz_g_mm2`: the `Izz` component of the inertia tensor as measured with the material (g·mm²).
+- `reimported_volume_mm3`: the volume reported when the exported STEP is imported back into the session — read the file back and report what that import says, which is what proves the written file holds the solid.
 - `bbox_mm`: the bounding-box sizes along X, Y and Z (mm), in that order.
 - `hole_count`: how many holes the recogniser finds in the part.
 - `bolt_hole_diameter_mm`: the diameter of the bolt-circle holes (mm).

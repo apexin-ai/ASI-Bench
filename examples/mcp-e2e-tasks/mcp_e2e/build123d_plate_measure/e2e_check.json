@@ -151,6 +151,13 @@
       "abs_tol": 0.01
     },
     {
+      "prediction_key": "reimported_volume_mm3",
+      "from_call": "reimport",
+      "result_key": "volume",
+      "reference_key": "reimported_volume_mm3",
+      "abs_tol": 0.001
+    },
+    {
       "prediction_key": "hole_count",
       "from_call": "holes",
       "result_key": "count",

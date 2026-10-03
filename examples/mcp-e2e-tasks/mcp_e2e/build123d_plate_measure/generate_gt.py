@@ -49,7 +49,8 @@ INPUT_SPEC = [
                                           "material and the export stem"},
 ]
 OUTPUT_SPEC = [
-    {"name": "result.json", "description": "measured volume, area, mass, Izz, bbox, hole table and gate"},
+    {"name": "result.json", "description": "measured volume, area, mass, Izz, the re-imported "
+                                           "volume, bbox, hole table and gate"},
     {"name": "part.step", "description": "the STEP written by the server's export tool"},
     {"name": "part.stl", "description": "the STL written by the server's export tool"},
 ]
@@ -173,6 +174,8 @@ def reference(case: dict) -> dict:
     stem = Path(case["export_stem"]).name
     return {
         "volume_mm3": volume,
+        # the STEP written and read back must report the same exact solid
+        "reimported_volume_mm3": volume,
         "surface_area_mm2": surface,
         "mass_g": volume * density,
         # measure(material=...) returns mass moments in g·mm²

@@ -34,6 +34,7 @@ REFERENCE = {
     **CASE,
     "volume_mm3": MEASURED["volume"], "surface_area_mm2": MEASURED["area"],
     "mass_g": MEASURED["mass_g"], "izz_g_mm2": MEASURED["izz"],
+    "reimported_volume_mm3": MEASURED["volume"],
     "bbox_mm": [90.0, 54.0, 12.0], "hole_count": 9, "bolt_pattern_count": 1,
     "bolt_hole_diameter_mm": 8.0, "face_count": 19, "n_solids": 1, "passes_gate": True,
     "density_g_cm3": 4.43,
@@ -51,7 +52,8 @@ STL_PATH = CASE["export_stem"] + ".stl"
 def _answer(**over):
     data = {"part": CASE["part"], "volume_mm3": MEASURED["volume"],
             "surface_area_mm2": MEASURED["area"], "mass_g": MEASURED["mass_g"],
-            "izz_g_mm2": MEASURED["izz"], "bbox_mm": [90.0, 54.0, 12.0], "hole_count": 9,
+            "izz_g_mm2": MEASURED["izz"], "reimported_volume_mm3": MEASURED["volume"],
+            "bbox_mm": [90.0, 54.0, 12.0], "hole_count": 9,
             "bolt_hole_diameter_mm": 8.0, "n_solids": 1, "passes_gate": True}
     data.update(over)
     return data
@@ -249,7 +251,8 @@ def test_reference_matches_the_recorded_closed_form(tmp_path):
     """The closed form is stdlib only, so this needs neither build123d nor OpenCascade."""
     generate_gt.generate(tmp_path, {"seed": 31415})
     ref = json.loads((tmp_path / "reference/reference.json").read_text())
-    for key in ("volume_mm3", "surface_area_mm2", "mass_g", "izz_g_mm2"):
+    for key in ("volume_mm3", "surface_area_mm2", "mass_g", "izz_g_mm2",
+                "reimported_volume_mm3"):
         assert ref[key] == pytest.approx(REFERENCE[key], abs=5e-5), key
     for key in ("hole_count", "bolt_pattern_count", "face_count", "n_solids", "bbox_mm",
                 "export_files", "bolt_hole_diameter_mm", "passes_gate", "part"):
@@ -295,8 +298,28 @@ def test_prompts_name_the_server_only_at_b1_b2_and_keep_the_rules():
         assert ("`find_hole_patterns`" in text) == (level == "b1")
         assert "no `import build123d`" in text and "Do not modify `data/plate.json`" in text
         assert "full precision" in text and "copied unchanged" in text
+        # the verifier requires import_cad_file, so every level must ask for the read-back
+        assert "reimported_volume_mm3" in text
+        assert ("read the file back" in text or "reading it back" in text
+                or "importing it back" in text or "read the written STEP back" in text)
         assert "mcp__" not in text and "Claude" not in text and "Codex" not in text
     assert "```python" in (TASK_DIR / "prompt_b1.md").read_text()
+
+
+def test_every_required_tool_is_asked_for_at_every_level():
+    """A required call the prompt never asks for fails an honest run: the first AWS B4 run
+    did everything right and still failed `tool_called` on import_cad_file."""
+    spec = json.loads((TASK_DIR / "e2e_check.json").read_text())
+    required = {cs["tool"] for cs in spec["calls"] if not cs.get("optional")}
+    asked = {"measure": ("measure", "mass properties"), "find_holes": ("hole", "recognis"),
+             "find_hole_patterns": ("bolt circle", "bolt-circle"), "export": ("export",),
+             "import_cad_file": ("read the file back", "reading it back", "importing it back",
+                                 "read the written STEP back")}
+    assert required <= set(asked)
+    for level in ("b1", "b2", "b3", "b4"):
+        text = (TASK_DIR / f"prompt_{level}.md").read_text().lower()
+        for tool in required:
+            assert any(word.lower() in text for word in asked[tool]), (level, tool)
 
 
 def test_task_meta_needs_no_cad_runtime():
@@ -400,7 +423,8 @@ def test_submission_failures_score_zero(tmp_path):
     assert _gate(pred, ref) == 0.0
     # values recomputed by hand (1% off) lose the measurement credit but keep the rest
     wrong = _answer(volume_mm3=MEASURED["volume"] * 1.01, surface_area_mm2=MEASURED["area"] * 1.01,
-                    mass_g=MEASURED["mass_g"] * 1.01, izz_g_mm2=MEASURED["izz"] * 1.01)
+                    mass_g=MEASURED["mass_g"] * 1.01, izz_g_mm2=MEASURED["izz"] * 1.01,
+                    reimported_volume_mm3=MEASURED["volume"] * 1.01)
     pred, ref = _dirs(tmp_path / "f", wrong)
     assert _gate(pred, ref) == 1.0
     assert TASK.total(pred, ref) == pytest.approx(60.0)

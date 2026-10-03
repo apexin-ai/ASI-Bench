@@ -937,14 +937,14 @@
   `rdkit_conformer` (opaque-pickle chain, tool writes a file) `86905ae`;
   build123d L1 `6c8e727` (42 tools, closed-form CAD references),
   `build123d_plate_measure` (stateful CAD session, path arguments, binary
-  artefacts) `<L2 commit>`.
+  artefacts) `73ea607`.
 - Framework and tooling work this produced: docs condensation `fe3651e`,
   verifier golden snapshot `b47c4f7`, verifier split into `e2e_verify/` with a
   strict spec parser `8ffc458`, `setup.py` installer registry `e24e8fc`, smoke
   scripts into `e2e_smoke/` with a shared runner `cbf026f`, tests regrouped into
   `tests/mcp_e2e/` `9fe5843`, persistence path-scrubbing fixed for shell
   commands `879dfc0`, for tool results `86905ae` and for tool arguments
-  `<L2 commit>`, `$HOME` pinned in the MCP E2E tests `81d31e2`.
+  `913d94e`, `$HOME` pinned in the MCP E2E tests `81d31e2`.
 - Verification: every task passed B1–B4 on AWS Linux amd64 with both Claude Code
   (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`, effort medium) at full local
   score and with every verifier check PASS; per-task dates in
@@ -964,7 +964,7 @@ Lessons — evidence and observability:
   and everything it carries must be restored from the trajectory by call id.
   Shell commands were fixed in `879dfc0`, tool results in `86905ae` after a
   returned path made every genuine Codex run fail `tool_correct`, and tool
-  *arguments* only in `<L2 commit>`, when the first CAD task's own honest run
+  *arguments* only in `913d94e`, when the first CAD task's own honest run
   failed `tool_chain` on a scrubbed `import_cad_file(path=…)`. A fix for
   "persistence destroyed X" has to enumerate every X the pipeline carries —
   three rounds for the same root cause. Two corollaries: the trajectory keeps
@@ -973,6 +973,11 @@ Lessons — evidence and observability:
   compare first and only call a mismatch unobservable when a placeholder caused
   it, otherwise a deliberately scrub-tolerant comparison (rdkit pickles) is
   downgraded to WARN.
+- A required tool in `e2e_check.json` is a promise every prompt level must make. The
+  build123d B4 run built, gated, measured and exported correctly and still failed
+  `tool_called`, because only B1–B3 asked for the written STEP to be read back. Put each
+  required tool's output in the shared result contract (`reimported_volume_mm3`) instead
+  of in level-specific prose, and test prompt-vs-spec coverage offline.
 - A test that hard-codes host-like paths is host-dependent: the MCP E2E fixtures
   use `/home/e2e/...`, which the sanitizer rewrites to `<home>/...` when the
   suite runs as that very user — four tests passed in CI and failed on the AWS
