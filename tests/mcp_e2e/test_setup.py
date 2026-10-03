@@ -60,24 +60,13 @@ def _manifest_with(tmp_path, sid, mutate):
     return path
 
 
-def _shared_manifest(tmp_path, mutate=None):
-    """The real manifest plus a second ToolUniverse tool face sharing arxiv's checkout.
+def _shared_manifest(tmp_path, mutate):
+    """The real manifest with one member of the shared ToolUniverse group edited.
 
-    ``mutate`` edits that second entry, so one group can be made inconsistent on purpose.
+    ``arxiv``, ``alphafold_db`` and ``ncbi`` are three tool faces of one pinned
+    checkout, so mutating one of them is how a group is made inconsistent on purpose.
     """
-    document = json.loads((BUNDLE / "manifest.json").read_text())
-    arxiv = next(e for e in document["servers"] if e["id"] == "arxiv")
-    arxiv["checkout"] = "tooluniverse"
-    second = json.loads(json.dumps(arxiv))
-    second["id"] = "alphafold_db"
-    second["launch"]["args"] = ["--no-search", "--include-tools", "alphafold_get_summary"]
-    second["expected_tools"] = ["alphafold_get_summary"]
-    if mutate:
-        mutate(second)
-    document["servers"].append(second)
-    path = tmp_path / "manifest.json"
-    path.write_text(json.dumps(document))
-    return path
+    return _manifest_with(tmp_path, "alphafold_db", mutate)
 
 
 def test_manifest_is_pinned_and_catalogued():
@@ -141,11 +130,12 @@ def test_arxiv_config_keeps_flags_literal_and_carries_env(tmp_path):
 
 
 def test_shared_checkout_is_one_directory_with_a_config_per_id(tmp_path):
-    servers = setup.load_manifest(_shared_manifest(tmp_path))
+    servers = setup.load_manifest()
     root = tmp_path / "root"
     shared = root / "tooluniverse"
-    assert setup.checkout_dir(root, servers["arxiv"]) == shared
-    assert setup.checkout_dir(root, servers["alphafold_db"]) == shared
+    # three tool faces of the same pinned upstream, one checkout
+    for sid in ("arxiv", "alphafold_db", "ncbi"):
+        assert setup.checkout_dir(root, servers[sid]) == shared
     assert setup.checkout_dir(root, servers["pyscf"]) == root / "pyscf"      # default: the id
     assert setup.checkout_dir(root, {"id": "pyscf", "checkout": None}) == root / "pyscf"
     first = setup.render_config(servers["arxiv"], shared)["mcpServers"]
@@ -159,7 +149,7 @@ def test_shared_checkout_is_one_directory_with_a_config_per_id(tmp_path):
 
 
 def test_setup_installs_a_shared_group_into_one_checkout(tmp_path, monkeypatch):
-    servers = setup.load_manifest(_shared_manifest(tmp_path))
+    servers = setup.load_manifest()
     root = (tmp_path / "root").resolve()
     root.mkdir()
     seen = []

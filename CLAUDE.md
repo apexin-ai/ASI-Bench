@@ -130,8 +130,10 @@
   `<id>.mcp.json` 与 MCP server 名仍按 id 一份（`mcp__<id>__<tool>` 不变）。
 - smoke（`smoke.py <id>`）必须用 server 自身 venv 在进程外独立计算参考值，并覆盖
   manifest 列出的全部工具：数值错误 FAIL、上游缺陷 WARN、已探测的已知数值缺陷用三态
-  （正确 PASS、精确符合缺陷 WARN、其他 FAIL），联网 server 只用封闭历史窗口并关闭上游
-  缓存。共享流程与通用检查在 `e2e_smoke/runner.py`，每个 server 只写
+  （正确 PASS、精确符合缺陷 WARN、其他 FAIL），联网 server 只用封闭历史窗口或不可变
+  标识（如 NCBI protein GI、UniProt accession、固定发布的数据集文件）并关闭上游
+  缓存；随上游版本漂移的量只记进报告，不得进 GT 或断言。共享流程与通用检查在
+  `e2e_smoke/runner.py`，每个 server 只写
   `e2e_smoke/servers/<id>.py` 的参考值与专属检查。直连 smoke 通过不等于 agent E2E 通过。
 - fake task 仅放 `examples/mcp-e2e-tasks/`（`status: test`，不进 `tasks/`），以
   `--params '{"seed":31415}'` 生成；参考值只在 `generate --sandbox task` 的隔离环境中

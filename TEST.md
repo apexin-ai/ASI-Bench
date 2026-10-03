@@ -694,7 +694,23 @@ confinement, `batch_map` item unpacking and the `fail_fast` / default image
 name / `(*args, **kwargs)` / lost-property verdicts, tool tables covering the
 manifest without overlap, hand anchors, and stubbed servers: descriptor checks
 FAIL when an option is ignored, oxidation-number and invalid-input probes,
-the coverage check.
+the coverage check; alphafold_db — the `{status, data, metadata}` wrapper split,
+the field-by-field comparison with an independently fetched entry (and that a
+new model version alone never differs), pLDDT read from a four-residue PDB
+fixture and binned at 50/70/90, AlphaMissense
+per-position means, isoform accessions (`P04637-2`) accepted while a mismatched
+`entryId` FAILs, summary selected by `model_identifier` (index 0 would be the
+wrong model), the pLDDT mean tolerance and the one-residue bin-edge WARN, the
+documented empty annotation state WARNing while an HTTP 500 or an
+`isError=true` sentinel FAILs, the overwritten-`type` WARN, and the
+`return_schema` drift check read from a fake checkout; ncbi — `gene_table`
+parsing for both strands, the 0-based → 1-based locus shift (comparing the raw
+values is the mistake the test pins), the reference-assembly entry chosen over
+index 0, FASTA residue counting, the three in-band failure shapes plus zero hits
+with no error field (a WARN, not a FAIL — only records for an impossible id
+FAIL), a `retmax` dropped as falsy, an unusable `gene_table` reference blamed on
+the smoke rather than on the tool, Datasets `v2alpha` disagreements kept to
+WARN, and the identification check read from a fake checkout.
 
 `test_verify_spec.py` / `test_verify_values.py`: strict parsing (unknown,
 inapplicable and invalid keys, dangling and optional-from-required
