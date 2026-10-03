@@ -27,6 +27,7 @@ identifier from a user-supplied model name and explicit ``api_protocol``.
 from __future__ import annotations
 
 import asyncio
+import copy
 import http.server
 import json
 import logging
@@ -598,6 +599,21 @@ def to_chat_completions_model(model: str) -> str:
     if model.startswith(prefix):
         return "hosted_vllm/" + model[len(prefix):]
     return model
+
+
+def _litellm_supports_custom_tools() -> bool:
+    """Older LiteLLM releases silently flatten custom tools in the Chat bridge."""
+    try:
+        from litellm.responses.litellm_completion_transformation.custom_tools import (
+            build_tool_call_item_kwargs,
+        )
+    except ImportError:
+        return False
+    # Probe the reconstruction capability without invoking a model or keeping
+    # per-session state. This is available in the tested LiteLLM 1.97.0 release.
+    item = build_tool_call_item_kwargs("call_probe", "exec", '{"content":"probe"}',
+                                      "completed", {"exec"})
+    return item.get("type") == "custom_tool_call" and item.get("input") == "probe"
 
 
 class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
@@ -1679,16 +1695,56 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
         body = self._prepare_model_input(body)
         is_stream = bool(body.get("stream"))
 
-        # Build litellm.responses kwargs.
-        kwargs: dict[str, Any] = {"model": self.litellm_model}
-        for key in (
+        # Keep the allowlist explicit: arbitrary LiteLLM kwargs could override
+        # routing or credentials. Unknown fields must fail rather than disappear.
+        response_params = {
             "input", "instructions", "max_output_tokens", "reasoning",
             "tools", "tool_choice", "temperature", "top_p",
             "parallel_tool_calls", "previous_response_id", "metadata",
             "text", "truncation", "store", "user",
-        ):
-            if key in body and body[key] is not None:
-                kwargs[key] = body[key]
+            "include", "max_tool_calls", "background", "conversation",
+            "prompt", "prompt_cache_key", "prompt_cache_retention",
+            "safety_identifier", "service_tier", "stream_options", "top_logprobs",
+        }
+        unknown = set(body) - response_params - {"model", "stream", "additional_tools"}
+        if unknown:
+            self._send_openai_error(
+                400, "Unsupported Responses translation parameter(s): "
+                + ", ".join(sorted(unknown))
+                + ". Use native Responses passthrough for unsupported features.",
+            )
+            return
+        kwargs = {key: value for key, value in body.items() if key in response_params}
+        kwargs["model"] = self.litellm_model
+
+        # The CLI extension supplies extra declarations separately. LiteLLM's
+        # Responses-to-Chat converter discovers custom tool names from `tools`.
+        # Merge declarations without flattening custom tools into function tools.
+        if "additional_tools" in body:
+            additional_tools = body["additional_tools"]
+            tools = body.get("tools") or []
+            if not isinstance(tools, list) or not isinstance(additional_tools, list):
+                self._send_openai_error(400, "tools and additional_tools must be arrays")
+                return
+            kwargs["tools"] = tools + additional_tools
+
+        tools = kwargs.get("tools") or []
+        if not isinstance(tools, list) or any(not isinstance(t, dict) for t in tools):
+            self._send_openai_error(400, "tools must be an array of tool declarations")
+            return
+        custom_names = {t.get("name") for t in tools if t.get("type") == "custom"}
+        history = body.get("input")
+        has_custom_history = isinstance(history, list) and any(
+            isinstance(item, dict) and item.get("type") in {"custom_tool_call", "custom_tool_call_output"}
+            for item in history
+        )
+        if (custom_names or has_custom_history) and not _litellm_supports_custom_tools():
+            self._send_openai_error(
+                400, "Installed LiteLLM cannot preserve custom tools in Responses translation. "
+                "Use native Responses passthrough or a LiteLLM version with custom-tool "
+                "round-trip support (tested with 1.97.0).",
+            )
+            return
 
         if self.litellm_api_base:
             kwargs["api_base"] = self.litellm_api_base
@@ -1702,10 +1758,9 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
 
         try:
             import litellm
-            # drop unsupported params (e.g. reasoning_effort for Anthropic)
-            # instead of raising — MiMo / Codex CLIs pass Responses-shaped
-            # params that don't universally map.
-            litellm.drop_params = True
+            # Do not change process-global policy (other sessions share it), or
+            # ask LiteLLM to silently discard execution-critical parameters.
+            kwargs["drop_params"] = False
             response = litellm.responses(**kwargs)
         except Exception as e:
             logger.exception("responses translation: litellm.responses failed")
@@ -1715,10 +1770,13 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
         try:
             resp_dict = response.model_dump() if hasattr(response, "model_dump") else dict(response)
         except Exception:
-            try:
-                resp_dict = json.loads(json.dumps(response, default=str))
-            except Exception:
-                resp_dict = {"error": "Failed to serialize response"}
+            self._send_openai_error(502, "Failed to serialize translated Responses response")
+            return
+
+        if any(item.get("type") == "function_call" and item.get("name") in custom_names
+               for item in resp_dict.get("output") or []):
+            self._send_openai_error(502, "Upstream translation lost the custom tool type; use native Responses passthrough")
+            return
 
         if is_stream:
             self._handle_synthetic_responses_streaming(resp_dict)
@@ -1734,26 +1792,38 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
                 pass
 
     def _handle_synthetic_responses_streaming(self, resp_dict: dict) -> None:
-        """Emit a minimal Responses API SSE sequence from a completed response.
+        """Replay a buffered response without changing item types, IDs or status.
 
-        We synthesize the events the OpenCode / MiMo family of CLIs actually
-        consume: ``response.created`` → per-output-item added/done →
-        ``response.completed``. Text output items also stream a single
-        ``response.output_text.delta`` with the full text and a matching
-        ``.done`` event so the CLI's incremental UI still updates.
-
-        Reasoning items are skipped in the streamed sequence — some CLIs
-        treat a stream that starts with a reasoning delta as an empty
-        assistant turn and never look at the subsequent message item.
+        This is still buffered, not a reconstruction of upstream token timing.
+        Reject response shapes that cannot be represented before sending SSE
+        headers. In particular, a pending response must never look completed.
         """
+        status = resp_dict.get("status")
+        if status not in {"completed", "failed", "incomplete"}:
+            self._send_openai_error(502, f"Cannot synthesize Responses status: {status!r}")
+            return
+        output = resp_dict.get("output") or []
+        if not isinstance(output, list) or any(
+            not isinstance(item, dict)
+            or item.get("type") not in {"message", "reasoning", "function_call", "custom_tool_call"}
+            or not item.get("id")
+            for item in output
+        ):
+            self._send_openai_error(502, "Unsupported Responses output item or missing item ID; use native Responses passthrough")
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "close")
         self.end_headers()
 
+        sequence_number = 0
+
         def emit(event_type: str, payload: dict) -> None:
-            payload = {"type": event_type, **payload}
+            nonlocal sequence_number
+            payload = {"type": event_type, "sequence_number": sequence_number, **payload}
+            sequence_number += 1
             frame = f"event: {event_type}\ndata: {json.dumps(payload, default=str)}\n\n"
             try:
                 self.wfile.write(frame.encode())
@@ -1761,40 +1831,33 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError):
                 raise
 
-        # Rewrite item IDs so message ids get msg_... prefix that Responses
-        # consumers expect (litellm hands back chatcmpl-... for both the
-        # response and its message item, which confuses OpenCode-family CLIs).
-        response_id = resp_dict.get("id") or "resp_synth"
-        if not response_id.startswith("resp_"):
-            response_id = "resp_" + response_id.replace("chatcmpl-", "")
-        resp_dict = dict(resp_dict)
-        resp_dict["id"] = response_id
-
-        rewritten_output: list[dict] = []
-        for i, item in enumerate(resp_dict.get("output") or []):
-            item = dict(item)
-            if item.get("type") == "message" and not str(item.get("id", "")).startswith("msg_"):
-                item["id"] = f"msg_{response_id}_{i}"
-            rewritten_output.append(item)
-        resp_dict["output"] = rewritten_output
-
         try:
-            emit("response.created", {"response": resp_dict})
-            emit("response.in_progress", {"response": resp_dict})
+            initial = {**resp_dict, "status": "in_progress", "output": [],
+                       "error": None, "incomplete_details": None, "usage": None}
+            emit("response.created", {"response": initial})
+            emit("response.in_progress", {"response": initial})
 
-            for idx, item in enumerate(resp_dict["output"]):
+            for idx, item in enumerate(output):
                 itype = item.get("type")
-                if itype == "reasoning":
-                    # Skip reasoning entirely in the streamed sequence.
-                    continue
-
-                emit("response.output_item.added", {"output_index": idx, "item": item})
+                added = copy.deepcopy(item)
+                if "status" in added:
+                    added["status"] = "in_progress"
+                if itype == "message":
+                    added["content"] = []
+                elif itype == "function_call":
+                    added["arguments"] = ""
+                elif itype == "custom_tool_call":
+                    added["input"] = ""
+                emit("response.output_item.added", {"output_index": idx, "item": added})
 
                 if itype == "message":
                     for cidx, part in enumerate(item.get("content") or []):
+                        added_part = dict(part)
+                        if part.get("type") in ("output_text", "text"):
+                            added_part["text"] = ""
                         emit("response.content_part.added", {
                             "output_index": idx, "content_index": cidx,
-                            "item_id": item.get("id"), "part": part,
+                            "item_id": item.get("id"), "part": added_part,
                         })
                         if part.get("type") in ("output_text", "text"):
                             text = part.get("text", "") or ""
@@ -1811,20 +1874,20 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
                             "item_id": item.get("id"), "part": part,
                         })
                 elif itype in ("function_call", "custom_tool_call"):
-                    args = item.get("arguments", "") or ""
-                    if args:
-                        emit("response.function_call_arguments.delta", {
-                            "output_index": idx, "item_id": item.get("id"),
-                            "delta": args,
-                        })
-                        emit("response.function_call_arguments.done", {
-                            "output_index": idx, "item_id": item.get("id"),
-                            "arguments": args,
-                        })
+                    field = "input" if itype == "custom_tool_call" else "arguments"
+                    event = ("response.custom_tool_call_input" if itype == "custom_tool_call"
+                             else "response.function_call_arguments")
+                    value = item.get(field, "") or ""
+                    emit(event + ".delta", {
+                        "output_index": idx, "item_id": item.get("id"), "delta": value,
+                    })
+                    emit(event + ".done", {
+                        "output_index": idx, "item_id": item.get("id"), field: value,
+                    })
 
                 emit("response.output_item.done", {"output_index": idx, "item": item})
 
-            emit("response.completed", {"response": resp_dict})
+            emit("response." + status, {"response": resp_dict})
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception:

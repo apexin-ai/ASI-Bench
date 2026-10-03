@@ -8,6 +8,23 @@ agent CLI cannot trigger paid/external execution unexpectedly:
 uv run pytest -q
 ```
 
+Issue #8 Responses translation regressions run without paid model requests:
+
+```bash
+uv run pytest -q tests/test_api_proxy_responses.py tests/test_third_party_api.py \
+  tests/test_api_proxy_image_inputs.py tests/test_mimo_adapter.py
+```
+
+Coverage includes custom `input` vs function `arguments`, additional tool
+declarations, caller `include`, request-local `drop_params=False`, original
+reasoning IDs/encrypted content, concurrent proxy requests, monotonic SSE
+sequence numbers, lifecycle ordering, and failed/incomplete terminal events.
+The real-LiteLLM regression mocks model completions and prohibits HTTP: on
+1.82.6 it verifies explicit rejection of unsupported custom-tool conversion;
+on 1.97.0 it verifies a two-turn custom-tool round trip. No agent CLI is run.
+These tests do not validate provider-side encrypted reasoning replay or live
+upstream streaming; those remain separate work under issue #8.
+
 The `CI` GitHub Actions workflow runs this suite automatically on every push
 and pull request with Python 3.11 and 3.13. It also runs the focused custom-task
 Docker integration suite once on Ubuntu, including pi and Claude Code overlays.
