@@ -141,11 +141,17 @@
   未知键、非法枚举、悬空引用一律 `invalid_spec`；取值统一走 `Selector`、比较器共用，新
   值类型只加 extractor 或 comparator，跨 task 共用的比较器不得为了单个测试收紧；工具名
   按 `mcp__<server>__<tool>` 精确匹配，日志解析器按 `agent_name` 选择。
-- 证据规则（最容易复犯）：持久化 stdout 会脱敏 user 事件并把绝对路径换成
-  `<abs_path>`，shell 命令原文和工具返回值都必须按同 call id 从 trajectory 补齐，含只是
-  被路径脱敏的返回值——否则返回宿主路径的工具（如 `mol_to_sdf`）在 Codex 下永远无法
-  校验。无法还原时一律记 WARN coverage gap，不得判 FAIL：证据缺口不是 agent 的错。测试的
-  `persist_like_run` 必须调用真实 `_sanitize_raw_artifact_text`，不得手写近似。
+- 证据规则（最容易复犯）：持久化 stdout 会脱敏 user 事件，并把宿主路径换成占位符
+  （`<home>`、`<workspace>`、`<run_output_dir>`、`<repo_root>`，其余 `<abs_path>`）。
+  shell 命令原文、工具返回值和路径类工具入参都必须按同 call id 从 trajectory 补齐，
+  含只是被脱敏的返回值与入参——否则返回或接收宿主路径的工具（`mol_to_sdf`、
+  `export`/`import_cad_file`）永远无法校验。trajectory 只保留
+  `core.trajectory.KEY_ARG_NAMES` 列出的入参，新增这类检查前先确认该键在列表里。
+  判定必须先比较、只有「比不过且该值只有脱敏副本」才记 WARN coverage gap，不得判
+  FAIL，也不得直接把脱敏值当不可观测（否则 scrub-tolerant 的比较会被降级）：证据缺口
+  不是 agent 的错。测试的 `persist_like_run` 必须调用真实
+  `_sanitize_raw_artifact_text`，不得手写近似；测试不得依赖运行者的 `$HOME`
+  （`tests/mcp_e2e/conftest.py` 已把它钉到 sentinel）。
 - 客户端差异：Claude 对带 outputSchema 的 FastMCP 工具展示 `structuredContent`
   `{"result": ...}`，verifier 须先解包，extractor 遇到非对象 message 跳过而不抛错；
   trajectory 不保存图片内容，只在 tool_result metadata 记 `content_types` /

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ai4sci_bench.core.trajectory import Trajectory, TrajectoryStep, TrajectorySummary
+from ai4sci_bench.core.trajectory import KEY_ARG_NAMES, Trajectory, TrajectoryStep, TrajectorySummary
 
 
 def _coerce_text(value: object) -> str:
@@ -14,6 +14,24 @@ def _coerce_text(value: object) -> str:
     if isinstance(value, (bytes, bytearray)):
         return value.decode("utf-8", errors="replace")
     return str(value)
+
+
+def _key_args(arguments: object) -> dict[str, str]:
+    """The path-like arguments of a tool call (:data:`KEY_ARG_NAMES`).
+
+    An MCP tool call's arguments are not otherwise kept in the trajectory, and the
+    persisted raw log replaces absolute host paths with placeholders — so for a tool
+    that acts on a file (a CAD export, a mesh import) this is the only record of the
+    path the agent actually passed.
+    """
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(arguments, dict):
+        return {}
+    return {k: str(arguments[k]) for k in KEY_ARG_NAMES if k in arguments}
 
 
 def _first_change_path(item: dict[str, object]) -> str:
@@ -302,7 +320,7 @@ def extract_from_jsonl(jsonl_text: str, instance_id: str = "") -> Trajectory:
                         content=tool_name,
                         metadata={
                             "tool_name": tool_name,
-                            "key_args": {},
+                            "key_args": _key_args(item.get("arguments")),
                             "tool_call_id": item_id,
                             "mcp_server": item.get("server"),
                             "mcp_tool": item.get("tool"),

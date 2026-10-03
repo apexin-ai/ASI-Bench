@@ -903,7 +903,7 @@
   producing one result per attempt.
 - Implementation commit: `0e43cdd`.
 
-## 2026-09-29 – 2026-10-03: MCP end-to-end testing (L0–L2), six servers and eight fake tasks
+## 2026-09-29 – 2026-10-03: MCP end-to-end testing (L0–L2), seven servers and eight fake tasks
 
 - Problem: the MCP catalog survey only proved L0 (`initialize` + `tools/list`).
   Nothing showed that an agent inside `asibench run` really calls a tool and
@@ -934,13 +934,17 @@
   `b513672`, `s4_grating_spectrum` (answers selected from returned arrays)
   `29ba5a5` and structured-output unwrapping `7b78b11`; psi4 L1 `7a9c5d9`,
   `psi4_opt_freq` (geometry-valued chain) `f4c48de`; rdkit L1 `8dc43e6`,
-  `rdkit_conformer` (opaque-pickle chain, tool writes a file) `86905ae`.
+  `rdkit_conformer` (opaque-pickle chain, tool writes a file) `86905ae`;
+  build123d L1 `6c8e727` (42 tools, closed-form CAD references),
+  `build123d_plate_measure` (stateful CAD session, path arguments, binary
+  artefacts) `<L2 commit>`.
 - Framework and tooling work this produced: docs condensation `fe3651e`,
   verifier golden snapshot `b47c4f7`, verifier split into `e2e_verify/` with a
   strict spec parser `8ffc458`, `setup.py` installer registry `e24e8fc`, smoke
   scripts into `e2e_smoke/` with a shared runner `cbf026f`, tests regrouped into
   `tests/mcp_e2e/` `9fe5843`, persistence path-scrubbing fixed for shell
-  commands `879dfc0` and for tool results `86905ae`.
+  commands `879dfc0`, for tool results `86905ae` and for tool arguments
+  `<L2 commit>`, `$HOME` pinned in the MCP E2E tests `81d31e2`.
 - Verification: every task passed B1–B4 on AWS Linux amd64 with both Claude Code
   (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`, effort medium) at full local
   score and with every verifier check PASS; per-task dates in
@@ -955,12 +959,25 @@ Lessons — evidence and observability:
   one. Where the evidence is missing, report a coverage gap (WARN), never a
   verdict about the agent.
 - `asibench run` destroys evidence two ways — it redacts user-role events (where
-  Claude's tool results live) and rewrites absolute host paths to `<abs_path>`
-  everywhere — and both must be restored from the trajectory by call id, for
-  shell commands *and* for tool results. The command half was fixed in `879dfc0`
-  and the result half only in `86905ae`, after a returned file path made every
-  genuine Codex run fail `tool_correct`: a fix for "persistence destroyed X"
-  has to enumerate every X the pipeline carries.
+  Claude's tool results live) and rewrites host paths to placeholders
+  (`<home>`, `<workspace>`, `<run_output_dir>`, `<repo_root>`, `<abs_path>`) —
+  and everything it carries must be restored from the trajectory by call id.
+  Shell commands were fixed in `879dfc0`, tool results in `86905ae` after a
+  returned path made every genuine Codex run fail `tool_correct`, and tool
+  *arguments* only in `<L2 commit>`, when the first CAD task's own honest run
+  failed `tool_chain` on a scrubbed `import_cad_file(path=…)`. A fix for
+  "persistence destroyed X" has to enumerate every X the pipeline carries —
+  three rounds for the same root cause. Two corollaries: the trajectory keeps
+  only `core.trajectory.KEY_ARG_NAMES`, so that list is the contract for what a
+  path check can ever see (Codex kept no MCP arguments at all); and a check must
+  compare first and only call a mismatch unobservable when a placeholder caused
+  it, otherwise a deliberately scrub-tolerant comparison (rdkit pickles) is
+  downgraded to WARN.
+- A test that hard-codes host-like paths is host-dependent: the MCP E2E fixtures
+  use `/home/e2e/...`, which the sanitizer rewrites to `<home>/...` when the
+  suite runs as that very user — four tests passed in CI and failed on the AWS
+  E2E box. Pin `$HOME` in the tests (`81d31e2`) instead of choosing "unlikely"
+  literals.
 - Build test streams from what the client really shows. A FastMCP tool with a
   return annotation declares an `outputSchema`, so Claude Code passes
   `structuredContent = {"result": …}` instead of the text block; streams built

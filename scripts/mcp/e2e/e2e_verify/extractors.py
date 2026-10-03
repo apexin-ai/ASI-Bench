@@ -101,10 +101,32 @@ def canon_file_name(value) -> str | None:
     return name or None
 
 
+_EXPORTED_FILE = re.compile(r"[^\s'\"`]+\.(?:step|stp|stl|3mf|dxf|svg)\b", re.IGNORECASE)
+
+
+def _extract_exported_files(data):
+    """The paths an export answer reports (build123d-mcp writes ``Exported to:`` and one
+    line per file, followed by a volume/bbox echo). The answer is plain text, so the
+    extractor reads the whole result."""
+    if not isinstance(data, str):
+        return None
+    return _EXPORTED_FILE.findall(data) or None
+
+
+def canon_exported_files(value):
+    """File names, sorted, of a list of paths; a single path canonicalises to its own name,
+    so a chained path argument can be compared against the returned list."""
+    if isinstance(value, list):
+        names = [canon_file_name(v) for v in value]
+        return sorted(names) if names and all(names) else None
+    return canon_file_name(value)
+
+
 EXTRACTORS: dict[str, Extractor] = {
     "arxiv_ids": Extractor(_extract_arxiv_ids, canon_ids),
     "term_counts": Extractor(_extract_term_counts, canon_counts),
     "text": Extractor(lambda data: data if isinstance(data, str) else None, canon_text),
     "rdkit_mol": Extractor(_extract_mol_field, canon_text),
     "file_name": Extractor(lambda data: data if isinstance(data, str) else None, canon_file_name),
+    "exported_files": Extractor(_extract_exported_files, canon_exported_files),
 }
