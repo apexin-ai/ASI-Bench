@@ -6,6 +6,9 @@ server's libraries), after ``setup.py <id>`` wrote ``<root>/<id>.mcp.json``::
 
     ~/mcp/<id>/.venv/bin/python scripts/mcp/e2e/smoke.py <id> --config ~/mcp/<id>.mcp.json
 
+The interpreter is ``<root>/<checkout>/.venv/bin/python`` for a server whose
+manifest entry shares a ``checkout`` with other ids.
+
 ``smoke.py <id> --help`` lists the server's extra options. The checks of
 server ``<id>`` are documented in ``e2e_smoke/servers/<id>.py``; the shared
 L0/L1 checks in ``e2e_smoke/runner.py``. Exit code 1 if any check FAILs.

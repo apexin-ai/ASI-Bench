@@ -3,7 +3,7 @@
 Run with the server's own virtualenv so that MarkItDown (the PDF converter the
 server uses) is importable for the independent snippet reference::
 
-    ~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke.py arxiv --config ~/mcp/arxiv.mcp.json
+    ~/mcp/tooluniverse/.venv/bin/python scripts/mcp/e2e/smoke.py arxiv --config ~/mcp/arxiv.mcp.json
 
 Needs network access to export.arxiv.org and arxiv.org (the server and the
 references both query the live public arXiv API; no key is needed). Queries

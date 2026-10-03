@@ -660,7 +660,11 @@ listed, checked before cloning); `conda-explicit` (fresh `micromamba create
 dropped, non-conda `.venv` refused) and the committed locks (header matches
 the manifest, conda-forge `<platform>`/`noarch` URLs with `#sha256:`; stale,
 foreign, md5-only or wrong-channel locks rejected), `setup.py --lock` from
-`micromamba --dry-run --json`.
+`micromamba --dry-run --json`. Shared checkouts: ids with the same `checkout`
+install into one `<root>/<checkout>` (default is still `<root>/<id>`) while
+keeping one `*.mcp.json` and one MCP server name per id, and a group that
+differs on repository, revision, python or an install field, collides with
+another manifest id, or names its checkout with a non-identifier is rejected.
 
 `test_smoke_runner.py`: the stdio client paginates `tools/list`, surfaces
 `isError` and records non-JSON stdout; the shared run end to end against a fake
@@ -732,8 +736,10 @@ PySCF, RDKit and geomeTRIC run in the smoke process; expected outcome on the
 pinned revision is `PASS` with 0 FAIL and 7–8 WARN (upstream defects listed in
 `scripts/mcp/e2e/e2e_smoke/servers/pyscf.py`; the benzene symmetry probe is intermittent).
 For arxiv: `python3 scripts/mcp/e2e/setup.py arxiv`, then
-`~/mcp/arxiv/.venv/bin/python scripts/mcp/e2e/smoke.py arxiv --config
-~/mcp/arxiv.mcp.json` (needs access to export.arxiv.org and arxiv.org, ~90 s).
+`~/mcp/tooluniverse/.venv/bin/python scripts/mcp/e2e/smoke.py arxiv --config
+~/mcp/arxiv.mcp.json` (the checkout is shared per upstream repository, so it is
+`~/mcp/tooluniverse`, not `~/mcp/arxiv`; needs access to export.arxiv.org and
+arxiv.org, ~90 s).
 Expected outcome on the pinned revision: `PASS` with 0 FAIL and 8 WARN (OR +
 date precedence, three in-band errors plus a missing-paper one, `truncated`
 flag, old-style ID, workspace-dependent tool filter).

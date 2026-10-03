@@ -125,7 +125,9 @@
   精确钉死（只允许 `==` 加 `exclude_newer`，或按平台提交带 SHA-256 的 `@EXPLICIT` lock
   无求解安装），不安装系统包（`host_requirements` 只在 clone 前检查）。新增安装方式或
   主机检查只加一个 `INSTALLERS` / `HOST_PROBES` 注册项，manifest 条目只允许公共键加本
-  方式字段。
+  方式字段。同一上游 repo 的多个 id 可用可选 `checkout` 键共用一份 checkout/.venv：组内
+  repository/revision/python/install 及该安装方式的字段必须逐字相同，组名不得撞其他 id；
+  `<id>.mcp.json` 与 MCP server 名仍按 id 一份（`mcp__<id>__<tool>` 不变）。
 - smoke（`smoke.py <id>`）必须用 server 自身 venv 在进程外独立计算参考值，并覆盖
   manifest 列出的全部工具：数值错误 FAIL、上游缺陷 WARN、已探测的已知数值缺陷用三态
   （正确 PASS、精确符合缺陷 WARN、其他 FAIL），联网 server 只用封闭历史窗口并关闭上游

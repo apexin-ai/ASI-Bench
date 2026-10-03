@@ -7,8 +7,10 @@ Stdlib only. For the server ``<id>`` listed in ``manifest.json`` this:
    flags, loadable system libraries) before anything is cloned; nothing is
    ever installed on the host;
 2. clones the upstream repository into ``<root>/<id>`` (or reuses an existing
-   clean checkout) and detaches at the pinned revision;
-3. builds an isolated environment at ``<root>/<id>/.venv`` with the server's
+   clean checkout) and detaches at the pinned revision; ids that declare the
+   optional ``checkout`` key share one ``<root>/<checkout>`` instead, for a
+   single upstream repository exposing several tool faces (ToolUniverse);
+3. builds an isolated environment at ``<checkout>/.venv`` with the server's
    install mode (``UV_PYTHON`` and other installer variables from the caller's
    shell are ignored on purpose):
 
@@ -61,6 +63,7 @@ HERE = Path(__file__).resolve().parent
 MANIFEST = HERE / "manifest.json"
 # Placeholder in launch args / env values for the absolute checkout path, e.g. "{checkout}/main.py".
 CHECKOUT = "{checkout}"
+ID_RE = re.compile(r"[a-z][a-z0-9_]*")
 REVISION_RE = re.compile(r"[0-9a-f]{40}")
 PYTHON_RE = re.compile(r"3\.\d+")
 PIN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9._,-]+\])?==[A-Za-z0-9][A-Za-z0-9.+!_-]*")
@@ -279,7 +282,7 @@ class CondaExplicit(Installer):
         """Solve the manifest specs once per locked platform and write @EXPLICIT locks (needs network)."""
         micromamba = _micromamba()
         conda = entry["conda"]
-        env = _mamba_env(root / entry["id"])
+        env = _mamba_env(checkout_dir(root, entry))
         env["CONDA_OVERRIDE_GLIBC"] = LOCK_GLIBC
         version = run([micromamba, "--version"], env=env)
         written = []
@@ -397,6 +400,14 @@ def _check_string(pattern: re.Pattern | None, what: str) -> Validator:
     return check
 
 
+def _optional(validator: Validator) -> Validator:
+    """Make a validator accept an absent field (value None)."""
+    def check(sid: str, value, entry: dict) -> None:
+        if value is not None:
+            validator(sid, value, entry)
+    return check
+
+
 def _check_launch(sid: str, launch, entry: dict) -> None:
     if not isinstance(launch, dict) or "command" not in launch or set(launch) - {"command", "args", "env"}:
         raise SetupError(f"{sid}: launch must have command and may have args, env")
@@ -429,8 +440,11 @@ def _check_install(sid: str, value, entry: dict) -> None:
 # Keys every entry may have (validators decide which are required); install modes add their own.
 COMMON_KEYS: dict[str, Validator] = {
     # the id also names the smoke module e2e_smoke/servers/<id>.py
-    "id": _check_string(re.compile(r"[a-z][a-z0-9_]*"), "id must be a lowercase identifier"),
+    "id": _check_string(ID_RE, "id must be a lowercase identifier"),
     "catalog_id": _check_string(None, "catalog_id must be a non-empty string"),
+    # optional: share one <root>/<checkout> (and its .venv) with the other ids of the same group,
+    # for one upstream repository that exposes several tool faces; defaults to the id
+    "checkout": _optional(_check_string(ID_RE, "checkout must be a lowercase identifier")),
     "repository": _check_string(re.compile(r"https://\S+"), "repository must be an https URL"),
     "revision": _check_string(REVISION_RE, "revision must be a full 40-char commit SHA"),
     "python": _check_string(PYTHON_RE, "python must be a 3.x version such as 3.12"),
@@ -461,6 +475,40 @@ def validate_entry(entry) -> None:
     installer.validate(sid, entry)
 
 
+# Fields that decide what a checkout holds: ids sharing one must agree on all of them,
+# plus the fields of their install mode. host_requirements is deliberately not here: it
+# gates the id you invoke, not the directory's contents.
+SHARED_CHECKOUT_KEYS = ("repository", "revision", "python", "install")
+
+
+def _check_shared_checkouts(servers: dict[str, dict]) -> None:
+    """Ids sharing a ``checkout`` must build the same directory: same upstream, revision, env.
+
+    Two consequences of sharing, worth knowing when one of the ids misbehaves:
+    :func:`ensure_checkout` refuses a checkout whose tracked files were modified, so one dirty
+    working tree blocks every id of the group; and running ``setup.py`` for the second id of a
+    group installs into that same directory again, which ``uv-sync-frozen`` makes a fast no-op
+    while the other modes rebuild ``.venv`` from scratch (so the group's other ids are briefly
+    unusable). Only the invoked id's ``<id>.mcp.json`` is rewritten.
+    """
+    groups: dict[str, list[dict]] = {}
+    for entry in servers.values():
+        if entry.get("checkout"):
+            groups.setdefault(entry["checkout"], []).append(entry)
+    for name, group in groups.items():
+        if name in servers and all(entry is not servers[name] for entry in group):
+            raise SetupError(f"checkout {name!r} collides with manifest id {name!r}, which installs "
+                             f"into <root>/{name} itself; to share that directory, give {name!r} the "
+                             f"same checkout key")
+        first, *rest = group
+        fields = (*SHARED_CHECKOUT_KEYS, *INSTALLERS[first["install"]].fields)
+        for entry in rest:
+            differs = [key for key in fields if entry.get(key) != first.get(key)]
+            if differs:
+                raise SetupError(f"{entry['id']}: shares checkout {name!r} with {first['id']} "
+                                 f"but differs on {differs}")
+
+
 def load_manifest(path: Path = MANIFEST) -> dict[str, dict]:
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("schema_version") != 1:
@@ -473,6 +521,7 @@ def load_manifest(path: Path = MANIFEST) -> dict[str, dict]:
         if entry["id"] in servers:
             raise SetupError(f"Duplicate manifest id: {entry['id']}")
         servers[entry["id"]] = entry
+    _check_shared_checkouts(servers)
     return servers
 
 
@@ -482,6 +531,11 @@ def load_manifest(path: Path = MANIFEST) -> dict[str, dict]:
 
 def git(checkout: Path, *args: str) -> str:
     return run(["git", "-C", str(checkout), *args])
+
+
+def checkout_dir(root: Path, entry: dict) -> Path:
+    """Where this server's checkout and ``.venv`` live: ``<root>/<checkout or id>``."""
+    return root / (entry.get("checkout") or entry["id"])
 
 
 def ensure_checkout(entry: dict, dest: Path) -> None:
@@ -534,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SetupError(f"Unknown server {args.server!r}; known: {', '.join(sorted(servers))}")
         entry = servers[args.server]
         root = Path(args.root).expanduser().resolve()
-        dest = root / entry["id"]
+        dest = checkout_dir(root, entry)
         if args.lock:
             INSTALLERS[entry["install"]].lock(entry, root)
             return 0

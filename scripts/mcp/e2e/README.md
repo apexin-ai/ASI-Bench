@@ -14,8 +14,8 @@ involved. Upstream code is cloned, never vendored; upstream licenses apply.
 
 | File | Purpose |
 |---|---|
-| `manifest.json` | per server: repository, 40-char revision, Python, install mode, launch command/env (`{checkout}` placeholder), expected tools |
-| `setup.py` | clone, pin, build `<root>/<id>/.venv`, write `<root>/<id>.mcp.json` (stdlib only) |
+| `manifest.json` | per server: repository, 40-char revision, Python, install mode, launch command/env (`{checkout}` placeholder), expected tools, optional shared `checkout` |
+| `setup.py` | clone, pin, build `<root>/<checkout or id>/.venv`, write `<root>/<id>.mcp.json` (stdlib only) |
 | `smoke.py` | L0/L1 smoke CLI: `smoke.py <id> --config …`, JSON report |
 | `e2e_smoke/` | `runner.py` (the shared run and generic checks), `client.py` (stdio client recording non-JSON stdout), `helpers.py`, and `servers/<id>.py` per server (references + server-specific checks, declared as `SMOKE`) |
 | `verify_run.py` | L2 verifier CLI for agent runs; implementation in `e2e_verify/` (spec, extractors, values, evidence, checks) |
@@ -31,6 +31,18 @@ Install modes:
 
 Servers with prebuilt native code also declare `host_requirements`; `setup.py`
 checks them before cloning and never installs system packages.
+
+Ids backed by the same upstream repository — one repository exposing several
+tool faces, such as the ToolUniverse SMCP servers — share one checkout and one
+`.venv` through the optional `checkout` key: `setup.py` installs into
+`<root>/<checkout>` instead of `<root>/<id>`, and still writes one
+`<root>/<id>.mcp.json` per id whose MCP server name is the id, so tool names
+(`mcp__<id>__<tool>`) do not change. Every id of a group must declare the same
+repository, revision, python, install mode and install fields, and the group
+name must not be another manifest id unless that id joins the group with the
+same key. Running `setup.py` for the second id of a group installs into the
+shared directory again: a fast no-op for `uv-sync-frozen`, a full rebuild of
+`.venv` for the other modes.
 
 The manifest is strict: an entry holds only the common keys plus its install
 mode's fields; a misspelt key or another mode's field is an error. A new mode is
@@ -48,6 +60,10 @@ python3 scripts/mcp/e2e/setup.py <id> --root ~/mcp
   --config ~/mcp/<id>.mcp.json --report ~/mcp/<id>-smoke-report.json
 uv run asibench mcp check --config ~/mcp/<id>.mcp.json
 ```
+
+For a server with a shared `checkout` the interpreter is
+`~/mcp/<checkout>/.venv/bin/python` (`arxiv` → `~/mcp/tooluniverse`); the
+config path stays `~/mcp/<id>.mcp.json`.
 
 Run the smoke with the server's own venv: the reference needs the same
 scientific library. The server is started from a temporary cwd/HOME/TMPDIR
@@ -72,7 +88,7 @@ re-implementing them.
 | id | Upstream | Install | Needs | Last smoke (PASS / WARN / FAIL) |
 |---|---|---|---|---|
 | `pyscf` | `lixin19/mcp2pyscf` | uv-sync-frozen, Py 3.13 | — | 21 / 8 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-09-29) |
-| `arxiv` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12 | network to arxiv.org | 16 / 8 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-09-30) |
+| `arxiv` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to arxiv.org | 16 / 8 / 0, amd64, 2026-10-02 (pre-shared-checkout layout; aarch64 PASS 2026-09-30) |
 | `jsbsim` | `flyintothesky/jsbsim-mcp` | uv-pip-pinned, Py 3.12 | — | 17 / 17 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
 | `s4` | `prof-davifr/mcp-s4-rcwa` | uv-pip-pinned, Py 3.12 | x86-64 (AVX2/FMA/BMI2), `libblas3 liblapack3` | 41 / 7 / 0, amd64, 2026-10-02 |
 | `psi4` | `Keith9922/chemaster` (`calc_psi4`) | conda-explicit | `micromamba` on `PATH` | 14 / 11 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |

@@ -60,6 +60,26 @@ def _manifest_with(tmp_path, sid, mutate):
     return path
 
 
+def _shared_manifest(tmp_path, mutate=None):
+    """The real manifest plus a second ToolUniverse tool face sharing arxiv's checkout.
+
+    ``mutate`` edits that second entry, so one group can be made inconsistent on purpose.
+    """
+    document = json.loads((BUNDLE / "manifest.json").read_text())
+    arxiv = next(e for e in document["servers"] if e["id"] == "arxiv")
+    arxiv["checkout"] = "tooluniverse"
+    second = json.loads(json.dumps(arxiv))
+    second["id"] = "alphafold_db"
+    second["launch"]["args"] = ["--no-search", "--include-tools", "alphafold_get_summary"]
+    second["expected_tools"] = ["alphafold_get_summary"]
+    if mutate:
+        mutate(second)
+    document["servers"].append(second)
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(document))
+    return path
+
+
 def test_manifest_is_pinned_and_catalogued():
     servers = setup.load_manifest()
     catalog = load_science_mcp_catalog()
@@ -116,6 +136,57 @@ def test_arxiv_config_keeps_flags_literal_and_carries_env(tmp_path):
     assert server["env"]["TOOLUNIVERSE_CACHE_PERSIST"] == "false"
     assert "TOOLUNIVERSE_HOME" not in server["env"]
     assert entry["uv_sync_args"] == ["--no-dev"]
+    # one checkout per upstream repository, not per tool face (shared with the other SMCP ids)
+    assert entry["checkout"] == "tooluniverse"
+
+
+def test_shared_checkout_is_one_directory_with_a_config_per_id(tmp_path):
+    servers = setup.load_manifest(_shared_manifest(tmp_path))
+    root = tmp_path / "root"
+    shared = root / "tooluniverse"
+    assert setup.checkout_dir(root, servers["arxiv"]) == shared
+    assert setup.checkout_dir(root, servers["alphafold_db"]) == shared
+    assert setup.checkout_dir(root, servers["pyscf"]) == root / "pyscf"      # default: the id
+    assert setup.checkout_dir(root, {"id": "pyscf", "checkout": None}) == root / "pyscf"
+    first = setup.render_config(servers["arxiv"], shared)["mcpServers"]
+    second = setup.render_config(servers["alphafold_db"], shared)["mcpServers"]
+    # the server name stays the id, so tool names (mcp__<id>__<tool>) do not change
+    assert list(first) == ["arxiv"] and list(second) == ["alphafold_db"]
+    assert first["arxiv"]["cwd"] == str(shared) == second["alphafold_db"]["cwd"]
+    assert first["arxiv"]["command"] == second["alphafold_db"]["command"] \
+        == str(shared / ".venv/bin/tooluniverse-smcp-stdio")
+    assert first["arxiv"]["args"] != second["alphafold_db"]["args"]
+
+
+def test_setup_installs_a_shared_group_into_one_checkout(tmp_path, monkeypatch):
+    servers = setup.load_manifest(_shared_manifest(tmp_path))
+    root = (tmp_path / "root").resolve()
+    root.mkdir()
+    seen = []
+    monkeypatch.setattr(setup, "load_manifest", lambda *a, **k: servers)
+    monkeypatch.setattr(setup, "check_host", lambda entry, **kwargs: None)
+    monkeypatch.setattr(setup, "ensure_checkout", lambda entry, dest: seen.append(dest))
+    monkeypatch.setattr(setup, "build_env", lambda entry, dest: dest / ".venv/bin/python")
+    assert setup.main(["alphafold_db", "--root", str(root)]) == 0
+    assert seen == [root / "tooluniverse"]
+    # the config is still per id, and the id is not a directory of its own
+    assert json.loads((root / "alphafold_db.mcp.json").read_text())["mcpServers"]["alphafold_db"]["cwd"] \
+        == str(root / "tooluniverse")
+    assert not (root / "alphafold_db").exists()
+
+
+@pytest.mark.parametrize("mutate,match", [
+    (lambda e: e.update(revision="b" * 40), r"differs on \['revision'\]"),
+    (lambda e: e.update(python="3.13"), r"differs on \['python'\]"),
+    (lambda e: e.update(uv_sync_args=[]), r"differs on \['uv_sync_args'\]"),
+    (lambda e: e.update(repository="https://github.com/other/ToolUniverse.git"), "differs on"),
+    (lambda e: e.update(checkout="pyscf"), "collides with manifest id 'pyscf'"),
+    (lambda e: e.update(checkout="Tool Universe"), "checkout must be a lowercase identifier"),
+    (lambda e: e.update(checkout=""), "checkout must be a lowercase identifier"),
+])
+def test_manifest_rejects_inconsistent_shared_checkouts(tmp_path, mutate, match):
+    with pytest.raises(setup.SetupError, match=match):
+        setup.load_manifest(_shared_manifest(tmp_path, mutate))
 
 
 @pytest.mark.parametrize("field,value,match", [

@@ -25,6 +25,7 @@
     {
       "id": "arxiv",
       "catalog_id": "arxiv",
+      "checkout": "tooluniverse",
       "repository": "https://github.com/mims-harvard/ToolUniverse.git",
       "revision": "9959ebee7638773314362f1746980a15f5b17e5b",
       "python": "3.12",
