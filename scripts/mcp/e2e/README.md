@@ -95,7 +95,7 @@ re-implementing them.
 | id | Upstream | Install | Needs | Last smoke (PASS / WARN / FAIL) |
 |---|---|---|---|---|
 | `pyscf` | `lixin19/mcp2pyscf` | uv-sync-frozen, Py 3.13 | — | 21 / 8 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-09-29) |
-| `arxiv` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to arxiv.org | 16 / 8 / 0, amd64, 2026-10-02 (pre-shared-checkout layout; aarch64 PASS 2026-09-30) |
+| `arxiv` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to arxiv.org | 16 / 8 / 0, amd64, 2026-10-03 (unchanged by the move to the shared checkout; aarch64 PASS 2026-09-30) |
 | `alphafold_db` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to alphafold.ebi.ac.uk | 16 / 7 / 0, amd64, 2026-10-03 |
 | `ncbi` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to eutils.ncbi.nlm.nih.gov and api.ncbi.nlm.nih.gov | 13 / 5 / 0, amd64, 2026-10-03 |
 | `jsbsim` | `flyintothesky/jsbsim-mcp` | uv-pip-pinned, Py 3.12 | — | 17 / 17 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |

@@ -1059,6 +1059,27 @@ Lessons — process:
   README) by keeping both sides; keep scratch directories under the session home,
   since `/tmp/...` can belong to another session's user.
 
+## 2026-10-03: One upstream checkout shared by several manifest ids
+
+- One repository exposing several tool faces (the ToolUniverse SMCP servers) was
+  installed once per manifest id: a 689 MB virtualenv and a 19 MB checkout per
+  tool face. `cbeb771` adds an optional `checkout` key, so a group installs into
+  `<root>/<checkout>` while each id keeps its own `<id>.mcp.json` whose MCP server
+  name is still the id — `mcp__<id>__<tool>` and the verifier golden snapshot are
+  untouched. arxiv moved to `~/mcp/tooluniverse` and its smoke still reports
+  16 / 8 / 0 (amd64, 2026-10-03), so the move changes nothing observable.
+- A group must declare the same repository, revision, python, install mode and
+  install fields, and its name must not be another manifest id;
+  `host_requirements` is deliberately not part of that check, since it gates the
+  id being installed rather than the directory's contents.
+- "Installing the second id of a group is idempotent" only holds for
+  `uv-sync-frozen`: `uv-pip-pinned` runs `uv venv --clear` and `conda-explicit`
+  removes the prefix, so there the second id rebuilds the venv. The docs say so.
+- Splitting this across two commits (manifest first, `setup.py` second) breaks
+  bisect: `load_manifest` rejects the unknown `checkout` key at collection time
+  and the whole `tests/mcp_e2e` suite errors out. Keep a new manifest key and its
+  validator in one commit.
+
 ## 2026-10-03: alphafold_db and ncbi smokes (L1) on the shared ToolUniverse checkout
 
 - Two more tool faces of the ToolUniverse pin (`33ea0be`), so both manifest
