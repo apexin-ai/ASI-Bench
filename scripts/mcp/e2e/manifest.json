@@ -134,6 +134,39 @@
         "single_point",
         "tddft"
       ]
+    },
+    {
+      "id": "rdkit",
+      "catalog_id": "rdkit_tandem",
+      "repository": "https://github.com/tandemai-inc/rdkit-mcp-server.git",
+      "revision": "3a7000ae62e94e095ecd804a403fca12982570cb",
+      "python": "3.12",
+      "install": "uv-pip-pinned",
+      "requirements": ["mcp==1.30.0", "pillow==12.3.0", "pydantic==2.13.5", "pyyaml==6.0.3", "rdkit==2025.3.1"],
+      "exclude_newer": "2026-10-01T00:00:00Z",
+      "launch": {
+        "command": ".venv/bin/python",
+        "args": ["{checkout}/run_server.py", "--transport", "stdio"]
+      },
+      "expected_tools": [
+        "CalcChi0v", "CalcChi1v", "CalcChi2v", "CalcChi3v", "CalcChi4v",
+        "CalcCrippenDescriptors", "CalcFractionCSP3", "CalcKappa1", "CalcKappa2", "CalcKappa3",
+        "CalcLabuteASA", "CalcMolFormula", "CalcNumAliphaticRings", "CalcNumAmideBonds", "CalcNumAromaticRings",
+        "CalcNumHBA", "CalcNumHBD", "CalcNumHeavyAtoms", "CalcNumHeteroatoms", "CalcNumHeterocycles",
+        "CalcNumLipinskiHBA", "CalcNumLipinskiHBD", "CalcNumRings", "CalcNumRotatableBonds",
+        "CalcNumSaturatedCarbocycles", "CalcNumSaturatedRings", "CalcNumSpiroAtoms",
+        "CalcNumUnspecifiedAtomStereoCenters", "CalcOxidationNumbers", "CalcPBF", "CalcTPSA",
+        "Compute2DCoords", "EmbedMolecule", "EmbedMultipleConfs", "ExactMolWt",
+        "FpDensityMorgan1", "FpDensityMorgan2", "FpDensityMorgan3", "FragmentMol",
+        "GetSubstructMatch", "GetUSR", "GetUSRScore", "HasSubstructMatch", "HeavyAtomMolWt",
+        "MakeScaffoldGeneric", "MaxAbsPartialCharge", "MaxPartialCharge", "MinAbsPartialCharge", "MinPartialCharge",
+        "MolToFile", "MolToImage", "MolWt", "MolsMatrixToGridImage", "MurckoScaffoldSmilesFromSmiles",
+        "NumRadicalElectrons", "NumValenceElectrons",
+        "SetBoolProp", "SetDoubleProp", "SetIntProp", "SetProp", "SetUnsignedProp",
+        "TanimotoSimilarity", "UpdatePropertyCache", "batch_map", "compute_descriptors",
+        "mol_to_pdb", "mol_to_sdf", "mol_to_smiles", "pdb_contents_to_mol", "pdb_to_mol",
+        "sdf_contents_to_mol", "sdf_to_mol", "smarts_to_mol", "smiles_to_mol"
+      ]
     }
   ]
 }

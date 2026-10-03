@@ -200,6 +200,22 @@ def test_s4_config_runs_module_from_checkout_src(tmp_path):
     assert entry["host_requirements"]["machine"] == ["x86_64"]
 
 
+def test_rdkit_config_runs_script_over_stdio_with_mcp_below_2(tmp_path):
+    entry = setup.load_manifest()["rdkit"]
+    dest = tmp_path / "rdkit"
+    path = tmp_path / "rdkit.mcp.json"
+    path.write_text(json.dumps(setup.render_config(entry, dest)))
+    server = load_mcp_config(path)["rdkit"]
+    assert server["command"] == str(dest / ".venv/bin/python")
+    # upstream's default transport is sse; stdio must be explicit
+    assert server["args"] == [str(dest / "run_server.py"), "--transport", "stdio"]
+    assert "env" not in server
+    pins = dict(r.split("==") for r in entry["requirements"])
+    # upstream declares mcp>=1.23.0 without an upper bound; mcp 2 removed FastMCP and the server cannot start
+    assert int(pins["mcp"].split(".")[0]) == 1 and pins["rdkit"] == "2025.3.1"
+    assert entry["catalog_id"] == "rdkit_tandem" and len(entry["expected_tools"]) == 74
+
+
 def test_check_host_accepts_matching_host(tmp_path):
     entry = setup.load_manifest()["s4"]
     cpuinfo = tmp_path / "cpuinfo"

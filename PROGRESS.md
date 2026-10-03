@@ -875,35 +875,6 @@
   bytecode compilation, and `git diff --check` passed.
 - Implementation commit: `59b9b34`.
 
-## 2026-09-29: MCP end-to-end (E2E) fake tasks, starting with pyscf
-
-- Problem: the MCP survey only proved L0 (`initialize` + `tools/list`); no
-  catalog server had evidence that an agent inside `asibench run` actually
-  calls a tool and uses its result. Scorers only see outputs and references, so
-  a correct answer could not show whether it came from the MCP tool.
-- Resolution: `scripts/mcp/e2e/` installs servers at pinned revisions with
-  their own Python (`setup.py`) and checks real `tools/call` against
-  independently computed references (`smoke_pyscf.py`, L1).
-  `examples/mcp-e2e-tasks/mcp_e2e/pyscf_rhf_energy` (status `test`, outside
-  `tasks/`) runs through the normal generate → run → score path, and
-  `verify_run.py` checks connection, tool call, tool result, answer provenance
-  and bypass from the run artefacts (L2). Framework scoring is unchanged.
-- Lessons: (1) `asibench run` redacts every user-role event in the persisted
-  stream-json, which also removes tool results; read them from the trajectory
-  (a bare JSON list) by `tool_call_id`. (2) Prompts must name the MCP server
-  and tool, never a harness-specific name: B1 with Claude's
-  `mcp__pyscf__pyscf_rhf_energy` failed 2 of 4 verified runs (agent looked for
-  ToolSearch, then `claude mcp list` falsely reported no servers because
-  servers are passed by `--mcp-config`); agent-neutral B1 passed 5/5.
-  (3) mcp2pyscf needs Python 3.13 and PySCF prints to stdout; neither broke
-  Claude Code 2.1.284.
-- Verification: AWS Linux amd64, `claude-opus-5-5`: B1–B4 ×3 11/12 verified
-  PASS (the failure was the B1 naming issue), agent-neutral B1 ×5 5/5; smoke
-  L0/L1 PASS on amd64 and aarch64; new offline tests in
-  `tests/test_mcp_e2e_scripts.py` and `tests/test_mcp_e2e_tasks.py`.
-- Implementation commits: `3cb28d5`, `1a225f1`, `fa977ff`, `e7093ae`,
-  `02d29cd`.
-
 ## 2026-09-29: Score runs that produced no files instead of aborting the batch
 
 - Problem: when an agent wrote no files, `asibench run` created no `.outputs`
@@ -932,566 +903,134 @@
   producing one result per attempt.
 - Implementation commit: `0e43cdd`.
 
-## 2026-09-29: pyscf MCP smoke covers all seven tools (L1)
+## 2026-09-29 – 2026-10-03: MCP end-to-end testing (L0–L2), six servers and eight fake tasks
 
-- Problem: the pyscf smoke checked only `pyscf_rhf_energy` values and the atom
-  labels of one `generate_pyscf_geom_input` call; five tools were never called,
-  so upstream defects were unknown before designing further fake tasks.
-- Resolution: `smoke_pyscf.py` now calls every manifest tool and compares
-  against references computed in the smoke process (seeded RDKit + UFF,
-  PySCF RHF, PySCF + geomeTRIC). Unseeded server geometries are compared with
-  rotation/permutation-invariant distances and energies; only rigid molecules
-  are used. Wrong values FAIL; upstream defects are WARN: in-band errors
-  (`isError=false`), ignored `basis` in the bond scan, missing optimized energy,
-  intermittent `PointGroupSymmetryError` when chaining geometry → RHF for
-  benzene, visualize writing into the server cwd while returning a hard-coded
-  path, and stdout pollution now attributed per tool.
-- Lesson: probe every tool over stdio before designing agent tasks; the tool
-  docstrings promised fields (`optimized_energy`) and behaviour (`basis`) that
-  the code does not deliver.
-- Verification: smoke 19 PASS / 8 WARN / 0 FAIL on Linux aarch64 and on AWS
-  Linux amd64 (identical values);
-  `tests/test_mcp_e2e_scripts.py` adds PySCF-free tests (parsers, invariants,
-  PNG header, WARN/FAIL classification, stub-client plot/visualize, every
-  manifest tool called). Full suite on macOS / Python 3.13: only the two known
-  environment failures that also occur on unmodified main
-  (`test_mimo_accepts_all_four_modes` needs Linux for `linux_ns`,
-  `test_kimi_host_env_uses_host_path` assumes a temporary path layout).
-- Implementation commit: `77f0929`.
+- Problem: the MCP catalog survey only proved L0 (`initialize` + `tools/list`).
+  Nothing showed that an agent inside `asibench run` really calls a tool and
+  uses its result — a scorer sees only outputs and references, so a correct
+  answer could have been produced any other way.
+- Resolution: two levels on top of L0, with framework scoring unchanged.
+  L1: `scripts/mcp/e2e/setup.py` clones each server at a pinned revision into
+  its own interpreter (install modes `uv-sync-frozen` / `uv-pip-pinned` /
+  `conda-explicit`, optional `host_requirements`) and `smoke.py <id>` calls every
+  manifest tool over stdio against a reference computed outside the server
+  process. L2: fake tasks in `examples/mcp-e2e-tasks/` (`status: test`, outside
+  `tasks/`) run the normal generate → run → score path, and `verify_run.py`
+  answers the separate question "did the answer come from the tool?" from the run
+  artefacts and the task's `e2e_check.json` (`mcp_connected`, `tool_called`,
+  `tool_correct`, `tool_chain`, `answer_from_tool`, `no_bypass`).
+- Detail deliberately not duplicated here: upstream defects per server in the
+  `e2e_smoke/servers/<id>.py` docstrings, install modes and host requirements in
+  `scripts/mcp/e2e/README.md`, task design and tolerances in each
+  `generate_gt.py` / `task_eval.yaml`, the `e2e_check.json` format in the
+  `verify_run.py` docstring, test layout in TEST.md, result tables in both
+  READMEs.
+- Servers, tasks and implementation commits: pyscf L1 `77f0929`,
+  `pyscf_rhf_energy` `3cb28d5` `1a225f1` `fa977ff` `e7093ae` `02d29cd`,
+  `pyscf_bond_stretch` (two-tool chain, image result) `39745b3`, Codex CLI
+  evidence `7455855`; arxiv L1 `c0fc58f`, `arxiv_search_snippets` (non-numeric
+  answers, live data, web tools available) `1d1e6bc`; jsbsim L1 `747409d`,
+  `jsbsim_engine_run` (stateful session, one-of tools) `6015365`; s4 L1
+  `b513672`, `s4_grating_spectrum` (answers selected from returned arrays)
+  `29ba5a5` and structured-output unwrapping `7b78b11`; psi4 L1 `7a9c5d9`,
+  `psi4_opt_freq` (geometry-valued chain) `f4c48de`; rdkit L1 `8dc43e6`,
+  `rdkit_conformer` (opaque-pickle chain, tool writes a file) `86905ae`.
+- Framework and tooling work this produced: docs condensation `fe3651e`,
+  verifier golden snapshot `b47c4f7`, verifier split into `e2e_verify/` with a
+  strict spec parser `8ffc458`, `setup.py` installer registry `e24e8fc`, smoke
+  scripts into `e2e_smoke/` with a shared runner `cbf026f`, tests regrouped into
+  `tests/mcp_e2e/` `9fe5843`, persistence path-scrubbing fixed for shell
+  commands `879dfc0` and for tool results `86905ae`.
+- Verification: every task passed B1–B4 on AWS Linux amd64 with both Claude Code
+  (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`, effort medium) at full local
+  score and with every verifier check PASS; per-task dates in
+  `examples/mcp-e2e-tasks/README.md`, per-server smoke counts in
+  `scripts/mcp/e2e/README.md`. Offline coverage is `tests/mcp_e2e/` (469 tests)
+  with the golden snapshot pinning every `verify_one` outcome.
 
-## 2026-09-30: L2 pyscf bond-stretch task with a two-tool chain and an image result
+Lessons — evidence and observability:
 
-- Problem: L2 evidence covered one tool returning one number. Multi-step tool
-  use and image results were untested, and the verifier could only check a
-  single tool with a scalar answer. The Claude trajectory extractor dropped
-  non-text tool_result blocks, and the persisted stream redacts user events, so
-  an image returned by an MCP tool was invisible in the run artefacts.
-- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/pyscf_bond_stretch` (scan with
-  `run_bond_stretch_calculation_mcp`, then plot the returned data with
-  `plot_energy_scan_image_mcp`; reference from seeded RDKit + UFF and PySCF,
-  rigid molecules only). `verify_run.py` schema 2 checks every required call,
-  JSON-field and image results, `tool_chain` (plot inputs equal the scan
-  output) and several answers; schema 1 specs are normalised. The Claude
-  extractor records `content_types` and `image_media_types` in tool_result
-  metadata without copying image data.
-- Lesson: check what the persisted artefacts can show before designing a
-  verifier check; a correct but unobservable result looks like a failure.
-- Verification: 41 seeds × 2 unseeded upstream runs agree with the reference
-  within 1.4e-7 Ha; a simulated run from real server outputs passes all checks
-  with full score; offline tests in `tests/test_mcp_e2e_bond_stretch.py`.
-  AWS Linux amd64, `claude-opus-5-5`, seed 31415, B1–B4 ×3: local score
-  1200/1200 and verifier 12/12 PASS on every check, including the image result
-  of the plot call (so the extractor metadata matches Claude Code's format).
-  macOS full suite: only the two known environment failures plus the timing
-  sensitive `test_parallel_local_scoring_is_bounded_isolated_and_ordered`
-  (untouched code path).
-- Implementation commit: `39745b3`.
+- Check what the persisted artefacts can show before designing a verifier
+  check: a correct result the artefacts cannot show looks exactly like a wrong
+  one. Where the evidence is missing, report a coverage gap (WARN), never a
+  verdict about the agent.
+- `asibench run` destroys evidence two ways — it redacts user-role events (where
+  Claude's tool results live) and rewrites absolute host paths to `<abs_path>`
+  everywhere — and both must be restored from the trajectory by call id, for
+  shell commands *and* for tool results. The command half was fixed in `879dfc0`
+  and the result half only in `86905ae`, after a returned file path made every
+  genuine Codex run fail `tool_correct`: a fix for "persistence destroyed X"
+  has to enumerate every X the pipeline carries.
+- Build test streams from what the client really shows. A FastMCP tool with a
+  return annotation declares an `outputSchema`, so Claude Code passes
+  `structuredContent = {"result": …}` instead of the text block; streams built
+  from the text block hid that until an AWS run scored 400/400 with every
+  provenance check failing. Equally, probe the real event stream before writing a
+  parser (Codex item schema, its own `list_mcp_resources*` calls).
+- A test fixture standing in for a production code path must call it: six copies
+  of a hand-written persistence helper encoded the same blind spot as the code
+  under test.
 
-## 2026-09-30: MCP E2E evidence for Codex CLI
+Lessons — agents and prompts:
 
-- Problem: the pyscf MCP E2E tasks were only proven with Claude Code. With
-  `codex_cli` the run and score already worked, but nothing could show that
-  the answer came from the MCP tool: `verify_run.py` parsed only Claude
-  stream-json, and the Codex trajectory extractor ignored `mcp_tool_call`
-  items, so MCP calls were missing from the trajectory as well.
-- Resolution: `verify_run.py` parses `codex exec --json` (`mcp_tool_call` items
-  named `mcp__<server>__<tool>`, `command_execution` as shell evidence). Codex
-  emits no list of connected servers or offered tools, so `mcp_connected` is
-  PASS only when every required tool returned a result and WARN otherwise. The
-  Codex extractor records MCP calls and results with `tool_call_id`,
-  `content_types` and `image_media_types`, without image data.
-- Lesson: probe the real event stream before writing a parser. A direct
-  `codex exec --json` run against the MCP server settled the item schema, the
-  image block shape, and that Codex adds its own `list_mcp_resources*` calls
-  under the server name (they must not count as tool calls). It also showed
-  that the expected problems (server stdout prints, default MCP timeouts) do
-  not occur, so no framework change was made for them.
-- Lesson: with a custom gateway, the isolated Codex home copies `auth.json`
-  from `$CODEX_HOME` but `config.toml` only from the `codex_home` agent-config
-  key; pass both or the provider settings are silently dropped.
-- Lesson: `AGENTS.md` must stay byte-identical to `CLAUDE.md`
-  (`tests/test_ci_workflow.py`); copy it after every `CLAUDE.md` edit. The
-  targeted tests did not include that file and the full suite caught it.
-- Verification: `tests/test_mcp_e2e_codex.py` (16 offline tests on event shapes
-  from real runs). AWS Linux amd64, codex-cli 0.159.2, seed 31415, both tasks,
-  B1–B4 ×1: local score 800/800 and verifier 8/8 PASS on every check, after a
-  B1-only pass with the same result. macOS full suite: only the two known
-  environment failures once `AGENTS.md` was synchronised.
-- Implementation commit: `7455855`.
+- Prompts must name the server and tool agent-neutrally, never `mcp__…`. A
+  harness-specific name sent the agent looking for ToolSearch, and
+  `claude mcp list` then reported no servers because they arrive by
+  `--mcp-config`.
+- Check which built-in tools a harness gets in the mode MCP forces:
+  `--mcp-config` turns on search mode (Claude WebSearch/WebFetch, Codex
+  `web_search`) and under `--sandbox none` the shell has network too, so
+  "restricted" assumptions do not hold — that is what `no_bypass` is for.
+- With a custom gateway the isolated Codex home copies `auth.json` from
+  `$CODEX_HOME` but `config.toml` only from the `codex_home` agent-config key.
 
-## 2026-09-30: arxiv (ToolUniverse) MCP smoke (L1)
+Lessons — task design:
 
-- Problem: the second MCP E2E server, ToolUniverse's arXiv tools, needs live
-  network data and a 700 MB general-purpose server; the L0 survey had shown
-  only `initialize` and `tools/list`.
-- Resolution: manifest entry `arxiv` (Python 3.12, `uv sync --no-dev`) with a
-  launch `env`; `setup.py` now supports launch `env`, extra `uv_sync_args` and a
-  `{checkout}` placeholder so non-path CLI flags stay literal.
-  `smoke_arxiv.py` compares five searches field by field with raw arXiv API
-  queries and the snippet tool with snippets cut from the same PDF version,
-  converted with the same MarkItDown; all queries use closed 2011 windows.
-  Shared report/call helpers moved to `smoke_common.py`.
-- Lesson: a `./.tooluniverse` directory in the server cwd makes ToolUniverse
-  load its default profile and ignore `--include-tools`, exposing 2718 tools;
-  the default result cache (forever, `~/.tooluniverse/cache.sqlite`) creates
-  that directory whenever cwd is `$HOME` and would also hide real calls. The
-  launch env disables the cache; `TOOLUNIVERSE_HOME`/`--workspace` must not be
-  used. FastMCP 3 ignores the catalog's `FASTMCP_NO_BANNER`.
-- Lesson: other upstream defects (WARN): an `OR` query with a date range loses
-  the date filter (missing parentheses), `truncated` stays false when the cap
-  drops matches, old-style IDs containing `v` break, errors are in-band.
-- Verification: 16 PASS / 8 WARN / 0 FAIL on Linux aarch64 (twice) and AWS
-  Linux amd64 (same WARNs); offline tests in `tests/test_mcp_e2e_scripts.py`.
-- Implementation commit: `c0fc58f`.
+- Pick cases where the tool's own numerical method makes the answer unique; a
+  physically exact quantity proves nothing about provenance. Keep arguments away
+  from the server's defaults so that an omitted one changes the result.
+- When the reference must not come from the tool's own backend, the sharpness is
+  in the method details: fitting basis and isotope masses for a density-fitted
+  program, truncation rule and harmonic count for RCWA, seed and library version
+  for a conformer.
+- Set scorer tolerances from measured margins, with a gap between correct use and
+  the plausible procedure errors (calls in the wrong order, default seed, rounded
+  values).
+- Scorers stay per-artefact: a broken artefact zeroes only the scorers that read
+  it, and "the whole instance is zero" belongs to the hard gate. Never tighten a
+  comparator shared by every task to make one test fail — choose a difference
+  above its detection floor instead.
 
-## 2026-10-02: L2 arxiv search → snippets task and non-numeric verifier checks
+Lessons — smoke tests:
 
-- Problem: the verifier compared only numbers, and the pyscf tasks never had
-  an alternative data source. For arXiv the agent has one: `--mcp-config`
-  forces search mode, so Claude Code gets `WebSearch`/`WebFetch`, Codex keeps
-  `web_search`, and the host shell has network access.
-- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/arxiv_search_snippets`: search a
-  closed date window, pick the paper with the most authors, fetch snippets for
-  two terms from its PDF, report IDs, the pick and per-term snippet counts.
-  Counts, not snippet text, are scored because MarkItDown garbles two-column
-  PDFs. The reference comes from the raw arXiv API and MarkItDown/pdfminer/
-  pdfplumber pinned to the server's lockfile, in `generate --sandbox task`.
-  `verify_run.py` gained named extractors (`arxiv_ids`, `term_counts`) with
-  `match` = equal/subset/member, member chaining (the snippet call must use a
-  paper the search returned, by `arxiv_id` or `pdf_url`), merged answers over
-  per-term calls, `bypass_tools`/`suspicious_tools` for non-MCP tool calls
-  (WebFetch of arxiv.org FAILs, web search WARNs; Codex `web_search` items are
-  now parsed), and `server_tools` (WARN when the server offers more tools, i.e.
-  the ToolUniverse workspace trap).
-- Lesson: check which built-in tools a harness gets in the mode MCP forces;
-  "restricted" assumptions do not hold for `--mcp-config` runs.
-- Verification: `tests/test_mcp_e2e_arxiv.py` (33 offline tests); the MCP tool
-  returned exactly the reference counts and IDs for three of the five cases;
-  `asibench generate --sandbox task` + an oracle `--agent-cmd` run scored
-  100/100 while `verify_run.py` failed it for lack of MCP evidence.
-  AWS Linux amd64, seed 31415, B1–B4 ×1 each for Claude Code
-  (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`): local score 400/400 per
-  harness and verifier 8/8 PASS on every check, no WARN (no web tool use).
-- Implementation commit: `1d1e6bc`.
+- Probe every tool over stdio before designing tasks: docstrings promise fields
+  and behaviour the code does not deliver, and L0 can pass with the backend
+  absent (psi4 imports it lazily).
+- Classify a deliberately probed defect tri-state — PASS for the correct answer,
+  WARN only when the output matches the recognised defect exactly, FAIL for
+  anything else — so a changed upstream cannot hide behind a WARN.
+- A crash probe must not use the FAIL-on-error call wrapper, since any step can
+  be the one that dies; tolerances must be absolute rather than scaled by the
+  value; and a defect that depends on scheduling order needs repeated probes (12
+  calls before `batch_map`'s `fail_fast` race showed up reliably).
 
-## 2026-10-02: jsbsim MCP smoke (L1) and pinned pip installs
+Lessons — process:
 
-- Problem: `flyintothesky/jsbsim-mcp` has no `pyproject.toml` or lockfile
-  (only a ranged `requirements.txt` that also pulls the web dashboard), so
-  `uv sync --frozen` could not install it; its data root comes from the
-  misspelt `JBSIM_ROOT` or the cwd, and JSBSim prints ~1100 lines to stdout
-  (the JSON-RPC channel) per `create_session`.
-- Resolution: `setup.py` install mode `uv-pip-pinned` (`uv venv --clear` +
-  `uv pip install --exclude-newer <timestamp>` of exact `==` pins only) and
-  `{checkout}` in launch `env` values; manifest entry `jsbsim` (Python 3.12,
-  `jsbsim==1.3.1`, `mcp==1.30.0`, `pydantic==2.13.5`) with
-  `JBSIM_ROOT={checkout}/jsbsim_data` and `JSBSIM_DEBUG=0`. `smoke_jsbsim.py`
-  calls all 10 tools and compares them with a separate `FGFDMExec` driven
-  through JSBSim's own property names in the smoke process; `execute_script`
-  runs in its own server, and two short-lived servers show what breaks
-  without each launch env key.
-- Lesson: upstream defects (WARN): 20 of 33 `get_telemetry` fields read
-  properties that do not exist (pitch/roll/heading, lat/lon, rpm, ...) and are
-  always 0, because `get_property_value` returns 0.0 for unknown paths;
-  `trim` is a home-made loop that ignores `mode`, forces throttle 0.7 and
-  returns `ok: true` without trimming, although jsbsim 1.3.1 exports
-  `do_trim`; `execute_script` reloads a model into the live session and
-  segfaults the server at a varying point; `set_initial_conditions` zeroes
-  omitted keys; a session without initial conditions integrates to NaN.
-- Lesson: a crash probe must not use the FAIL-on-error call wrapper; any step
-  of it can be the one that dies. Telemetry tolerances must be absolute
-  (half the printed decimal + slack), not scaled by the value — a unit test
-  caught 0.08 ft of accidental slack on altitude.
-- Verification: 17 PASS / 17 WARN / 0 FAIL on Linux aarch64 (five runs) and
-  AWS Linux amd64; a reference offset by 0.5 ft makes both state checks FAIL;
-  offline tests in `tests/test_mcp_e2e_scripts.py`.
-- Implementation commit: `747409d`.
-
-## 2026-10-02: L2 jsbsim engine-run task, optional/grouped verifier calls
-
-- Problem: the jsbsim server is stateful: every call after `create_session`
-  carries a `session_id`, and the final state can be read with two different
-  tools (`get_property` or `get_telemetry`). `verify_run.py` could only chain
-  numbers and required every listed tool.
-- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/jsbsim_engine_run`: a seeded
-  powered c172x flight (seven initial conditions, engine start, mixture,
-  throttle, 6–10 s); the agent reports altitude, calibrated airspeed, thrust
-  and simulation time. The reference flies the scenario with jsbsim 1.3.1
-  directly in `generate --sandbox task` using the wheel's c172x data (identical
-  to the server's). `verify_run.py` gained `optional` + `group` call specs
-  (one-of requirements), multi-source numeric answers (`from_calls`) and exact
-  string comparison for chained non-numeric inputs (`session_id`);
-  `suspicious_tools` flags the forbidden `trim`/`execute_script` MCP tools.
-- Lesson: `\b(install|add|--with)\b` never matches `--with` (no word boundary
-  between a space and `-`), so `uv run --with <pkg>` slipped past the arxiv
-  bypass pattern too; both patterns now use `(\binstall\b|\badd\b|--with\b)`
-  and the arxiv tests cover it.
-- Lesson: score tolerances were set from measured margins: the server's
-  0.592484 kt factor and two-decimal telemetry stay below 3.3e-4 ft over 300
-  seeds, while procedure errors (settings before initial conditions, wrong
-  engine property, one extra second) cost >= 0.33 ft over 60 seeds.
-- Verification: `asibench generate --sandbox task` (VM, aarch64) reproduced the
-  direct reference bit for bit; an oracle `--agent-cmd` that follows B1 through
-  the real MCP server scored 100/100 with `asibench score`, and `verify_run.py`
-  failed it for lack of agent evidence; a Claude stream built from those real
-  server outputs passes all six checks. `tests/test_mcp_e2e_jsbsim.py` (offline).
-  AWS Linux amd64, seed 31415, B1–B4 ×1 each for Claude Code
-  (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`): local score 400/400 per
-  harness and verifier 4/4 PASS per harness.
-- Implementation commit: `6015365`.
-
-## 2026-10-02: s4 (S4 RCWA) MCP smoke (L1) and host requirements
-
-- Problem: `prof-davifr/mcp-s4-rcwa` ships S4 as a prebuilt `libS4.so` in the
-  repository: x86-64 only, compiled with `-march=native` (AVX2/FMA/BMI2) and
-  linked against the system BLAS/LAPACK, which `uv` cannot install. Without a
-  check, a wrong host fails at server start with an opaque ctypes or SIGILL
-  error. The upstream has no lockfile either.
-- Resolution: optional manifest `host_requirements` (`machine`, `cpu_flags`,
-  `shared_libraries`, `reason`), checked by `setup.py` before cloning and never
-  installed; manifest entry `s4` (`uv-pip-pinned`, run as `python -m
-  mcp_s4_rcwa.server` with `PYTHONPATH={checkout}/src`, no package build).
-  `smoke_s4.py` compares both tools with numpy-only references that share
-  nothing with S4: a transfer-matrix method for planar stacks and a 1D RCWA
-  for lamellar gratings; it reports the binary's SHA-256.
-- Lesson: S4's default formulation is Laurent's rule with circular truncation.
-  With a complete square-lattice shell (21/49/81 harmonics) and a grating
-  uniform along y, an independent 1D RCWA with the same rule and orders agrees
-  to ~1e-14, which is a much sharper test than comparing converged values (TM
-  is still 1e-3 away from Li's-rule convergence at 201 harmonics).
-- Lesson: keep RCWA wavelength grids off Rayleigh anomalies; a grid point at
-  λ = period alone produced a 3e-9 disagreement.
-- Lesson: upstream defects (WARN): the incidence side is always S4's last
-  layer, and `incidence_layer`/`substrate_layer` only pick where fluxes are
-  read, so swapped or inner layers give R=0/T>1 or meaningless spectra without
-  an error; unknown layer materials become vacuum; θ ≥ 90° reports A=1;
-  negative thickness and duplicate layer names are accepted.
-- Verification: Linux aarch64 with a locally built S4 (victorliu/S4 7fd00a2):
-  40 PASS / 8 WARN / 0 FAIL, four runs; the upstream binary's Fresnel
-  self-test on AWS was bit-identical to that build. Offline tests in
-  `tests/test_mcp_e2e_scripts.py` (stubbed servers built from the references
-  catch a TE/TM swap and a Li-vs-Laurent formulation change). AWS Linux amd64
-  with the pinned upstream binary (SHA-256 verified): 41 PASS / 7 WARN /
-  0 FAIL, the same seven defect WARNs and values.
-- Implementation commit: `b513672`.
-
-## 2026-10-02: L2 s4 grating-spectrum task, answers selected from returned arrays
-
-- Problem: an L2 task must show that the answer came from the MCP tool, but
-  for planar stacks any agent can reproduce S4 exactly with a few lines of
-  transfer-matrix code, and the s4 server's only other tool takes no input,
-  so there is no real chain. The answers are elements of returned arrays (R at
-  one wavelength, the maximum, its wavelength), which `verify_run.py` could
-  not express.
-- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/s4_grating_spectrum`: one
-  `simulate_stack_spectrum` call of a seeded TM lamellar grating with a given
-  harmonic count (21/37/81, never equivalent to the default 51). The reference
-  is the smoke's independent numpy 1D RCWA with S4's default formulation
-  (Laurent's rule, same truncation), computed in `generate --sandbox task`
-  with numpy only. Instances are selected so that the converged answer (Li's
-  rule) and the next truncation differ from the tool's R at the reported point
-  by ≥ 1e-3, the scorer's zero-credit tolerance. `verify_run.py` answer sources
-  gained `select` (`reduce` max/min, `argmax_of`/`argmin_of`, `where_key` +
-  `equals_reference_key`); `check_engine_sanity` is an optional call.
-- Lesson: pick L2 cases where the tool's specific numerical method is what
-  makes the answer unique; a physically exact quantity proves nothing about
-  provenance. Also keep the angle non-zero and the harmonic count away from
-  the default, so that omitted arguments change the result or show up as an
-  input mismatch.
-- Lesson: in the shared VM `/tmp/e2e` belonged to another session's user; use
-  a scratch directory under the session home.
-- Lesson: the first AWS Claude run scored 400/400 but every verifier
-  `tool_correct`/`answer_from_tool` failed, even for `check_engine_sanity`.
-  Both s4 tools have return annotations, so FastMCP declares an `outputSchema`
-  and sends `structuredContent = {"result": <str or content blocks>}`; Claude
-  Code passes that object instead of the text block. `verify_run.py` now
-  unwraps it everywhere it parses a result. The offline streams had used the
-  text block only; build test streams from what the client really shows.
-- Verification: `tests/test_mcp_e2e_s4.py` (34 offline tests); over 61 seeds
-  the server (S4 built from source, Linux aarch64) matched the reference to
-  ≤ 1.1e-12. `asibench generate --sandbox task` + an oracle `--agent-cmd` that
-  follows B1 through the real server scored 100/100 and `verify_run.py` failed
-  it for lack of agent evidence; Claude and Codex streams built from those real
-  server outputs pass every check. AWS Linux amd64 (pinned upstream
-  `libS4.so`), seed 31415, B1–B4 ×1 each for Claude Code (`claude-opus-5-5`)
-  and Codex CLI (`gpt-5.6-sol`): local score 400/400 per harness and verifier
-  4/4 PASS per harness (Claude after the structured-output fix, re-verified on
-  the same run artefacts without re-running the agent).
-- Implementation commits: `29ba5a5` (task, verifier `select`), `7b78b11`
-  (structured-output unwrapping).
-
-## 2026-10-02: psi4 (ChemMaster calc_psi4) MCP smoke (L1) and conda-explicit install
-
-- Problem: the catalog's psi4 server (`Keith9922/chemaster`, `chemaster-mcp
-  calc_psi4`) imports psi4 lazily, so the L0 survey passed although every
-  `tools/call` would fail with `No module named 'psi4'`. psi4 has no PyPI wheel
-  (and ChemMaster is not on PyPI), so neither uv install mode can provide it.
-- Resolution: install mode `conda-explicit`: manifest `conda` (`channel`,
-  exact `specs`, per-platform `locks`) and committed `@EXPLICIT` locks with
-  SHA-256 for linux-64 and linux-aarch64, installed by `micromamba create
-  --file` without a solver; `setup.py <id> --lock` regenerates them. Manifest
-  entry `psi4` (psi4 1.11, dftd3-python 1.6.0, mcp 1.28.1, Python 3.12.14) runs
-  the checkout with `python -m chemaster.mcp.calc_psi4.server` and
-  `PYTHONPATH={checkout}` (a bare `{checkout}` is now a valid launch `env`
-  value). `smoke_psi4.py` calls all five tools and compares with psi4 run in
-  the smoke process through wavefunctions, `psi4.variable` and
-  `tdscf_excitations` rather than the server's log parsers.
-- Lesson: when a smoke deliberately probes a known upstream defect, classify
-  tri-state — PASS for the correct answer, WARN only when the output matches
-  the recognised defect exactly, FAIL for anything else — so a changed
-  upstream cannot hide behind a WARN. Here: the planar-NH3 saddle's
-  1081.6i cm⁻¹ mode comes back as +1081.6 with `n_imaginary` 0, and
-  `optimize_excited_state` returns the ground-state minimum (psi4's
-  finite-difference TDSCF optimisation ignores `FOLLOW_ROOT`); checks at true
-  minima PASS.
-- Lesson: psi4 1.11 has no `psi4.core.get_active_wavefunction`; upstream's
-  `conftest.py` monkeypatches it, so its tests never saw that
-  `n_basis_functions`, `n_iterations`, `homo_lumo_gap` and `dipole` are always
-  null and frequencies always come from the log parser (IR intensities zero).
-- Lesson: conda-forge's `mcp` lags PyPI (1.28.1 is the newest 1.x); pinning it
-  in conda avoids mixing pip-installed pydantic into the conda prefix.
-- Verification: Linux aarch64: 14 PASS / 11 WARN / 0 FAIL, ~20 s, four runs
-  with identical verdicts; tampering with one lock SHA-256 makes micromamba
-  abort. Offline tests in `tests/test_mcp_e2e_scripts.py`. AWS Linux amd64
-  (linux-64 lock): 14 PASS / 11 WARN / 0 FAIL, the same verdicts and values.
-- Implementation commit: `7a9c5d9`.
-
-## 2026-10-02: L2 psi4 optimize → frequency task, geometry-valued tool chain
-
-- Problem: the L2 task must chain two psi4 tools through a value an agent
-  cannot recompute (the optimised geometry), and the reference must not come
-  from psi4 itself. The psi4 results are nested JSON (`result.zpe.value`) and
-  the chained value is a geometry string an agent may reformat, which
-  `verify_run.py` could only compare as identical strings of a flat key.
-- Resolution: `examples/mcp-e2e-tasks/mcp_e2e/psi4_opt_freq`: seeded small
-  molecule, STO-3G or cc-pVDZ, ±0.04 Å distortion; `optimize` (RHF, tight),
-  then `frequency` at the returned geometry; answers energy, frequencies, ZPE.
-  Reference in `generate --sandbox task` with PySCF 2.14.0 + geomeTRIC 1.1.1:
-  DF-RHF with psi4's default JK fitting basis, tight minimum, analytic Hessian,
-  isotope masses. `verify_run.py` gained dotted result/answer keys (`_field`)
-  and `"compare": "geometry"` for `inputs_from_call` (atom lines within
-  `abs_tol` Å).
-- Lesson: to reproduce a density-fitted program in another one, match the
-  fitting basis, not just the orbital basis: psi4 uses `def2-universal-jkfit`
-  for STO-3G and `cc-pvdz-jkfit` for cc-pVDZ (both matched PySCF to ≤ 4e-9 Eh),
-  but for the Cartesian 6-31G it treats the fitting functions as Cartesian too
-  (1e-5 Eh off), so 6-31G is excluded. Frequencies also need the same masses:
-  PySCF's default average masses shift them by ~0.3 cm⁻¹ against psi4's
-  most-abundant isotopes.
-- Lesson: PySCF 2.9.0 (pinned by the pyscf tasks) fails in DF-RHF gradients
-  with numpy 2.5 (`einsum` contraction path unpacking); 2.14.0 works.
-- Lesson: when the VM cannot commit and another branch moves underneath,
-  develop on a scratch clone rebased with a throwaway identity and resolve
-  append-only conflicts (PROGRESS, README) by keeping both sides in order.
-- Verification: over 16 seeds the server matched the reference to ≤ 4e-9 Eh,
-  ≤ 0.11 cm⁻¹ and ≤ 4e-7 Eh; `asibench generate --sandbox task` + an oracle
-  `--agent-cmd` following B1 through the real server scored 100/100 and
-  `verify_run.py` failed it for lack of agent evidence; offline tests in
-  `tests/test_mcp_e2e_psi4.py` (Claude/Codex streams built from recorded
-  server outputs pass every check). AWS Linux amd64, seed 31415 (methane,
-  HF/STO-3G), B1–B4 ×1 each for Claude Code (`claude-opus-5-5`) and Codex CLI
-  (`gpt-5.6-sol`): local score 400/400 per harness and verifier 4/4 PASS per
-  harness.
-- Implementation commit: `f4c48de`.
-
-## 2026-10-02: MCP E2E chore — README condensation and verifier golden snapshot
-
-- Context: before the next MCP server, `setup.py` / `verify_run.py` are to be
-  refactored (they grew by per-server patches). Branch `chore-mcp-e2e-docs`.
-- Docs: `scripts/mcp/e2e/README.md` (397 → 139 lines) and
-  `examples/mcp-e2e-tasks/README.md` (515 → ~140) now hold only tables and
-  author-relevant bullets. Per-server L1 detail stays in `smoke_<id>.py`
-  docstrings, task design in `generate_gt.py` / `task_eval.yaml`, the
-  `e2e_check.json` format in the `verify_run.py` docstring (completed to match
-  the six real files).
-- Safety net for the refactor: `tests/mcp_e2e_golden.py` (pytest plugin from
-  `tests/conftest.py`) wraps `verify.verify_one` in every `test_mcp_e2e_*`
-  module and compares the stable outcome of each call with
-  `tests/golden/mcp_e2e_verify.json` (94 tests, 100 calls). Mismatches, missing
-  and stale entries fail; `MCP_E2E_GOLDEN=update` only writes after a green
-  run of whole files.
-- Lesson: a mutation run showed that the existing assertions already caught
-  every verdict/check-level change tried, except one: an *ungrouped optional*
-  call returning a wrong result (it must fail `tool_correct`) was not covered
-  by any test, and the golden could not catch it either because no fixture
-  exercised that path. Added
-  `test_wrong_optional_sanity_result_fails_tool_correct`. The golden's own
-  value is in fields no test asserts (per-call statuses, tool sequence: 27–41
-  tests turned red only through the golden). A snapshot pins only paths that
-  fixtures exercise — check coverage of a branch before relying on it.
-- Lesson: errors raised in an autouse fixture's teardown are reported by
-  pytest as ERROR, not FAILED; count both when assessing a test run.
-- Commits: docs `fe3651e`; golden snapshot `b47c4f7`.
-
-## 2026-10-02: MCP E2E chore — verifier split into `e2e_verify/`, strict spec
-
-- Problem: `verify_run.py` (1020 lines) grew a patch per server. The three
-  value checks each had their own way to read and compare values, so `extract`
-  existed in three copies, `select` only for answers, `geometry` only for
-  chains; `e2e_check.json` was read with `.get()`, so a typo (`abs_toll`,
-  `bypass_pattern`, `inputs_from_cal`) silently loosened the audit; tool names
-  matched fuzzily (`server in name and name.endswith(tool)`); the log format
-  was guessed by trial.
-- Resolution: package `scripts/mcp/e2e/e2e_verify/` (stdlib only):
-  `spec` (frozen dataclasses, strict parser: unknown / inapplicable keys,
-  enums, duplicate names, dangling or optional-from-required chain references,
-  regexes), `extractors` (arXiv IDs, term counts), `values` (one `Selector`
-  read for call results, chained inputs and answers; shared comparators),
-  `evidence` (`ToolCall` dataclass, Claude / Codex / trajectory parsers,
-  parser chosen by `agent_name` with format sniffing for unknown agents),
-  `checks` (six check functions in an ordered registry, `verify_one`).
-  `verify_run.py` is the CLI plus the format docstring. `select` now also
-  works on call results. Tool names must equal `mcp__<server>__<tool>`.
-- Verification: the golden snapshot stayed byte-identical for all 100
-  existing `verify_one` calls; the only golden diff is the entry of the new
-  lookalike-server test. Helper tests moved to the module API.
-- Lesson: a delegated sub-agent was interrupted after adding `parse_spec`
-  but before wiring it into `verify_one`; tests stayed green because nothing
-  called it. After any delegation, grep that new code is actually reached.
-- Lesson: modules loaded with `spec_from_file_location` must be put in
-  `sys.modules` before `exec_module` or dataclasses fail on Python 3.14;
-  `verify_run.py` puts its own directory on `sys.path` so every test loader
-  shares one `e2e_verify` package.
-- Commit: `8ffc458`.
-
-## 2026-10-02: MCP E2E chore — `setup.py` installer registry, strict manifest
-
-- Problem: every install mode added pairwise "X only applies to Y" checks to
-  `_check_install_fields`, and one mode's logic was spread over
-  `INSTALL_MODES`, field checks, a `build_env` branch and `--lock`. Unknown
-  top-level keys were ignored, so a misspelt `host_requirement` would have
-  skipped the s4 host check silently.
-- Resolution: `Installer` subclasses (`UvSyncFrozen`, `UvPipPinned`,
-  `CondaExplicit`) in `INSTALLERS` each own their fields (validator per field,
-  also called when absent, so it decides "required"), `install()` and an
-  optional `lock()`. One generic rule replaces the pairwise checks: allowed =
-  `COMMON_KEYS` + the mode's fields; another mode's field is reported as
-  "only apply to install <mode>", anything else as unknown. Common keys
-  (revision hex, python 3.x, launch shape, sorted expected_tools, smoke name)
-  and the document keys are validated too. `host_requirements` checks are a
-  probe table (`HOST_PROBES`). Manifest format unchanged; entries stay dicts
-  (smoke scripts read the same JSON).
-- Verification: all existing setup tests passed unchanged except one message
-  (`conda only applies` → `['conda'] only apply to install conda-explicit`);
-  new tests cover unknown keys, disjoint field owners, and a stub installer
-  registered without touching any other code.
-- Commit: `e24e8fc`.
-
-## 2026-10-02: MCP E2E chore — smoke scripts into `e2e_smoke/` with a shared runner
-
-- Problem: each `smoke_<id>.py` (590–770 lines) carried a ~90-line copy of
-  `main()` (config/manifest load, revision, temp dirs, handshake, tools/list,
-  alive, stdout purity, cwd leftovers, report) plus copies of `server_env`,
-  `quiet_fds`, distance/PNG helpers, four "call → JSON" wrappers, five variants
-  of "invalid input: isError PASS / in-band WARN / accepted FAIL", five copies of
-  "unknown tool is an error" and four hand-written
-  "launch env in config" checks. Every new server would copy all of it again.
-- Resolution: `scripts/mcp/e2e/smoke.py <id>` + package `e2e_smoke/`:
-  `runner.py` (one run; `Smoke` declaration with `run_l1` and optional
-  `prepare` / `after` / `extra_env` / `pass_proxies` / `expected_cwd_files` /
-  `add_arguments` / `report_fields`; `Session.spawn` for probe servers;
-  `Caller.json`, `json_result`, `check_rejected`, `check_unknown_tool`),
-  `client.py` (was `stdio_client.py`), `helpers.py`, `servers/<id>.py`. The
-  per-env checks are replaced by one generic L0 "config matches manifest"
-  (the `--config` entry must equal `setup.render_config`); the unknown-tool
-  check runs once in the runner. The manifest `smoke` field is gone (module =
-  id; ids must be identifiers). Package named `e2e_smoke`, not `smoke`, so it
-  cannot shadow `smoke.py`.
-- Verification: an AST comparison against the old scripts shows 95 per-server
-  functions unchanged; the changed ones are exactly the converted wrappers,
-  error checks, `run_l1` and probe servers. New end-to-end runner tests drive a
-  fake stdio server from a pinned scratch checkout through `runner.main`.
-  Not yet re-run against the real servers (needs the AWS host).
-- Behaviour changes to expect in the next real smoke reports: check
-  "config matches manifest" replaces "launch env in config" / "result cache
-  disabled in config"; pyscf now has its own HOME/cwd/TMPDIR (the visualize HTML
-  is a declared cwd artefact); arxiv now gets a TMPDIR; "unknown tool is an
-  error" runs after the server's own checks for all five servers.
-- AWS re-run (amd64, 2026-10-02) of all five smokes on the new layout: all
-  PASS, no FAIL; per server the only status differences against the previous
-  reports are the expected ones ("config matches manifest" PASS replacing the
-  per-server env checks; pyscf's new "cwd untouched" PASS). pyscf 21/8/0,
-  arxiv 16/8/0, jsbsim 17/17/0, s4 41/7/0, psi4 14/11/0 (PASS/WARN/FAIL).
-- Lesson: for a refactor of scripts that only run on a remote host, an AST
-  comparison of same-named functions against `git show HEAD:` plus a
-  per-check status diff of old vs new reports is a cheap, complete parity
-  check; keep the old reports and write new ones beside them.
-- Commit: `cbf026f`.
-
-## 2026-10-02: MCP E2E chore — tests regrouped into `tests/mcp_e2e/` with one support module
-
-- Problem: the eight `tests/test_mcp_e2e_*.py` files grew one per server by
-  copying the previous one. File names did not say what they tested
-  (`_tasks.py` was only pyscf_rhf_energy, `_codex.py` mixed framework extractor
-  and verifier tests, `_scripts.py` was 1552 lines of setup + five smokes +
-  runner + spec), verifier helper unit tests sat in task files, ~580 lines of
-  helpers were copied 4–8 times (`_run` ×7, `_stream` ×7, `_persist_like_run`
-  ×7, `_dirs` ×6, `_load` ×8, `_codex` ×4), and task-wide conventions were
-  re-asserted per task with drifting wording (only psi4 checked
-  `server_tools` against the manifest).
-- Resolution: `tests/mcp_e2e/` with `support.py` (loaders, `claude`/`codex`
-  log builders, `persist_like_run`, `Task.verify` → `verify_one`,
-  `score_dirs`, smoke stubs), `test_setup`, `test_smoke_runner`,
-  `test_smoke_<id>`, `test_verify_{spec,values,evidence}`, `test_task_<task>`
-  and `test_task_contract.py` (parametrized over every fake task: status and
-  discovery, agent-neutral prompts, strict e2e_check vs manifest tools, and
-  that each task has its own test module covering generator determinism,
-  submission/evaluator failures and a genuine run). Golden plugin and data
-  moved to `tests/mcp_e2e/golden.py` / `golden.json`, keyed on the directory.
-- Verification: inventory before/after (374 → 393 items = 374 − 7 replaced +
-  26 contract/runtime); 230 moved test bodies AST-identical to `git HEAD`
-  (smoke stub renames applied); the old golden snapshots were carried over
-  with renamed keys only and pass unchanged, and an update-mode regeneration
-  reproduces the file byte for byte; a corrupted snapshot is still caught.
-- Finding (not fixed here): six of seven `_persist_like_run` copies modelled
-  Claude persistence as redaction only, while real runs also scrub absolute
-  paths in the persisted stdout. With realistic persistence 7 bypass
-  expectations fail (4 FAIL → missed: server venv Python, `ctypes.CDLL` of
-  `libS4.so`), because the verifier reads Bash commands from the persisted
-  stream; the trajectory, built from the raw stdout, keeps them. Codex runs
-  are persisted the same way.
-- Lesson: when a test helper says "exactly as the real code does", call the
-  real code path — a hand re-implementation of one step hid a verifier blind
-  spot. Carrying golden values over with renamed keys (instead of
-  regenerating) turns a test move into a proof that no outcome changed.
-- Commit: `9fe5843`.
-
-## 2026-10-02: MCP E2E fix — path-scrubbed shell commands hid bypasses; Claude extractor crash
-
-- Problem 1: `asibench run` saves the raw stdout through
-  `_sanitize_raw_artifact_text`, which redacts user events and replaces
-  absolute host paths with `<abs_path>` (`~/mcp/s4/.venv/bin/python` →
-  `~<abs_path>`, `ctypes.CDLL('/…/libS4.so')` → `ctypes.CDLL('<abs_path>')`).
-  The verifier read shell commands from that saved log, so path-based
-  `bypass_patterns` (server venv Python, `libS4`, `ls` of a server checkout)
-  could never match in a real Claude or Codex run. Tests did not notice: six
-  `_persist_like_run` copies modelled persistence as redaction only.
-  Realistic persistence turned 7 bypass expectations red (4 missed FAILs).
-- Problem 2: `claude_extractor` raised `AttributeError` on an event whose
-  `message` is a string; `_compute_trajectory_data` then silently re-parsed
-  the Claude log with the Codex extractor and the trajectory (and every tool
-  result the verifier recovers from it) was lost. The verifier test for such
-  payloads used `persist=False` and so never built a trajectory.
-- Resolution: `e2e_verify/evidence.py` keeps each shell command as a
-  `Command(id, text, raw)`; `enrich_commands_from_trajectory` attaches the
-  trajectory's `key_args.command` by call id (`tool_call_id` / Codex
-  `item_id`); `no_bypass` scans the raw text and reports a scrubbed command it
-  cannot restore as a WARN coverage gap; rows gain `raw_bash_commands`.
-  `claude_extractor` skips non-object messages / non-list content
-  (`_message_blocks`). `tests/mcp_e2e/support.persist_like_run` now calls the
-  real `_sanitize_raw_artifact_text` for both harnesses, Codex scenarios are
-  persisted, and the string-payload test builds a trajectory.
-- Verification: red first (7 bypass cases + string payload + 4 new tests),
-  then green; golden diff is 3 added entries only — all 95 existing snapshots
-  unchanged under realistic persistence. Framework tests touching the
-  extractor/orchestrator pass apart from the known VM artefact
-  (`test_save_result_sanitizes_host_paths…`, TMPDIR under HOME).
-- Open: MCP tool inputs are scrubbed the same way and the Claude trajectory
-  keeps only `path`/`file_path`/`command`/`pattern`/`url` arguments, so a
-  future task whose tools take absolute paths (CAD) needs its own plan for
-  `inputs_from_reference` / `tool_chain`.
-- Lesson: test fixtures that stand in for a production code path must call
-  it; a partial re-implementation encoded the same blind spot as the code
-  under test. A test that skips a pipeline step to dodge a crash is a bug
-  report waiting to be filed.
-- Commit: `879dfc0`.
+- The golden snapshot pins only the paths the fixtures exercise, so check that a
+  branch is covered before relying on it, keep the file byte-identical through
+  pure refactors, and never let a test behind `importorskip` feed it. Errors from
+  an autouse fixture's teardown are reported as ERROR, not FAILED.
+- For a refactor of scripts that only run on a remote host, an AST comparison of
+  same-named functions against `git show HEAD:` plus a per-check status diff of
+  old and new reports is a cheap and complete parity check.
+- After delegating work, grep that the new code is actually reached: a sub-agent
+  left `parse_spec` unwired and the suite stayed green.
+- Traps that cost a round each: `\b--with\b` never matches (no word boundary
+  between a space and `-`); modules loaded with `spec_from_file_location` must be
+  in `sys.modules` before `exec_module` or dataclasses break on Python 3.14;
+  `AGENTS.md` must stay byte-identical to `CLAUDE.md`
+  (`tests/test_ci_workflow.py`).
+- When the VM cannot commit and the base branch moves, develop in a scratch clone
+  rebased with a throwaway identity and resolve append-only conflicts (PROGRESS,
+  README) by keeping both sides; keep scratch directories under the session home,
+  since `/tmp/...` can belong to another session's user.

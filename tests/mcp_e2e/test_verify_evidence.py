@@ -258,3 +258,23 @@ def test_codex_commands_keep_their_unscrubbed_text_from_the_trajectory(tmp_path)
     # the suspicious pattern \bpyscf\b only matches the as-executed text
     assert _status(row)["no_bypass"] == "WARN" and "pyscf" in row["checks"]["no_bypass"]["detail"]
 
+
+def test_codex_tool_results_keep_their_unscrubbed_paths_from_the_trajectory(tmp_path):
+    """A tool returning a host path (``mol_to_sdf``) survives the persisted Codex JSONL
+    only as ``<abs_path>``; without the trajectory refill no such result is verifiable."""
+    written = "/home/e2e/workspace/conformer.sdf"
+    call = _mcp("item_3", "pyscf_rhf_energy", {"atom": ATOM, "basis": "6-31g"},
+                _text(json.dumps({"result": written})))
+    persisted, steps = _persist_like_run(_stream(call), tmp_path)
+    assert written not in persisted and verify.evidence.SCRUBBED in persisted
+    task_out = tmp_path / "out" / RHF_TASK
+    task_out.mkdir(parents=True)
+    task_out.joinpath("s.jsonl").write_text(persisted)
+    task_out.joinpath("t.trajectory.json").write_text(json.dumps(steps))
+    result = {"agent_name": "CodexCLIAdapter",
+              "agent_output": {"raw_stdout_file": "s.jsonl", "trajectory_file": "t.trajectory.json"}}
+    ev = verify.evidence.load_evidence(task_out / "r.json", result)
+    recovered = [c for c in ev.calls if c.name == "mcp__pyscf__pyscf_rhf_energy"]
+    assert json.loads(recovered[0].result_text)["result"] == written
+    assert "tool result(s) from t.trajectory.json" in ev.source
+

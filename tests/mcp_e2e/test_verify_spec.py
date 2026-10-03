@@ -172,3 +172,15 @@ def test_select_narrows_a_call_result_like_an_answer_source():
                                     is_error=False, input={"x": 3})
     assert verify.checks.judge_call(call, cs, {"y_ref": 0.4, "x_ref": 3})["result_ok"] is True
     assert verify.checks.judge_call(call, cs, {"y_ref": 0.2, "x_ref": 3})["result_ok"] is False
+
+
+def test_star_maps_a_chained_input_to_the_whole_result():
+    raw = {"schema_version": 2, "server": "s", "reference_file": "r.json", "prediction_file": "p.json",
+           "calls": [{"name": "a", "tool": "t", "result": {"format": "json", "extract": "text", "reference_key": "x"}},
+                     {"name": "b", "tool": "u", "inputs_from_call": {"call": "a", "map": {"p_mol": "*", "k": "mol"}},
+                      "result": {"format": "json", "extract": "rdkit_mol", "reference_key": "y"}}],
+           "answers": [{"prediction_key": "n", "reference_key": "n", "from_call": "a"}]}
+    spec = verify.parse_spec(raw)
+    whole, keyed = spec.call("b").inputs_from_call.bindings
+    assert whole.args == ("p_mol",) and whole.source == verify.spec.Selector(key=None, raw=True)
+    assert keyed.source == verify.spec.Selector(key="mol", raw=True)

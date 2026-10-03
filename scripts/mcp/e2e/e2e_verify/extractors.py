@@ -79,7 +79,32 @@ def _extract_term_counts(data):
     return counts
 
 
+# --- opaque strings and returned file paths -----------------------------------
+
+def canon_text(value) -> str | None:
+    """A non-empty string, stripped (e.g. a base64 RDKit pickle). Compared exactly; a
+    copy scrubbed in the persisted log still matches (values.same_text)."""
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _extract_mol_field(data):
+    """The ``mol`` field of an RDKit result object (EmbedMolecule / EmbedMultipleConfs)."""
+    return data.get("mol") if isinstance(data, dict) else None
+
+
+def canon_file_name(value) -> str | None:
+    """The last component of a returned path. Host paths are scrubbed in persisted logs
+    (``<workspace>/x.sdf``) and differ between runs; the file name is what a task fixes."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    name = re.split(r"[\\/]", value.strip())[-1]
+    return name or None
+
+
 EXTRACTORS: dict[str, Extractor] = {
     "arxiv_ids": Extractor(_extract_arxiv_ids, canon_ids),
     "term_counts": Extractor(_extract_term_counts, canon_counts),
+    "text": Extractor(lambda data: data if isinstance(data, str) else None, canon_text),
+    "rdkit_mol": Extractor(_extract_mol_field, canon_text),
+    "file_name": Extractor(lambda data: data if isinstance(data, str) else None, canon_file_name),
 }

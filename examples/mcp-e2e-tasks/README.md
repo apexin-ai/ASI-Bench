@@ -33,6 +33,7 @@ An E2E pass needs both. The verifier reads the run artefacts and the task's
 | `mcp_e2e.jsbsim_engine_run` | `jsbsim` | `create_session` → `set_*` → `step` → `get_property`/`get_telemetry` (one session) | JSBSim driven directly |
 | `mcp_e2e.s4_grating_spectrum` | `s4` | `simulate_stack_spectrum` | numpy 1D RCWA |
 | `mcp_e2e.psi4_opt_freq` | `psi4` | `optimize` → `frequency` at the returned geometry | PySCF DF-RHF + geomeTRIC |
+| `mcp_e2e.rdkit_conformer` | `rdkit` | `smiles_to_mol` → `EmbedMolecule` → `mol_to_sdf` (writes the file), `Max`/`MinPartialCharge` | RDKit ETKDGv3 at the instance's seed + Gasteiger charges |
 
 How each task picks its instances, scores answers and keeps the tool the only
 practical source of the numbers is described in its `generate_gt.py` and
@@ -54,6 +55,7 @@ works; it is not a pass rate.
 | `jsbsim_engine_run` | 2026-10-02 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `s4_grating_spectrum` | 2026-10-02 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `psi4_opt_freq` | 2026-10-02 | 4 × 100, 4/4 | 4 × 100, 4/4 |
+| `rdkit_conformer` | 2026-10-03 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 
 In every run at B3/B4 the agent found the tools without being told their names.
 

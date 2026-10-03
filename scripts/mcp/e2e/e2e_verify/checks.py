@@ -110,7 +110,9 @@ def judge_call(call: ToolCall, cs: CallSpec, reference: dict) -> dict:
         if rs.selector.extract:
             ref = values.canon(rs.selector.extract)(reference.get(rs.reference_key))
             report["extracted"] = value
-            report["result_ok"] = values.matches(value, ref, rs.match)
+            # A value the persistence replaced wholesale (a returned host path) and that no
+            # trajectory restored carries nothing to compare: a coverage gap, not a wrong result.
+            report["result_ok"] = None if value == values.SCRUBBED else values.matches(value, ref, rs.match)
         else:
             err = values.diff(value, values.numbers(reference.get(rs.reference_key)))
             report["abs_error"] = None if math.isinf(err) else err
@@ -131,7 +133,7 @@ def check_tool_correct(ctx: Context) -> dict:
         elif good:
             status, detail = "WARN", "result correct but inputs differ from reference"
         elif any(r["result_ok"] is None for r in reports):
-            status, detail = "WARN", "result type not observable in this evidence"
+            status, detail = "WARN", "result not observable in this evidence"
         else:
             status, detail = "FAIL", "no successful call returned the expected result"
         judged[cs.name] = status

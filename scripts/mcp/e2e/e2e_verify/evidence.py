@@ -18,6 +18,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+SCRUBBED = "<abs_path>"
+"""What ``asibench run`` leaves in a persisted artefact in place of an absolute host path."""
+
 
 @dataclass
 class ToolCall:
@@ -40,7 +43,7 @@ class Command:
 
     @property
     def scrubbed(self) -> bool:
-        return "<abs_path>" in self.text and self.raw is None
+        return SCRUBBED in self.text and self.raw is None
 
 
 @dataclass
@@ -299,12 +302,15 @@ def enrich_commands_from_trajectory(ev: Evidence, path: Path) -> int:
 
 
 def enrich_results_from_trajectory(ev: Evidence, path: Path) -> int:
-    """Fill tool results missing from the persisted stream; return how many were filled.
+    """Fill tool results missing or scrubbed in the persisted stream; return how many were filled.
 
     `asibench run` redacts the content of every user-role event in the saved
-    stream-json (prompt protection), which also removes tool_result payloads.
-    The trajectory is extracted from the unredacted stream and keeps the result
-    text and content block types, keyed by the same tool_call_id.
+    stream-json (prompt protection), which also removes tool_result payloads, and
+    replaces absolute host paths with ``<abs_path>`` everywhere. The Codex JSONL
+    keeps its MCP results, so a tool returning a path (``mol_to_sdf``) survives
+    persistence only as ``<abs_path>``. The trajectory is extracted from the
+    unsanitized stream and keeps the result text and content block types, keyed by
+    the same tool_call_id: it is the source for both cases.
     """
     steps = {}
     for step in _trajectory_steps(path):
@@ -313,7 +319,8 @@ def enrich_results_from_trajectory(ev: Evidence, path: Path) -> int:
             steps[meta["tool_call_id"]] = step
     filled = 0
     for call in ev.calls:
-        if call.result_text in (None, "<redacted>") and call.id in steps:
+        lost = call.result_text in (None, "<redacted>") or SCRUBBED in (call.result_text or "")
+        if lost and call.id in steps:
             _apply_result(call, steps[call.id])
             filled += 1
     return filled

@@ -36,7 +36,7 @@ afterwards.
 
 Usage::
 
-    python3 scripts/mcp/e2e/setup.py <id> [--root ~/mcp]      # pyscf, arxiv, jsbsim, s4, psi4
+    python3 scripts/mcp/e2e/setup.py <id> [--root ~/mcp]      # pyscf, arxiv, jsbsim, s4, psi4, rdkit
 
 Conda locks are regenerated (maintainers only, needs network) with::
 

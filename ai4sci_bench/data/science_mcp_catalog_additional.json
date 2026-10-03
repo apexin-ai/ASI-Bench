@@ -279,6 +279,19 @@
       }
     }
   },
+  "rdkit_tandem": {
+    "category": "cheminformatics",
+    "source": "https://github.com/tandemai-inc/rdkit-mcp-server",
+    "server": {
+      "command": "/path/to/rdkit-mcp-server/.venv/bin/python",
+      "args": [
+        "/path/to/rdkit-mcp-server/run_server.py",
+        "--transport",
+        "stdio"
+      ],
+      "cwd": "/path/to/rdkit-mcp-server"
+    }
+  },
   "openbabel": {
     "category": "cheminformatics",
     "source": "https://github.com/openbabel/openbabel",
