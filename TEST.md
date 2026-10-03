@@ -789,7 +789,8 @@ For quantum_espresso (L0 only so far): `python3 scripts/mcp/e2e/setup.py
 quantum_espresso` (needs `micromamba`; the conda prefix is ~1.5 GB), then
 `~/mcp/quantum_espresso/.venv/bin/python scripts/mcp/e2e/smoke.py
 quantum_espresso --config ~/mcp/quantum_espresso.mcp.json` (no network, ~5 s).
-Expected outcome on the pinned revision: `PASS` with 16 PASS, 0 WARN, 0 FAIL —
+Outcome on the pinned revision, measured on amd64 and aarch64 (2026-10-03):
+`PASS` with 16 PASS, 0 WARN, 0 FAIL —
 `pw.x`, `bands.x`, `dos.x` and `projwfc.x` each report QE 7.5, the vendored
 SG15 library holds 219 `.upf` files for 69 elements, the handshake lists the 19
 `qe_*` tools, and `qe_status` echoes the launch env with an available
