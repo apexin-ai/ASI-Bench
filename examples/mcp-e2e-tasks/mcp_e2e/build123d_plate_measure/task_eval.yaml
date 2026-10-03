@@ -1,0 +1,63 @@
+task_id: mcp_e2e.build123d_plate_measure
+
+output:
+  files:
+    - name: result.json
+      type: data
+    - name: part.step
+      type: data
+    - name: part.stl
+      type: data
+
+evaluation:
+  gates:
+    - scorer: build123d_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+        step_file: part.step
+        stl_file: part.stl
+
+  # The reference is closed form (box minus bore, four corner slivers and the
+  # bolt circle, extruded), so a correctly copied measure() answer is exact to
+  # the server's 4-decimal rounding: measured on three shapes, every quantity
+  # agrees to <= 5e-5 absolute, i.e. <= 1e-6 relative. Full credit therefore
+  # ends at 1e-6 relative and credit runs out at 1e-2, which is where a value
+  # recomputed by hand, read from a different material or taken from the wrong
+  # object lands. The exported mesh is coarser by construction: the tessellated
+  # volume sits 1e-4 relative above the exact solid, so its band starts there.
+  scoring:
+    - scorer: build123d_e2e_measurements
+      weight: 40
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-2
+    - scorer: build123d_e2e_features
+      weight: 20
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        dimension_tol: 1.0e-3
+    - scorer: build123d_e2e_mesh
+      weight: 30
+      config:
+        stl_file: part.stl
+        ref_file: reference.json
+        full_score_tol: 5.0e-4
+        zero_score_tol: 5.0e-2
+        dimension_tol: 1.0e-3
+    - scorer: build123d_e2e_step
+      weight: 10
+      config:
+        step_file: part.step
+        ref_file: reference.json
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 120

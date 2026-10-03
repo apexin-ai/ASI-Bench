@@ -34,6 +34,7 @@ An E2E pass needs both. The verifier reads the run artefacts and the task's
 | `mcp_e2e.s4_grating_spectrum` | `s4` | `simulate_stack_spectrum` | numpy 1D RCWA |
 | `mcp_e2e.psi4_opt_freq` | `psi4` | `optimize` → `frequency` at the returned geometry | PySCF DF-RHF + geomeTRIC |
 | `mcp_e2e.rdkit_conformer` | `rdkit` | `smiles_to_mol` → `EmbedMolecule` → `mol_to_sdf` (writes the file), `Max`/`MinPartialCharge` | RDKit ETKDGv3 at the instance's seed + Gasteiger charges |
+| `mcp_e2e.build123d_plate_measure` | `build123d` | `execute` → `validate` → `measure` → `find_holes`/`find_hole_patterns` → `export` (STEP+STL) → `import_cad_file` (one session) | closed form: box − bore − corner slivers − bolt circle, extruded (stdlib only) |
 
 How each task picks its instances, scores answers and keeps the tool the only
 practical source of the numbers is described in its `generate_gt.py` and
@@ -117,6 +118,8 @@ that is what `no_bypass` is for. `--mcp-config` also turns on web search
    | session chain, optional/grouped calls | `jsbsim_engine_run` |
    | answers selected from returned arrays | `s4_grating_spectrum` |
    | nested keys, geometry chain | `psi4_opt_freq` |
+   | opaque strings a tool chain passes on | `rdkit_conformer` |
+   | path arguments, binary artefacts, closed-form reference | `build123d_plate_measure` |
 
 4. Prompts name the server and the tool (e.g. "`pyscf_rhf_energy` of the
    `pyscf` server"). Never use a harness-specific name such as
@@ -140,13 +143,17 @@ The verifier handles these; they matter only if you are debugging it.
 - **Claude, structured output:** for FastMCP tools that declare an
   `outputSchema`, Claude Code shows `structuredContent` (`{"result": …}`) and
   not the text. The verifier unwraps it.
-- **Both, paths in commands:** the persisted stdout has absolute host paths
-  replaced by `<abs_path>` (e.g. `~/mcp/s4/.venv/bin/python` →
-  `~<abs_path>`), which would hide path-based bypass patterns. The verifier
-  scans each shell command as executed, from the trajectory (matched by call
-  id); a scrubbed command it cannot restore is a `no_bypass` WARN. Tool inputs
-  are scrubbed the same way and are not restored yet: a future task whose MCP
-  tools take absolute paths needs a plan for its input checks.
+- **Both, scrubbed paths:** the persisted stdout replaces host paths with
+  placeholders — `<home>`, `<workspace>`, `<run_output_dir>`, `<repo_root>` by
+  name and every other absolute path with `<abs_path>` — which would hide
+  path-based bypass patterns and break path arguments and returned paths. The
+  verifier restores shell commands, tool results **and** path-like tool
+  arguments from `*.trajectory.json`, matched by call id; the trajectory keeps
+  them because `ai4sci_bench.core.trajectory.KEY_ARG_NAMES` lists the arguments
+  an extractor preserves (`filename`, `path`, `file_path`, `command`, …).
+  What it cannot restore is reported as a coverage gap, never as a failure: a
+  scrubbed command is a `no_bypass` WARN, and a comparison that only a
+  placeholder made fail becomes "not observable in this evidence".
 - **Codex:** each call is an `mcp_tool_call` item that keeps its inputs and
   results, but Codex does not list servers or offered tools. Its own
   `list_mcp_resources*` calls are not counted as required tools.
