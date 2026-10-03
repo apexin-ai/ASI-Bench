@@ -1,0 +1,56 @@
+id: mcp_e2e.rdkit_conformer
+name: "MCP E2E: seeded 3D conformer and Gasteiger charges through the rdkit MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. It exercises a chain whose links are opaque base64 pickles
+# (smiles_to_mol -> EmbedMolecule -> mol_to_sdf), a tool that writes a file
+# into the agent's workspace, and two scalar tools; see
+# examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: chemistry
+subdomain: "cheminformatics_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/tandemai-inc/rdkit-mcp-server"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 1-5
+  requires_gpu: false
+  requires_network: false
+
+tags: [mcp_e2e, rdkit, conformer, etkdg, gasteiger_charges, sdf, tool_chain]
+
+# Only generate_gt.py needs RDKit (the same release as the pinned server, and
+# Python 3.12 like the server, so that pickles and coordinates are
+# bit-identical). Generate instances with `asibench generate --sandbox task`;
+# run the agent with --sandbox none and --mcp-config so that RDKit is
+# reachable only through the MCP server.
+runtime:
+  python: ">=3.12,<3.13"
+  packages: ["rdkit==2025.3.1"]
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: molecule.json
+      type: data
+      description: "Molecule name, SMILES, ETKDG random seed and the SDF file name to write."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with molecule, conf_id, max_partial_charge and min_partial_charge."
+    - name: conformer.sdf
+      type: data
+      description: "The seeded 3D conformer, written by the server's mol_to_sdf tool into the working directory."

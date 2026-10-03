@@ -1528,4 +1528,65 @@
 - Verification: Linux aarch64, 125 PASS / 28 WARN / 0 FAIL, ~1 s, three runs
   with the same verdicts; `tests/mcp_e2e` + `tests/test_mcp_config.py` 427
   passed. AWS amd64 not yet run.
+- Commit: `8dc43e6`.
+
+## 2026-10-03: L2 rdkit conformer task — scrubbed tool results, and 5 test-side bugs
+
+- Problem 1 (framework, the sibling of `879dfc0`): that fix restored
+  path-scrubbed shell *commands* from the trajectory but left tool *results*
+  alone — `enrich_results_from_trajectory` only refilled `None` /
+  `<redacted>`. Claude is unaffected (its `tool_result` payloads are redacted
+  wholesale, so they take the refill path), but the persisted Codex JSONL
+  *keeps* its MCP results, path-scrubbed: `mol_to_sdf` returning
+  `/tmp/ws/conformer.sdf` reaches the verifier as `{"result": "<abs_path>"}`,
+  so `file_name` could never equal `conformer.sdf` and `tool_correct` FAILed
+  every genuine Codex run. Any task whose tool returns a host path hits this.
+- Problem 2 (framework): when nothing unscrubbed survives anywhere (no
+  trajectory, or a trajectory extracted from an already scrubbed log), a
+  wholly replaced value carries no information, yet `judge_call` compared
+  `<abs_path>` with the reference and FAILed — accusing the agent of a wrong
+  result over a gap in our own evidence.
+- Resolution: `enrich_results_from_trajectory` also refills a result
+  containing `SCRUBBED`; `judge_call` reports `result_ok=None` for a value that
+  is exactly `SCRUBBED`, which `check_tool_correct` already renders as a WARN
+  coverage gap. `SCRUBBED` now has one definition (`evidence.py`, re-exported
+  through `values.py`) instead of three literals. Closes the result half of
+  that entry's "Open" note; MCP tool *inputs* remain open.
+- Problem 3 (task): `e2e_check.json` listed only `mcp__rdkit__*` in
+  `suspicious_tools`, so a `WebFetch` of RDKit documentation was invisible —
+  CLAUDE.md requires the web tools of a `--mcp-config` run to be in the bypass
+  checks. Added `WebFetch`/`WebSearch`/`web_fetch`/`web_search` scoped to
+  `\brdkit\b`, so an unrelated fetch stays PASS.
+- Problem 4 (tests, 15 red): `test_submission_failures_are_valid_zero_scores`
+  asserted every scorer returns 0 for every broken submission, but the scorers
+  are per-artefact: a broken `result.json` leaves `conformer.sdf` its 60
+  points (the hard gate zeroes the instance, which is where that guarantee
+  lives), and `conf_id` is not scorer input at all. Three more were simply
+  mis-written: `_sdf()[:20]` raises "no counts line" rather than the
+  "lines after it" branch; `"gASV" + pickle[4:]` *is* the pickle (it already
+  starts with `gASV`), so the "different string" case changed nothing; and
+  `+1e-9` on a charge sits exactly on `values.copied`'s `max(1e-9, …)` floor,
+  so the not-copied answer counted as copied (fixed in the test with `1e-7`,
+  not by tightening a comparator shared by every task and pinned by golden).
+- Problem 5 (tests): the seed-3 scrubbing test called `verify_one` behind
+  `importorskip("rdkit")`, so its golden entry would exist or not depending on
+  the environment. Split: an RDKit-free end-to-end case splices a path-like
+  run into the recorded pickles, and the RDKit-only part asserts the property
+  (real references do carry such runs) without touching `verify_one`.
+- Verification: `tests/mcp_e2e` 469 passed / 3 skipped, 0 errors; the golden
+  grew by 23 rdkit entries with **all 98 existing snapshots byte-identical**,
+  which is what shows the two framework changes are inert elsewhere. The
+  3 remaining repo failures are unrelated and environment-dependent:
+  `test_mimo_accepts_all_four_modes` (passes on Linux, macOS has no
+  `linux_ns`), `test_kimi_host_env_uses_host_path` (asserts `/tmp` but reads
+  `tempfile.gettempdir()`), and
+  `test_parallel_local_scoring_is_bounded_isolated_and_ordered` (b3 scores
+  0.0; needs `asibench[full]`, still to be triaged).
+- Lesson: a fix for "persistence destroyed X" must enumerate every X the
+  pipeline carries. `879dfc0` fixed commands and even recorded inputs as open,
+  but results — the one kind two harnesses treat differently — were assumed
+  safe because the Claude path happened to work.
+- Lesson: when evidence is missing, say so. A verifier that cannot observe a
+  value must report a coverage gap, never a verdict about the agent.
+- Lesson: a test behind `importorskip` must not feed a committed snapshot.
 - Commit: pending (to be filled in after erix commits).

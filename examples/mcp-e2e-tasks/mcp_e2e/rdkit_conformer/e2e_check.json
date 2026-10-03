@@ -1,0 +1,85 @@
+{
+  "schema_version": 2,
+  "server": "rdkit",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": [
+    "CalcChi0v", "CalcChi1v", "CalcChi2v", "CalcChi3v", "CalcChi4v", "CalcCrippenDescriptors",
+    "CalcFractionCSP3", "CalcKappa1", "CalcKappa2", "CalcKappa3", "CalcLabuteASA", "CalcMolFormula",
+    "CalcNumAliphaticRings", "CalcNumAmideBonds", "CalcNumAromaticRings", "CalcNumHBA", "CalcNumHBD",
+    "CalcNumHeavyAtoms", "CalcNumHeteroatoms", "CalcNumHeterocycles", "CalcNumLipinskiHBA",
+    "CalcNumLipinskiHBD", "CalcNumRings", "CalcNumRotatableBonds", "CalcNumSaturatedCarbocycles",
+    "CalcNumSaturatedRings", "CalcNumSpiroAtoms", "CalcNumUnspecifiedAtomStereoCenters",
+    "CalcOxidationNumbers", "CalcPBF", "CalcTPSA", "Compute2DCoords", "EmbedMolecule",
+    "EmbedMultipleConfs", "ExactMolWt", "FpDensityMorgan1", "FpDensityMorgan2", "FpDensityMorgan3",
+    "FragmentMol", "GetSubstructMatch", "GetUSR", "GetUSRScore", "HasSubstructMatch", "HeavyAtomMolWt",
+    "MakeScaffoldGeneric", "MaxAbsPartialCharge", "MaxPartialCharge", "MinAbsPartialCharge",
+    "MinPartialCharge", "MolToFile", "MolToImage", "MolWt", "MolsMatrixToGridImage",
+    "MurckoScaffoldSmilesFromSmiles", "NumRadicalElectrons", "NumValenceElectrons", "SetBoolProp",
+    "SetDoubleProp", "SetIntProp", "SetProp", "SetUnsignedProp", "TanimotoSimilarity",
+    "UpdatePropertyCache", "batch_map", "compute_descriptors", "mol_to_pdb", "mol_to_sdf", "mol_to_smiles",
+    "pdb_contents_to_mol", "pdb_to_mol", "sdf_contents_to_mol", "sdf_to_mol", "smarts_to_mol",
+    "smiles_to_mol"
+  ],
+  "calls": [
+    {
+      "name": "parse",
+      "tool": "smiles_to_mol",
+      "inputs_from_reference": {"smiles": "smiles"},
+      "result": {"format": "json", "extract": "text", "reference_key": "mol_pickle"}
+    },
+    {
+      "name": "embed",
+      "tool": "EmbedMolecule",
+      "inputs_from_call": {"call": "parse", "map": {"p_mol": "*"}},
+      "result": {"format": "json", "extract": "rdkit_mol", "reference_key": "embedded_mol_pickle"}
+    },
+    {
+      "name": "write",
+      "tool": "mol_to_sdf",
+      "inputs_from_call": {"call": "embed", "map": {"pmol": "mol"}},
+      "result": {"format": "json", "extract": "file_name", "reference_key": "sdf_file"}
+    },
+    {
+      "name": "qmax",
+      "tool": "MaxPartialCharge",
+      "inputs_from_reference": {"smiles": "smiles"},
+      "result": {"format": "number", "reference_key": "max_partial_charge", "abs_tol": 1e-9}
+    },
+    {
+      "name": "qmin",
+      "tool": "MinPartialCharge",
+      "inputs_from_reference": {"smiles": "smiles"},
+      "result": {"format": "number", "reference_key": "min_partial_charge", "abs_tol": 1e-9}
+    }
+  ],
+  "answers": [
+    {"prediction_key": "conf_id", "from_call": "embed", "result_key": "conf_id", "reference_key": "conf_id",
+     "abs_tol": 0},
+    {"prediction_key": "max_partial_charge", "from_call": "qmax", "reference_key": "max_partial_charge",
+     "abs_tol": 1e-6},
+    {"prediction_key": "min_partial_charge", "from_call": "qmin", "reference_key": "min_partial_charge",
+     "abs_tol": 1e-6}
+  ],
+  "suspicious_tools": {
+    "mcp__rdkit__batch_map": "",
+    "mcp__rdkit__EmbedMultipleConfs": "",
+    "WebFetch": "\\brdkit\\b",
+    "WebSearch": "\\brdkit\\b",
+    "web_fetch": "\\brdkit\\b",
+    "web_search": "\\brdkit\\b"
+  },
+  "bypass_patterns": [
+    "(import|from)\\s+rdkit\\b",
+    "\\b(pip|pip3|uv|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\b(rdkit|rdkit-pypi|openbabel|openbabel-wheel)\\b",
+    "\\buvx\\b[^\\n]*\\brdkit\\b",
+    "(rdkit|rdkit-mcp-server|pyscf|mcp2pyscf)[^\\s'\"]*/\\.venv/bin/python",
+    "\\brdkit_mcp\\b",
+    "\\bobabel\\b|(import|from)\\s+openbabel\\b|\\bpybel\\b"
+  ],
+  "suspicious_patterns": [
+    "\\brdkit\\b",
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ]
+}

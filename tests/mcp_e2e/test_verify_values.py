@@ -67,3 +67,54 @@ def test_same_geometry():
     assert verify.values.link_comparator(link)("abc", "abc") and not verify.values.link_comparator(link)("0.1", "0.2")
     geo = verify.spec.Binding(("g",), verify.spec.Selector(key="g", raw=True), "geometry", 1e-4)
     assert verify.values.link_comparator(geo)(plain.replace("0.75", "0.75004"), plain)
+
+
+def _persisted(text, tmp_path):
+    """``text`` through the orchestrator's real persistence sanitizer (as a JSONL string value)."""
+    line = support.persist_like_run(json.dumps({"type": "assistant", "v": text}) + "\n", tmp_path=tmp_path)[0]
+    return json.loads(line)["v"]
+
+
+def test_scrub_host_paths_equals_the_persistence_sanitizer(tmp_path):
+    import base64
+    import random
+    rng = random.Random(7)
+    samples = ["gASV+/AAAA/BBBB", "x /usr/bin/python3 -c 1", "see https://example.org/a/b and /c/d", "a/b/c",
+               "//AA/BB", "C(=O)O", "<workspace>/out/conformer.sdf", "/tmp/x"]
+    samples += [base64.b64encode(rng.randbytes(rng.randrange(200, 800))).decode() for _ in range(200)]
+    for text in samples:
+        assert verify.values.scrub_host_paths(text) == _persisted(text, tmp_path), text[:60]
+    assert sum(verify.values.SCRUBBED in verify.values.scrub_host_paths(s) for s in samples) > 10
+
+
+def test_same_text_tolerates_only_the_persistence_scrubbing():
+    pickle_b64 = "gASVnwEAAAAAAACMEXJka2l0+/Q2hlbS5yZGNoZW0/lIwDTW9slJOUQnMBAADvvq3e"
+    scrubbed = verify.values.scrub_host_paths(pickle_b64)
+    assert verify.values.SCRUBBED in scrubbed
+    assert verify.values.same_text(pickle_b64, pickle_b64) and verify.values.same_text(scrubbed, pickle_b64)
+    assert verify.values.same_text(f" {pickle_b64}\n", pickle_b64)
+    assert not verify.values.same_text(scrubbed.replace("gASV", "gASW"), pickle_b64)    # the visible rest must match
+    assert not verify.values.same_text(pickle_b64, scrubbed)                            # only the given side is persisted
+    # limitation: a value scrubbed entirely matches any path-like value, so tasks never chain bare host paths
+    assert verify.values.same_text("<abs_path>", "/some/other/path")
+    assert not verify.values.same_text("", "") and not verify.values.same_text(None, "x")
+    assert verify.values.same_link(scrubbed, pickle_b64) and verify.values.same_input(scrubbed, pickle_b64)
+    assert verify.values.matches(scrubbed, pickle_b64, "equal")
+
+
+def test_whole_result_selector_and_text_extractors():
+    pickle_b64 = "gASVdQAAAAAAAACMEXJka2l0LkNoZW0ucmRjaGVt"
+    shown_structured = verify.evidence.ToolCall(result_text=json.dumps({"result": pickle_b64}))   # Claude
+    shown_text = verify.evidence.ToolCall(result_text=pickle_b64 + "\n")                          # Codex text block
+    whole = verify.spec.Selector(raw=True)
+    assert verify.values.read(shown_structured, whole) == pickle_b64 == verify.values.read(shown_text, whole)
+    text = verify.spec.Selector(extract="text")
+    assert verify.values.read(shown_structured, text) == pickle_b64 == verify.values.read(shown_text, text)
+    embedded = verify.evidence.ToolCall(result_text=json.dumps({"conf_id": 0, "mol": pickle_b64}))
+    assert verify.values.read(embedded, verify.spec.Selector(extract="rdkit_mol")) == pickle_b64
+    assert verify.values.read(embedded, verify.spec.Selector(extract="text")) is None
+    assert verify.values.read(shown_text, verify.spec.Selector(extract="rdkit_mol")) is None
+    name = verify.spec.Selector(extract="file_name")
+    for shown in ("/tmp/ws/conformer.sdf", "<workspace>/conformer.sdf", json.dumps({"result": "/a/b/conformer.sdf"})):
+        assert verify.values.read(verify.evidence.ToolCall(result_text=shown), name) == "conformer.sdf"
+    assert verify.values.read(verify.evidence.ToolCall(result_text=None), name) is None

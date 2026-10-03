@@ -1,0 +1,55 @@
+task_id: mcp_e2e.rdkit_conformer
+
+output:
+  files:
+    - name: result.json
+      type: data
+    - name: conformer.sdf
+      type: data
+
+evaluation:
+  gates:
+    - scorer: rdkit_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+        sdf_file: conformer.sdf
+
+  # Full credit within the tolerance, zero at the second bound, log-linear in
+  # between. The reference is RDKit called directly (same release as the
+  # server): pickles and coordinates are bit-identical, so the conformer is off
+  # only by the molfile's 4 decimals (<= 5e-5 Angstrom) and copied charges are
+  # exact. Measured procedure errors: another seed moves atoms by 0.5-11
+  # Angstrom (the frame is not aligned); the default randomSeed (-1) is not
+  # reproducible; hydrogens or a different molecule change the atom list
+  # (zero); charges rounded to 4 decimals lose part of their credit.
+  scoring:
+    - scorer: rdkit_e2e_conformer
+      weight: 60
+      config:
+        sdf_file: conformer.sdf
+        ref_file: reference.json
+        full_score_tol: 2.0e-4
+        zero_score_tol: 0.1
+    - scorer: rdkit_e2e_max_partial_charge
+      weight: 20
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-3
+    - scorer: rdkit_e2e_min_partial_charge
+      weight: 20
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-3
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 300

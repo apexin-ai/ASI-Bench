@@ -9,9 +9,46 @@ from __future__ import annotations
 
 import json
 import math
+import re
 
 from .extractors import EXTRACTORS
+from .evidence import SCRUBBED
 from .spec import Selector
+
+
+# --------------------------------------------------------------------------
+# Persisted-log path scrubbing
+# --------------------------------------------------------------------------
+
+# The absolute-path rule of ai4sci_bench.runner.orchestrator._sanitize_persisted_text,
+# which ``asibench run`` applies to every string of the saved stdout (outside
+# http(s) URLs). tests/mcp_e2e keep this copy equal to the real function.
+_ABSOLUTE_PATH = re.compile(r"(?<![A-Za-z0-9_>.])/(?:[^/\s'\"`]+/){1,}[^/\s'\"`]+")
+_HTTP_URL = re.compile(r"https?://[^\s'\"`]+")
+
+
+def scrub_host_paths(text: str) -> str:
+    """``text`` as the persisted log would show it: absolute-path-like runs become
+    ``<abs_path>``. Base64 data (e.g. an RDKit pickle) contains ``/`` and is hit too."""
+    parts, cursor = [], 0
+    for match in _HTTP_URL.finditer(text):
+        parts.append(_ABSOLUTE_PATH.sub(SCRUBBED, text[cursor:match.start()]))
+        parts.append(match.group(0))
+        cursor = match.end()
+    parts.append(_ABSOLUTE_PATH.sub(SCRUBBED, text[cursor:]))
+    return "".join(parts)
+
+
+def same_text(given, expected) -> bool:
+    """Identical non-empty strings, also when ``given`` comes from the persisted log and had
+    path-like runs scrubbed: then it must equal ``expected`` scrubbed the same way (the
+    unscrubbed rest still has to match character for character)."""
+    if not isinstance(given, str) or not isinstance(expected, str):
+        return False
+    a, b = given.strip(), expected.strip()
+    if not a:
+        return False
+    return a == b or (SCRUBBED in a and a == scrub_host_paths(b))
 
 
 # --------------------------------------------------------------------------
@@ -114,6 +151,15 @@ def parsed_result(call):
         return None
 
 
+def result_value(call):
+    """The whole result: parsed JSON (structured-output wrapper removed), else the stripped
+    text (a tool returning one plain string, e.g. a pickle, in a client that shows the text)."""
+    data = parsed_result(call)
+    if data is not None:
+        return data
+    return None if call.result_text is None else call.result_text.strip()
+
+
 def json_object(call) -> dict | None:
     data = parsed_result(call)
     return data if isinstance(data, dict) else None
@@ -130,8 +176,8 @@ def canon(kind: str):
 
 def readable(call, selector: Selector) -> bool:
     """Whether the call's result can serve as a source at all: a JSON object for a key
-    lookup, an extracted value for an extractor."""
-    if selector.extract:
+    lookup, an extracted value for an extractor, any value for the whole result."""
+    if selector.extract or (selector.raw and selector.key is None):
         return read(call, selector) is not None
     return json_object(call) is not None
 
@@ -147,11 +193,11 @@ def read(call, selector: Selector, reference: dict | None = None):
         return None
     if selector.extract:
         extractor = EXTRACTORS[selector.extract]
-        data = parsed_result(call)
+        data = result_value(call)
         raw = None if data is None else extractor.extract(data)
         return None if raw is None else extractor.canon(raw)
     if selector.raw:
-        return field(json_object(call), selector.key)
+        return result_value(call) if selector.key is None else field(json_object(call), selector.key)
     if selector.select is not None:
         return _select(json_object(call), selector, reference or {})
     if selector.key is None:
@@ -207,7 +253,7 @@ def same_input(given, expected) -> bool:
     a, b = numbers(given), numbers(expected)
     if a is not None and b is not None:
         return diff(a, b) <= 1e-12
-    return str(given).strip() == str(expected).strip()
+    return str(given).strip() == str(expected).strip() or same_text(given, expected)
 
 
 def same_link(given, source) -> bool:
@@ -218,7 +264,7 @@ def same_link(given, source) -> bool:
         return copied(a, b)
     if isinstance(given, (dict, list)) or isinstance(source, (dict, list)) or given is None or source is None:
         return False
-    return str(given).strip() != "" and str(given).strip() == str(source).strip()
+    return str(given).strip() != "" and (str(given).strip() == str(source).strip() or same_text(given, source))
 
 
 def same_geometry(given, source, abs_tol: float) -> bool:
@@ -240,7 +286,7 @@ def matches(value, ref, mode: str) -> bool:
     if mode == "subset":
         return isinstance(value, dict) and isinstance(ref, dict) and bool(value) and \
             all(k in ref and ref[k] == v for k, v in value.items())
-    return value == ref
+    return value == ref or same_text(value, ref)
 
 
 def link_comparator(binding):

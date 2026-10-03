@@ -630,7 +630,12 @@ unsanitized log, as `asibench run` does; Codex scenarios are persisted too.
 command is scrubbed in the saved log yet still FAILs `no_bypass` (as-executed
 text from the trajectory), and that a scrubbed command without a trajectory is
 a `no_bypass` WARN; `test_verify_evidence.py` checks the same for a Codex
-`command_execution`; `tests/test_trajectory.py` checks that the Claude extractor
+`command_execution` and that a tool *result* holding a host path (persisted as
+`<abs_path>`, which the Codex JSONL keeps instead of redacting) is restored from
+the trajectory by call id; `test_task_rdkit_conformer.py` checks that when
+nothing unscrubbed is left the returned path is a `tool_correct` WARN (coverage
+gap) rather than a FAIL, while the partially scrubbed pickles still chain;
+`tests/test_trajectory.py` checks that the Claude extractor
 skips events whose `message` is not an object instead of raising.
 
 `test_setup.py`: manifest entries pinned to 40-char revisions and matching

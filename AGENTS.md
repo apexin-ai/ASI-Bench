@@ -167,8 +167,11 @@
   `--mcp-config` 强制 search mode，Claude 有 WebSearch/WebFetch、Codex 有 web_search，
   联网类 fake task 必须把它们纳入 bypass 检查。
   持久化 stdout（Claude/Codex）会脱敏 user 事件（含 tool_result）并把绝对路径替换为 `<abs_path>`；
-  工具返回值与 shell 命令原文须从同 call id 的 trajectory（由未脱敏 stdout 提取）补齐，
-  `no_bypass` 扫描命令原文，无法还原的脱敏命令记 WARN；测试的 `persist_like_run` 必须调用真实
+  工具返回值与 shell 命令原文须从同 call id 的 trajectory（由未脱敏 stdout 提取）补齐——
+  不只是被整块 redact 的，含 `<abs_path>` 的返回值同样要回填，否则返回宿主路径的工具
+  （如 `mol_to_sdf`）在 Codex 下永远无法校验；`no_bypass` 扫描命令原文，无法还原的脱敏命令记
+  WARN，无法还原、整体只剩 `<abs_path>` 的工具返回值同样记 WARN 而不得判 FAIL；测试的
+  `persist_like_run` 必须调用真实
   `_sanitize_raw_artifact_text`，不得手写近似；Claude extractor 遇到非对象 message 跳过而不抛错；Claude 对带 outputSchema 的 FastMCP 工具展示 `structuredContent`
   `{"result": ...}`，verifier 须先解包；Claude/Codex trajectory 不保存图片内容，只在 tool_result metadata 记录
   `content_types` / `image_media_types`。Codex 证据来自 `exec --json` 的 `mcp_tool_call`

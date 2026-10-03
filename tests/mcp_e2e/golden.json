@@ -198,6 +198,76 @@
   "tests/mcp_e2e/test_task_pyscf_rhf_energy.py::test_verifier_warns_when_tool_inputs_were_reformatted": [
     {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "WARN"}, "failure": null, "per_call": {"pyscf_rhf_energy": "WARN"}, "tool_sequence": ["mcp__pyscf__pyscf_rhf_energy"], "verdict": "PASS"}
   ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_a_fully_scrubbed_pickle_still_chains": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "WARN"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "WARN"}, "tool_sequence": ["mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_a_produced_script_importing_rdkit_is_a_bypass": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_answers_must_be_copied_from_tool_results": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_batch_helpers_are_only_suspicious": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["mcp__rdkit__batch_map", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_codex_run_passes": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_conf_id_must_come_from_the_embedding": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_genuine_b1_run_passes_every_check[False]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_genuine_b1_run_passes_every_check[True]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_other_seed_breaks_the_chain_and_the_answer_check": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"embed": "FAIL", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_pickles_scrubbed_in_the_persisted_log_still_chain": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[conda install -c conda-forge rdkit-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[ls ~/mcp/rdkit-WARN]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[obabel conformer.sdf -O out.xyz-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[pip install rdkit-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[python3 -c \"import json; json.dump({}, open('result.json','w'))\"-PASS]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[python3 -c 'from rdkit import Chem'-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[python3 -c 'import rdkit'-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[python3 -m rdkit_mcp.register_tools-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[uv run --with rdkit python embed.py-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[uvx rdkit-pypi-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_shell_access_to_rdkit[~/mcp/rdkit/.venv/bin/python -c 'print(1)'-FAIL]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["Bash", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_web_lookup_of_the_chemistry_is_only_suspicious": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["WebFetch", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"},
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["WebFetch", "mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_rdkit_conformer.py::test_written_sdf_must_stay_a_molfile_of_the_reference_molecule": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"embed": "PASS", "parse": "PASS", "qmax": "PASS", "qmin": "PASS", "write": "PASS"}, "tool_sequence": ["mcp__rdkit__smiles_to_mol", "mcp__rdkit__EmbedMolecule", "mcp__rdkit__mol_to_sdf", "mcp__rdkit__MaxPartialCharge", "mcp__rdkit__MinPartialCharge"], "verdict": "PASS"}
+  ],
   "tests/mcp_e2e/test_task_s4_grating_spectrum.py::test_answers_must_be_copied_from_the_returned_spectrum": [
     {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"sanity": "SKIP", "spectrum": "PASS"}, "tool_sequence": ["mcp__s4__simulate_stack_spectrum"], "verdict": "FAIL"}
   ],

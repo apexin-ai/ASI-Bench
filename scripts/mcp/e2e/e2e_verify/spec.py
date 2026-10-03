@@ -38,7 +38,8 @@ class Selector:
 
     ``extract`` applies a named extractor to the parsed JSON result; otherwise
     ``key`` (dotted path, ``None`` = the whole result) is read as numbers, or kept
-    as is with ``raw`` (chained inputs such as a session id or a geometry);
+    as is with ``raw`` (chained inputs such as a session id or a geometry; ``raw``
+    without ``key`` is the whole result, e.g. a pickle returned as one string);
     ``select`` then picks one element of that list field."""
     key: str | None = None
     extract: str | None = None
@@ -155,6 +156,7 @@ FORMATS = ("number", "json", "image")
 RESULT_MATCH = ("equal", "subset", "member")
 ANSWER_MATCH = ("equal", "member")
 CHAIN_COMPARE = ("geometry",)
+WHOLE_RESULT = "*"          # inputs_from_call map value: the source's whole result (e.g. one returned string)
 
 
 class _Parser:
@@ -303,7 +305,8 @@ class _Parser:
         if "abs_tol" in data and compare != "geometry":
             self.fail(where, "abs_tol only applies to compare 'geometry'")
         tol = self.number(data.get("abs_tol"), f"{where}.abs_tol", 1e-4) if compare == "geometry" else None
-        return ChainSpec(call, tuple(Binding((arg,), Selector(key=key, raw=True), compare, tol)
+        return ChainSpec(call, tuple(Binding((arg,), Selector(key=None if key == WHOLE_RESULT else key, raw=True),
+                                             compare, tol)
                                      for arg, key in mapping.items()))
 
     def call_spec(self, data, where: str) -> CallSpec:
