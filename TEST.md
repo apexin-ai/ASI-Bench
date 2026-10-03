@@ -689,10 +689,15 @@ absolute launch paths and foreign checkout remotes rejected; `uv-pip-pinned`
 `host_requirements` (machine, CPU flags, loadable libraries, every problem
 listed, checked before cloning); `conda-explicit` (fresh `micromamba create
 --file <lock>`, package cache under `<root>/.micromamba`, conda variables
-dropped, non-conda `.venv` refused) and the committed locks (header matches
-the manifest, conda-forge `<platform>`/`noarch` URLs with `#sha256:`; stale,
-foreign, md5-only or wrong-channel locks rejected), `setup.py --lock` from
-`micromamba --dry-run --json`. Shared checkouts: ids with the same `checkout`
+dropped, non-conda `.venv` refused) and the committed locks (every
+conda-explicit server and platform: header matches the manifest, each spec's
+version really appears, conda-forge `<platform>`/`noarch` URLs with
+`#sha256:`; stale, foreign, md5-only or wrong-channel locks rejected),
+`setup.py --lock` from
+`micromamba --dry-run --json`. The quantum_espresso config pins the local
+runner (no Docker, no `mpirun`), resolves `pw.x` from the conda prefix via
+`QE_PREFIX`, leaves `QE_WORKDIR` unset and keeps `mcp` below 2. Shared
+checkouts: ids with the same `checkout`
 install into one `<root>/<checkout>` (default is still `<root>/<id>`) while
 keeping one `*.mcp.json` and one MCP server name per id, and a group that
 differs on repository, revision, python or an install field, collides with
@@ -882,6 +887,18 @@ instance grid: ecut 350 eV was dropped because its relaxation stops on the force
 criterion (2 BFGS steps, fmax 0.0495 against 0.05) and reports an indirect
 Gamma->K gap, so ground truth there would be one GPAW release away from
 changing.
+
+For quantum_espresso (L0 only so far): `python3 scripts/mcp/e2e/setup.py
+quantum_espresso` (needs `micromamba`; the conda prefix is ~1.5 GB), then
+`~/mcp/quantum_espresso/.venv/bin/python scripts/mcp/e2e/smoke.py
+quantum_espresso --config ~/mcp/quantum_espresso.mcp.json` (no network, ~5 s).
+Expected outcome on the pinned revision: `PASS` with 16 PASS, 0 WARN, 0 FAIL —
+`pw.x`, `bands.x`, `dos.x` and `projwfc.x` each report QE 7.5, the vendored
+SG15 library holds 219 `.upf` files for 69 elements, the handshake lists the 19
+`qe_*` tools, and `qe_status` echoes the launch env with an available
+`LocalQERunner` and the same 69 elements. The report also records the measured
+`qe_versions` and `sg15_elements`. References for the other 18 tools are the L1
+stage and are not written yet.
 
 The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`.
