@@ -118,3 +118,40 @@ def test_whole_result_selector_and_text_extractors():
     for shown in ("/tmp/ws/conformer.sdf", "<workspace>/conformer.sdf", json.dumps({"result": "/a/b/conformer.sdf"})):
         assert verify.values.read(verify.evidence.ToolCall(result_text=shown), name) == "conformer.sdf"
     assert verify.values.read(verify.evidence.ToolCall(result_text=None), name) is None
+
+
+def test_listed_files_extractor_reads_any_file_listing():
+    """A listing result is compared by file name, not by the host directory it names."""
+    read = lambda data: verify.values.read(                                   # noqa: E731
+        verify.evidence.ToolCall(result_text=json.dumps(data)),
+        verify.spec.Selector(extract="listed_files"))
+    want = ["bands.png", "dos.png"]
+    assert read({"ok": True, "artifacts": [{"path": "runs/x/dos.png", "bytes": 1},
+                                           {"path": "runs/x/bands.png", "bytes": 2}]}) == want
+    assert read({"files": ["/abs/dos.png", "/abs/bands.png"]}) == want
+    assert read(["runs/x/bands.png", "runs/x/dos.png"]) == want
+    assert read({"entries": [{"name": "bands.png"}, {"filename": "dos.png"}]}) == want
+    # The reference side canonicalises the same way, so a spec lists bare names.
+    assert verify.extractors.EXTRACTORS["listed_files"].canon(want) == want
+    # Shapes it must refuse rather than guess at
+    for bad in ({"artifacts": [], "files": []}, {"artifacts": [{"bytes": 1}]},
+                {"artifacts": [1, 2]}, {"nothing": ["a.png"]}, {}, "a.png"):
+        assert read(bad) is None, bad
+
+
+def test_named_statuses_extractor_reads_a_report_of_named_checks():
+    read = lambda data: verify.values.read(                                   # noqa: E731
+        verify.evidence.ToolCall(result_text=json.dumps(data)),
+        verify.spec.Selector(extract="named_statuses"))
+    report = {"verdict": "pass_with_warnings",
+              "checks": [{"check": "convergence_gate", "status": "pass"},
+                         {"check": "band_gap_vs_mp", "status": "warn"}]}
+    want = ["convergence_gate:pass", "band_gap_vs_mp:warn"]
+    assert read(report) == want
+    assert read({"checks": [{"name": "a", "status": "PASS"}]}) == ["a:pass"]
+    assert verify.extractors.EXTRACTORS["named_statuses"].canon(want) == want
+    # Order is part of the report, so a reordered list is a different value.
+    assert read(report) != list(reversed(want))
+    for bad in ({"checks": []}, {"checks": [{"check": "a"}]}, {"checks": [{"status": "pass"}]},
+                {"checks": "pass"}, {"verdict": "pass"}, ["a:pass"]):
+        assert read(bad) is None, bad

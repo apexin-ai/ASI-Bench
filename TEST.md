@@ -733,9 +733,24 @@ default cap, WebFetch/shell HTTP bypass, workspace trap; jsbsim_engine_run:
 chunked steps WARN, another session id, no state read, trim WARN;
 s4_grating_spectrum: default harmonics, uncopied spectrum values, RCWA code
 WARN; psi4_opt_freq: reformatted geometry still chains, frequencies at the
-start geometry, in-band `ok:false`, default method). With PySCF and geomeTRIC
-installed (`uv run --with pyscf==2.14.0 --with geometric==1.1.1 ...`) the psi4
-file also regenerates seed 31415 and compares with the recorded reference.
+start geometry, in-band `ok:false`, default method; gpaw_mos2_bandgap: a second
+`run_id` breaking the chain, the one-call `run_verified_workflow` shortcut as a
+bypass, an artefact listing that is not the run directory, a different
+verification report, while `find`/`cp` in the server's own directory stay
+PASS). With PySCF and geomeTRIC installed (`uv run --with pyscf==2.14.0 --with
+geometric==1.1.1 ...`) the psi4 file also regenerates seed 31415 and compares
+with the recorded reference.
+
+`test_task_gpaw_mos2_bandgap.py` is the one task whose DFT reference cannot be
+recomputed in a test, so it runs on a synthetic `SAMPLE_MEASURED` table
+engineered to reach every branch (both convergence tolerances, all three
+`verify_run` verdicts, `params_verified` true and false) and checks the derived
+policy against it. Two further tests read the committed `MEASURED` table
+instead — that it covers the whole `(ecut, kpts_density)` grid, that the pure
+functions reproduce the gate the server itself answered, and that no instance's
+gap sits within 3 meV of a `verify_run` branch boundary — and skip while that
+table is still empty. Only `test_mx2_structure_matches_the_hardcoded_cell` and
+the generator test need ASE (`uv run --with ase==3.29.0 ...`).
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
@@ -810,6 +825,15 @@ energies and the gap and ~1e-8 eV on the Fermi level (MoS2 monolayer: gap
 E = -22.0734417 eV, recommended ecut 300 eV / density 15), so an L2 tolerance
 of 1e-6 eV is safe across platforms; it is GPAW *releases* that shift the
 values by meV.
+
+Ground truth for `mcp_e2e.gpaw_mos2_bandgap` comes from the same installation:
+`~/mcp/gpaw/.venv/bin/python scripts/mcp/e2e/measure_gpaw_table.py --config
+~/mcp/gpaw.mcp.json --output ~/mcp/gpaw-table.json` drives nine full chains
+(the eight `(ecut, kpts_density)` grid points plus one that re-gates at the
+second tolerance to confirm the generator may derive the recommendation rather
+than measure it) in about an hour, and writes the `MEASURED` literal to paste
+into `generate_gt.py`. Re-run it after bumping the server revision or the conda
+lock; `--only 400:25` is an eight-minute dry run.
 
 The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`.

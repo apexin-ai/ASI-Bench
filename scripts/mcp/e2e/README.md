@@ -19,6 +19,7 @@ involved. Upstream code is cloned, never vendored; upstream licenses apply.
 | `smoke.py` | L0/L1 smoke CLI: `smoke.py <id> --config …`, JSON report |
 | `e2e_smoke/` | `runner.py` (the shared run and generic checks), `client.py` (stdio client recording non-JSON stdout), `helpers.py`, and `servers/<id>.py` per server (references + server-specific checks, declared as `SMOKE`) |
 | `verify_run.py` | L2 verifier CLI for agent runs; implementation in `e2e_verify/` (spec, extractors, values, evidence, checks) |
+| `measure_gpaw_table.py` | gpaw only: measures the `MEASURED` ground-truth table of `mcp_e2e.gpaw_mos2_bandgap` against the pinned server (~1 h; re-run after a revision or lock bump) |
 | `locks/` | committed conda `@EXPLICIT` locks (psi4, gpaw) |
 
 Install modes:
@@ -281,3 +282,10 @@ known defects is in each smoke script.
   deliberately asks for a Materials Project structure without a key and expects
   it to fail (HTTP 401, or a connection error on an offline host): that is the
   only call that reaches out.
+- A task cannot recompute the DFT: GPAW exists only in this conda prefix and a
+  task runtime may not build one. `mcp_e2e.gpaw_mos2_bandgap` therefore carries
+  a measured table, produced by `measure_gpaw_table.py` (nine chains, ~1 h), and
+  derives everything else — k-grid, convergence recommendation, `params_verified`
+  and the `verify_run` verdict — with the same pure functions this smoke
+  validates. Only `(ecut, kpts_density)` needs measuring; `tol_mev_per_atom` just
+  picks a row of the fixed sweep and `gap_tol_ev` a branch of the verifier.

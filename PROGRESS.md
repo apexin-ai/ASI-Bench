@@ -1067,3 +1067,51 @@ Lessons — process:
   rebased with a throwaway identity and resolve append-only conflicts (PROGRESS,
   README) by keeping both sides; keep scratch directories under the session home,
   since `/tmp/...` can belong to another session's user.
+
+## gpaw L2 (`mcp_e2e.gpaw_mos2_bandgap`)
+
+Lessons — task design:
+
+- When the solver cannot enter a task runtime, a measured ground-truth table is
+  the only option — but measure the *smallest* dimension. Here only
+  `(ecut, kpts_density)` moves the SCF: `tol_mev_per_atom` picks a row of
+  check_convergence's hard-coded sweep and `gap_tol_ev` picks a branch of
+  verify_run, so both are derived at generation time by the pure functions the
+  L1 smoke already validates. 32 instance combinations cost 8 measurements.
+- Record the server's own answer for everything that is derived
+  (`measured_recommended_*`, `measured_params_verified`,
+  `measured_verdict_by_gap_tol`) and assert the derivation against it offline,
+  or the claim "derived, not guessed" is unverified. Caught in review: the
+  first version derived the verify_run verdict but measured only the gate.
+- A discrete ground truth must not sit near a decision boundary. verify_run's
+  warn branch spans `(tol, 1.5*tol]`, so centring it on this gap needs
+  `gap_tol_ev ~ 0.0123` and leaves a ~6 meV band — less than the 2-3 meV a GPAW
+  release moves the gap by, from both sides. The warn branch was dropped and
+  `generate_gt` now refuses any instance within 3 meV of a boundary
+  (`GAP_BRANCH_MARGIN_EV`). Review caught this: a third of all seeds would have
+  raised at generation time.
+- Keep the measurement script's parameters identical to the task's. Measuring
+  verify_run at tolerances no instance uses confirms nothing about any instance.
+- Bypass patterns must not fire on the correct solution. The tools report
+  artefact paths relative to the server's own directory, so locating and copying
+  the two figures necessarily puts `.../gpaw/runs/...` into a shell command: a
+  bare `\bgpaw\b` (and even `gpaw ... python`) would WARN on every passing run.
+  Match importing, installing and executing the solver instead. The test asserts
+  that no pattern matches the three legitimate commands.
+- Ask for artefacts the tool replies do not already contain. Copying the
+  server's JSON records only repeats what the agent was handed; the two PNGs
+  exist nowhere but the run directory, so handing them back is what proves the
+  artefact listing was resolved to a real path.
+
+Lessons — process:
+
+- Drive a new remote-only script against a stub MCP server locally before
+  spending an hour of AWS time on it. `StdioMCP.call_tool` returns the raw
+  JSON-RPC envelope, not the result (`Caller.__call__` unwraps it in the smoke);
+  the stub caught that in seconds.
+- Emit pasteable tables with `repr`, not `json.dumps`: the latter writes `true`,
+  which is not Python.
+- A pre-commit review sub-agent earns its keep on a task with four files that
+  must agree. It found the boundary bug above, the measure/task tolerance
+  mismatch, five missing `inputs_from_reference` arguments and an unbound
+  `relax_kpts` answer, all of which the green test suite had accepted.

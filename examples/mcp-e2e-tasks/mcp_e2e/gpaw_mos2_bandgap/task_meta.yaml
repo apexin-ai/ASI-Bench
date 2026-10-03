@@ -1,0 +1,68 @@
+id: mcp_e2e.gpaw_mos2_bandgap
+name: "MCP E2E: MoS2 monolayer relaxation, convergence gate and band structure through the gpaw MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. It exercises the longest chain of the set: six tools linked
+# by one run_id, where the convergence gate must run before the band structure
+# or the ground state is marked unverified; see examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: materials_science
+subdomain: "electronic_structure_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/Crystalhihihi/matmcp"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 10-30
+  requires_gpu: false
+  requires_network: false
+
+tags: [mcp_e2e, gpaw, dft, band_structure, convergence, tool_chain, run_id_chain]
+
+# The reference is measured, not recomputed: plane-wave DFT only exists inside
+# the server's pinned conda environment, so generate_gt.py carries a table
+# produced by scripts/mcp/e2e/measure_gpaw_table.py and derives everything else
+# (k-grid policy, convergence recommendation, params_verified gate, verify_run
+# state machine) in the standard library. ASE is needed only for the structure.
+#
+# Generate instances with `asibench generate --sandbox task`; run the agent with
+# --sandbox none and --mcp-config so GPAW is reachable only through the server.
+# Budget --timeout 1800: one chain is about 430 s of pure SCF on a
+# single-threaded host, of which the hard-coded convergence sweep is ~60%.
+runtime:
+  python: ">=3.11"
+  packages: ["ase==3.29.0"]
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: calculation.json
+      type: data
+      description: "Plane-wave cutoff, k-point density, convergence tolerance and band-gap
+        tolerance for this instance, plus the fixed arguments of the chain (query, fmax,
+        max_steps, npoints, window_ev, engine) and the files to hand back."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with the relaxation, ground-state, convergence-gate and
+        verification numbers exactly as the MCP tools returned them."
+    - name: bands.png
+      type: data
+      description: "The band-structure figure the server wrote, located through the artefact
+        listing and copied unchanged. It exists only in the run directory: every tool returns
+        its path, never its bytes."
+    - name: dos.png
+      type: data
+      description: "The density-of-states figure the server wrote, copied unchanged."

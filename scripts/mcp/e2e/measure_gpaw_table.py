@@ -62,7 +62,9 @@ ECUTS = (350, 400, 450, 500)
 KPTS_DENSITIES = (15.0, 25.0)
 # The task's free parameters; the first of each is the one the chains use.
 TOL_MEV_PER_ATOM = (5.0, 0.3)
-GAP_TOL_EV = (0.02, 0.3)
+# Keep in step with GAP_TOL_EV in the task's generate_gt.py: measuring verify_run
+# at tolerances no instance uses would confirm nothing about any instance.
+GAP_TOL_EV = (0.005, 0.3)
 # The chain that additionally re-runs the gate and the bands at TOL_MEV_PER_ATOM[1],
 # so that the generator's derivation of the recommendation and of params_verified
 # is confirmed against the server instead of assumed.
@@ -289,6 +291,14 @@ def render_literal(records: list[dict]) -> str:
             ("measured_recommended_kpts_density", conv.get("recommended_kpts_density")),
             ("measured_converged", conv.get("converged")),
             ("measured_params_verified", bands.get("params_verified")),
+            ("measured_band_gap_ref", (record["fetch"] or {}).get("band_gap_ref")),
+            # verify_run's own answer at each gap tolerance: the generator derives
+            # these from the state machine and the offline tests compare.
+            ("measured_verdict_by_gap_tol", {
+                tol: data.get("verdict") for tol, data in record["verify_by_gap_tol"].items()}),
+            ("measured_verify_labels_by_gap_tol", {
+                tol: [f"{c.get('check')}:{c.get('status')}" for c in data.get("checks") or []]
+                for tol, data in record["verify_by_gap_tol"].items()}),
         ):
             lines.append(f"        {json.dumps(key)}: {number(value)},")
         for sweep in ("ecut_sweep", "kpts_sweep"):
