@@ -946,8 +946,10 @@
   commands `879dfc0`, for tool results `86905ae` and for tool arguments
   `913d94e`, `$HOME` pinned in the MCP E2E tests `81d31e2`.
 - Verification: every task passed B1–B4 on AWS Linux amd64 with both Claude Code
-  (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`, effort medium) at full local
-  score and with every verifier check PASS; per-task dates in
+  (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`, effort medium) with every
+  verifier check PASS, and at full local score except `build123d_plate_measure`
+  on Codex b1 (396/400: it reported the bolt circle's diameter where the bolt
+  hole's was asked for, which the prompt now spells out); per-task dates in
   `examples/mcp-e2e-tasks/README.md`, per-server smoke counts in
   `scripts/mcp/e2e/README.md`. Offline coverage is `tests/mcp_e2e/` (469 tests)
   with the golden snapshot pinning every `verify_one` outcome.

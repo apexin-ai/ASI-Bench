@@ -32,7 +32,7 @@ Three files must end up in the current working directory:
 - `reimported_volume_mm3`: the volume reported when the exported STEP is imported back into the session — read the file back and report what that import says, which is what proves the written file holds the solid.
 - `bbox_mm`: the bounding-box sizes along X, Y and Z (mm), in that order.
 - `hole_count`: how many holes the recogniser finds in the part.
-- `bolt_hole_diameter_mm`: the diameter of the bolt-circle holes (mm).
+- `bolt_hole_diameter_mm`: the diameter of **one bolt hole** of the pattern, in mm, as the feature recogniser reports it — the hole itself, not the diameter of the circle the holes sit on.
 - `n_solids`, `passes_gate`: from the validity gate.
 
 Copy each value exactly as the tools return it (full precision); do not round, convert or recompute them.

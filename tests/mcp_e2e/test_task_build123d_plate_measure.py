@@ -300,6 +300,8 @@ def test_prompts_name_the_server_only_at_b1_b2_and_keep_the_rules():
         assert "full precision" in text and "copied unchanged" in text
         # the verifier requires import_cad_file, so every level must ask for the read-back
         assert "reimported_volume_mm3" in text
+        # the bolt-hole diameter must not be confusable with the bolt-circle diameter
+        assert "not the diameter of the circle the holes" in text
         assert ("read the file back" in text or "reading it back" in text
                 or "importing it back" in text or "read the written STEP back" in text)
         assert "mcp__" not in text and "Claude" not in text and "Codex" not in text
@@ -431,6 +433,10 @@ def test_submission_failures_score_zero(tmp_path):
     # a hole table read off the input file instead of the recogniser
     pred, ref = _dirs(tmp_path / "g", _answer(hole_count=8, bolt_hole_diameter_mm=6.0))
     assert TASK.total(pred, ref) == pytest.approx(100.0 - 2 * 20 / 5)
+    # the bolt *circle* diameter instead of the bolt *hole* diameter: one fifth of the
+    # feature weight (the first Codex b1 run did exactly this, hence the prompt wording)
+    pred, ref = _dirs(tmp_path / "g2", _answer(bolt_hole_diameter_mm=CASE["bolt_circle_d"]))
+    assert TASK.total(pred, ref) == pytest.approx(100.0 - 20 / 5)
     # the STEP written without the object name carries no part label
     pred, ref = _dirs(tmp_path / "h", _answer(), step=_step(label="COMPOUND"))
     assert TASK.total(pred, ref) == pytest.approx(90.0)

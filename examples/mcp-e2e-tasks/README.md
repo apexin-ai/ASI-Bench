@@ -57,8 +57,15 @@ works; it is not a pass rate.
 | `s4_grating_spectrum` | 2026-10-02 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `psi4_opt_freq` | 2026-10-02 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `rdkit_conformer` | 2026-10-03 | 4 × 100, 4/4 | 4 × 100, 4/4 |
+| `build123d_plate_measure` | 2026-10-03 | 4 × 100, 4/4 | 396/400 (b1 96), 4/4 |
 
 In every run at B3/B4 the agent found the tools without being told their names.
+
+The one deduction: Codex's `build123d_plate_measure` b1 reported the bolt *circle*
+diameter as `bolt_hole_diameter_mm` (the input file carries both numbers), which costs a
+fifth of the feature weight. Every verifier check still passed — the value came from a
+tool, it was just the wrong one. The output description now says "one bolt hole … not the
+diameter of the circle the holes sit on"; the run above predates that wording.
 
 ## Run
 
@@ -91,8 +98,14 @@ python3 scripts/mcp/e2e/verify_run.py --results-dir $OUT \
 For Codex, use `--agent codex_cli --agent-config '{"model": "gpt-5.6-sol",
 "effort": "medium", "codex_home": "/abs/path"}'`. With a custom gateway, put
 `config.toml` and `auth.json` in a directory of their own and point both
-`CODEX_HOME` and `codex_home` at it. The isolated run home copies `config.toml`
-only from `codex_home`; without it Codex falls back to the default endpoint.
+`CODEX_HOME` and `codex_home` at it: the isolated run home copies `config.toml`
+from the `codex_home` of `--agent-config` but `auth.json` from the *shell's*
+`CODEX_HOME` (else `~/.codex`). Miss either and Codex starts, finds no usable
+credentials and finishes without a single model call. A gateway that
+authenticates through `OPENAI_API_KEY` does not work either: without an
+`api_key` in `--agent-config` the adapter removes that variable from the
+agent's environment, so use `auth.json` or name the variable something else in
+`config.toml`.
 
 Host runs have no filesystem isolation, so use a dedicated unprivileged user.
 The agent can still find the backend library elsewhere on the host; catching
