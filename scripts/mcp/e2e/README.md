@@ -19,7 +19,7 @@ involved. Upstream code is cloned, never vendored; upstream licenses apply.
 | `smoke.py` | L0/L1 smoke CLI: `smoke.py <id> --config …`, JSON report |
 | `e2e_smoke/` | `runner.py` (the shared run and generic checks), `client.py` (stdio client recording non-JSON stdout), `helpers.py`, and `servers/<id>.py` per server (references + server-specific checks, declared as `SMOKE`) |
 | `verify_run.py` | L2 verifier CLI for agent runs; implementation in `e2e_verify/` (spec, extractors, values, evidence, checks) |
-| `locks/` | committed conda `@EXPLICIT` locks (psi4) |
+| `locks/` | committed conda `@EXPLICIT` locks (psi4, quantum_espresso) |
 
 Install modes:
 
@@ -94,13 +94,17 @@ re-implementing them.
 | `psi4` | `Keith9922/chemaster` (`calc_psi4`) | conda-explicit | `micromamba` on `PATH` | 14 / 11 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
 | `rdkit` | `tandemai-inc/rdkit-mcp-server` (catalog `rdkit_tandem`) | uv-pip-pinned, Py 3.12 | — | 125 / 28 / 0, amd64, 2026-10-03 (aarch64 identical 2026-10-02) |
 | `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, amd64 and aarch64, 2026-10-03 |
+| `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | L0 only: 16 / 0 / 0, aarch64, 2026-10-03 |
+
+`quantum_espresso` is at L0: the environment checks and `qe_status` run, the
+numerical references for the other 18 tools are not written yet.
 
 Install the prerequisites before running `setup.py`:
 
 ```sh
 sudo apt-get install libblas3 liblapack3            # s4, admin, once
 mkdir -p ~/.local/bin && curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
-  | tar -xj -C ~/.local bin/micromamba               # psi4
+  | tar -xj -C ~/.local bin/micromamba               # psi4, quantum_espresso
 ```
 
 ## Notes for task authors
@@ -224,3 +228,54 @@ known defects is in each smoke script.
   not build a task on them.
 - No display, Xvfb, network or CAD application is needed: `render_view` and
   `health_check` pass headless.
+
+**quantum_espresso**
+
+- Real DFT with real binaries: the conda environment provides `pw.x`,
+  `bands.x`, `dos.x` and `projwfc.x` (`qe=7.5`, openmpi build). The launch env
+  pins `QE_RUNNER=local`, `QE_USE_DOCKER=false` and `QE_NPROCS=1`, so
+  executables are run directly, never through `mpirun`, Docker or Globus. A
+  singleton `pw.x` needs no `OMPI_MCA_*` settings (verified on aarch64).
+- Both platform locks pin `qe` 7.5, but different conda-forge builds
+  (`h19104ac_2` on linux-64, `hc91ee90_1` on linux-aarch64), so energies are
+  not expected to agree bit for bit across platforms.
+- `mcp` must stay below 2: this revision imports `mcp.server.fastmcp`, which
+  mcp 2.x replaced with `mcp.server.mcpserver.MCPServer`. The manifest pins
+  `mcp=1.28.1`. `spglib` is declared by upstream but never imported.
+- The 219 SG15 ONCV `.upf` files (69 elements) are vendored in the pinned
+  revision, so `scripts/download_pseudos.py` is never run and no calculation
+  needs the network. The two Materials Project tools are the only ones that go
+  online, and they need `MP_API_KEY`; do not describe the server as fully
+  offline.
+- Which pseudopotential file an element gets is **not** reproducible across
+  hosts: `SG15Library._scan_library` iterates `glob("*.upf")` and lets a later
+  non-`_FR` file overwrite an earlier one without sorting or comparing
+  versions, so for Si (1.0, 1.1, 1.2 are all shipped) the pick follows the
+  host's directory order. The *element set* is stable. A task must read the
+  actual pick from `qe_list_pseudopotentials` → `details.<El>.filename` (a bare
+  file name, so path scrubbing leaves it intact) and generate its ground truth
+  on the host that runs the agent, or score only quantities that do not depend
+  on the pseudopotential version.
+- `qe_read_bands(output_dir)` and `qe_read_dos(output_dir)` want a **file**
+  path (`bands.dat.gnu`, the dos `.dat`), not a directory, despite the
+  parameter name; a directory gives `File not found`.
+- `bands.x` and `dos.x` can only be reached through the workflow tools:
+  `server.py` imports `postprocessing.run_bands/run_dos/run_pdos` but never
+  registers them, so no tool can produce a PDOS and `qe_read_pdos` can only
+  read a file from elsewhere.
+- Semiconductors are forced to `occupations='smearing'` with cold smearing and
+  `degauss=0.02`, so a band gap is derived from the `bands.dat` eigenvalues and
+  the smeared SCF Fermi energy. Physically crude, but deterministic — and a
+  good fingerprint, since another code will not reproduce it.
+- Defaults worth knowing: cutoffs come from an SG15 hint table (Si 30/120 Ry),
+  the automatic k grid is `round(40/|a_i|)` snapped to odd numbers (Si diamond
+  → 11×11×11), `nbnd = 8·natoms`, and `workflow_dos` runs its NSCF step on
+  **twice** the SCF grid — pass `kpoints` explicitly or it becomes very
+  expensive.
+- `QE_WORKDIR` is deliberately left unset, so work directories are
+  `<cwd>/qe_calculations`: a temporary directory under the smoke, the checkout
+  (gitignored upstream) under an agent run. Each SCF copies its `.upf` files
+  there, so clean `<checkout>/qe_calculations` between runs — and nothing else,
+  the checkout must stay clean for `setup.py`.
+- `qe_get_job_status` only means something for the Globus runner; with
+  `QE_RUNNER=local` it always answers `not found in registry`.
