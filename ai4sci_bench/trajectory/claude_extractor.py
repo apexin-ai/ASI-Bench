@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ai4sci_bench.core.trajectory import Trajectory, TrajectoryStep, TrajectorySummary
+from ai4sci_bench.core.trajectory import KEY_ARG_NAMES, Trajectory, TrajectoryStep, TrajectorySummary
 
 
 def _message_blocks(event: dict) -> tuple[dict, list[dict]]:
@@ -81,7 +81,7 @@ def extract_from_jsonl(jsonl_text: str, instance_id: str = "") -> Trajectory:
                     inputs = block.get("input", {}) or {}
                     key_args = {}
                     if isinstance(inputs, dict):
-                        for k in ("file_path", "path", "command", "pattern", "url"):
+                        for k in KEY_ARG_NAMES:
                             if k in inputs:
                                 key_args[k] = str(inputs[k])
                     steps.append(TrajectoryStep(

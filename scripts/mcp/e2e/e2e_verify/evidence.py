@@ -4,12 +4,16 @@ One parser per harness log format turns the raw stdout into :class:`Evidence`;
 the normalised trajectory is the adapter-neutral fallback.
 
 ``asibench run`` saves the raw stdout sanitized: user events (Claude tool
-results) are redacted and absolute host paths become ``<abs_path>``. The
-trajectory is extracted from the unsanitized stdout, so :func:`load_evidence`
-fills in tool results and the as-executed text of shell commands from it. The parser is chosen
-from the result's ``agent_name`` (:data:`HARNESSES`); an unknown agent falls
-back to trying each format in turn. To support another harness, add a parser
-to :data:`PARSERS` and map its adapter class in :data:`HARNESSES`.
+results) are redacted, and host paths are replaced with placeholders
+(:data:`SCRUB_MARKERS`) — the home directory, the workspace, the run output
+directory and the repository root by name, everything else as ``<abs_path>``.
+The trajectory is extracted from the unsanitized stdout, so
+:func:`load_evidence` fills tool results, tool *arguments* and the as-executed
+text of shell commands back in from it; what it cannot restore is reported as a
+coverage gap instead of a wrong answer. The parser is chosen from the result's
+``agent_name`` (:data:`HARNESSES`); an unknown agent falls back to trying each
+format in turn. To support another harness, add a parser to :data:`PARSERS` and
+map its adapter class in :data:`HARNESSES`.
 """
 from __future__ import annotations
 
@@ -20,6 +24,23 @@ from typing import Any, Callable
 
 SCRUBBED = "<abs_path>"
 """What ``asibench run`` leaves in a persisted artefact in place of an absolute host path."""
+
+SCRUB_MARKERS = (SCRUBBED, "<home>", "<workspace>", "<run_output_dir>", "<repo_root>", "<redacted>")
+"""Every placeholder ``ai4sci_bench.runner.orchestrator`` can leave behind. A value that
+carries one of them is not the value the agent saw: it must be restored from the
+trajectory, or treated as unobservable — never compared with a reference.
+"""
+
+
+def is_scrubbed(value) -> bool:
+    """Whether a persisted value (string, or a dict/list of them) carries a placeholder."""
+    if isinstance(value, str):
+        return any(marker in value for marker in SCRUB_MARKERS)
+    if isinstance(value, dict):
+        return any(is_scrubbed(item) for item in value.values())
+    if isinstance(value, list):
+        return any(is_scrubbed(item) for item in value)
+    return False
 
 
 @dataclass
@@ -32,6 +53,20 @@ class ToolCall:
     content_types: list[str] | None = None   # content block types; None = not observable
     media_types: list[str] | None = None     # image media types
 
+    @property
+    def result_lost(self) -> bool:
+        """No result observed, or only a scrubbed copy the trajectory could not restore."""
+        return self.result_text is None or is_scrubbed(self.result_text)
+
+    def input_lost(self, *args: str) -> bool:
+        """Whether any of ``args`` (all arguments if none are named) is only available
+        scrubbed, so comparing it with a reference or an earlier result proves nothing."""
+        if not isinstance(self.input, dict):
+            return True
+        if not args:
+            return is_scrubbed(self.input)
+        return any(is_scrubbed(self.input.get(arg)) for arg in args)
+
 
 @dataclass
 class Command:
@@ -43,7 +78,7 @@ class Command:
 
     @property
     def scrubbed(self) -> bool:
-        return SCRUBBED in self.text and self.raw is None
+        return is_scrubbed(self.text) and self.raw is None
 
 
 @dataclass
@@ -301,6 +336,31 @@ def enrich_commands_from_trajectory(ev: Evidence, path: Path) -> int:
     return matched
 
 
+def enrich_inputs_from_trajectory(ev: Evidence, path: Path) -> int:
+    """Restore scrubbed tool arguments from the trajectory's ``key_args``; return how many
+    arguments were restored.
+
+    A path argument (``export(filename=…)``, ``import_cad_file(path=…)``) survives
+    persistence only as a placeholder, while the trajectory keeps it as passed
+    (``ai4sci_bench.core.trajectory.KEY_ARG_NAMES``), keyed by the same call id.
+    """
+    raw: dict[str, dict] = {}
+    for step in _trajectory_steps(path):
+        meta = step.get("metadata") or {}
+        key_args = meta.get("key_args") or {}
+        if step.get("step_type") == "tool_call" and _step_id(meta) and isinstance(key_args, dict):
+            raw.setdefault(_step_id(meta), {}).update(key_args)
+    restored = 0
+    for call in ev.calls:
+        if not isinstance(call.input, dict) or call.id not in raw:
+            continue
+        for arg, value in raw[call.id].items():
+            if arg in call.input and is_scrubbed(call.input.get(arg)) and not is_scrubbed(value):
+                call.input[arg] = value
+                restored += 1
+    return restored
+
+
 def enrich_results_from_trajectory(ev: Evidence, path: Path) -> int:
     """Fill tool results missing or scrubbed in the persisted stream; return how many were filled.
 
@@ -308,7 +368,7 @@ def enrich_results_from_trajectory(ev: Evidence, path: Path) -> int:
     stream-json (prompt protection), which also removes tool_result payloads, and
     replaces absolute host paths with ``<abs_path>`` everywhere. The Codex JSONL
     keeps its MCP results, so a tool returning a path (``mol_to_sdf``) survives
-    persistence only as ``<abs_path>``. The trajectory is extracted from the
+    persistence only scrubbed. The trajectory is extracted from the
     unsanitized stream and keeps the result text and content block types, keyed by
     the same tool_call_id: it is the source for both cases.
     """
@@ -319,8 +379,7 @@ def enrich_results_from_trajectory(ev: Evidence, path: Path) -> int:
             steps[meta["tool_call_id"]] = step
     filled = 0
     for call in ev.calls:
-        lost = call.result_text in (None, "<redacted>") or SCRUBBED in (call.result_text or "")
-        if lost and call.id in steps:
+        if call.result_lost and call.id in steps:
             _apply_result(call, steps[call.id])
             filled += 1
     return filled
@@ -368,5 +427,8 @@ def load_evidence(result_path: Path, result: dict) -> Evidence | None:
         filled = enrich_results_from_trajectory(ev, traj)
         if filled:
             ev.source += f" + {filled} tool result(s) from {traj_file}"
+        restored = enrich_inputs_from_trajectory(ev, traj)
+        if restored:
+            ev.source += f" + {restored} tool argument(s) from {traj_file}"
         enrich_commands_from_trajectory(ev, traj)
     return ev

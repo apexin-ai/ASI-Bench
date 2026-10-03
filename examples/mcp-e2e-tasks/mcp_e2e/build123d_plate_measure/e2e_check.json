@@ -1,0 +1,187 @@
+{
+  "schema_version": 2,
+  "server": "build123d",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": [
+    "analyze_printability",
+    "compare",
+    "crop_drawing",
+    "cross_sections",
+    "design_audit",
+    "destroy_session",
+    "execute",
+    "execute_file",
+    "export",
+    "find_bored_bosses",
+    "find_bosses",
+    "find_countersinks",
+    "find_hole_patterns",
+    "find_holes",
+    "health_check",
+    "import_cad_file",
+    "inspect_drawing",
+    "inspect_part",
+    "install_skill",
+    "last_error",
+    "lint_drawing",
+    "list_sessions",
+    "locate_gate_defects",
+    "measure",
+    "prepare_drawing",
+    "recognise_features",
+    "render_drawing",
+    "render_view",
+    "repair_advice",
+    "repair_hints",
+    "reset",
+    "resolve",
+    "restore_snapshot",
+    "save_drawing_annotations",
+    "save_snapshot",
+    "script",
+    "session_state",
+    "suggest_view_layout",
+    "validate",
+    "version",
+    "view_axes",
+    "workflow_hints"
+  ],
+  "calls": [
+    {
+      "name": "meas",
+      "tool": "measure",
+      "inputs_from_reference": {
+        "object_name": "part",
+        "material": "material"
+      },
+      "result": {
+        "format": "json",
+        "key": "volume",
+        "reference_key": "volume_mm3",
+        "abs_tol": 0.001
+      }
+    },
+    {
+      "name": "holes",
+      "tool": "find_holes",
+      "inputs_from_reference": {
+        "object_name": "part"
+      },
+      "result": {
+        "format": "json",
+        "key": "count",
+        "reference_key": "hole_count",
+        "abs_tol": 0
+      }
+    },
+    {
+      "name": "pattern",
+      "tool": "find_hole_patterns",
+      "inputs_from_reference": {
+        "object_name": "part"
+      },
+      "result": {
+        "format": "json",
+        "key": "count",
+        "reference_key": "bolt_pattern_count",
+        "abs_tol": 0
+      }
+    },
+    {
+      "name": "write",
+      "tool": "export",
+      "inputs_from_reference": {
+        "filename": "export_stem",
+        "object_name": "part"
+      },
+      "result": {
+        "format": "json",
+        "extract": "exported_files",
+        "reference_key": "export_files",
+        "match": "equal"
+      }
+    },
+    {
+      "name": "reimport",
+      "tool": "import_cad_file",
+      "inputs_from_call": {
+        "call": "write",
+        "extract": "exported_files",
+        "args": [
+          "path"
+        ],
+        "match": "member"
+      },
+      "result": {
+        "format": "json",
+        "key": "volume",
+        "reference_key": "volume_mm3",
+        "abs_tol": 0.001
+      }
+    }
+  ],
+  "answers": [
+    {
+      "prediction_key": "volume_mm3",
+      "from_call": "meas",
+      "result_key": "volume",
+      "reference_key": "volume_mm3",
+      "abs_tol": 0.001
+    },
+    {
+      "prediction_key": "surface_area_mm2",
+      "from_call": "meas",
+      "result_key": "area",
+      "reference_key": "surface_area_mm2",
+      "abs_tol": 0.001
+    },
+    {
+      "prediction_key": "mass_g",
+      "from_call": "meas",
+      "result_key": "mass_g",
+      "reference_key": "mass_g",
+      "abs_tol": 0.001
+    },
+    {
+      "prediction_key": "izz_g_mm2",
+      "from_call": "meas",
+      "result_key": "inertia.Izz",
+      "reference_key": "izz_g_mm2",
+      "abs_tol": 0.01
+    },
+    {
+      "prediction_key": "reimported_volume_mm3",
+      "from_call": "reimport",
+      "result_key": "volume",
+      "reference_key": "reimported_volume_mm3",
+      "abs_tol": 0.001
+    },
+    {
+      "prediction_key": "hole_count",
+      "from_call": "holes",
+      "result_key": "count",
+      "reference_key": "hole_count",
+      "abs_tol": 0
+    }
+  ],
+  "bypass_patterns": [
+    "(import|from)\\s+(build123d|OCP|cadquery|trimesh|numpy_stl)\\b",
+    "\\b(pip|pip3|uv|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\b(build123d|build123d-mcp|cadquery|cadquery-ocp|cadquery-ocp-novtk|pythonocc-core|trimesh|numpy-stl|meshio|pyvista)\\b",
+    "\\buvx\\b[^\\n]*\\b(build123d|cadquery)\\b",
+    "\\bbuild123d-mcp\\b",
+    "(build123d|cadquery|freecad)[^\\s'\"]*/\\.venv/bin/(python|build123d-mcp)",
+    "\\b(freecadcmd|openscad|gmsh|meshlabserver|admesh|assimp)\\b"
+  ],
+  "suspicious_patterns": [
+    "\\bbuild123d\\b",
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ],
+  "suspicious_tools": {
+    "WebFetch": "(?i)\\b(build123d|cadquery|opencascade)\\b",
+    "WebSearch": "(?i)\\b(build123d|cadquery|opencascade)\\b",
+    "web_fetch": "(?i)\\b(build123d|cadquery|opencascade)\\b",
+    "web_search": "(?i)\\b(build123d|cadquery|opencascade)\\b"
+  }
+}

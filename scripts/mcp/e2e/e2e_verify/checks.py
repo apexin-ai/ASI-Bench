@@ -94,6 +94,12 @@ def judge_call(call: ToolCall, cs: CallSpec, reference: dict) -> dict:
     if isinstance(call.input, dict) and cs.inputs_from_reference:
         inputs_ok = all(values.same_input(call.input.get(arg), reference.get(ref_key))
                         for arg, ref_key in cs.inputs_from_reference.items())
+        # An argument only available scrubbed (a host path the trajectory could not
+        # restore) carries nothing to compare: leave the verdict open rather than
+        # reporting inputs that "differ from the reference".
+        if not inputs_ok and call.input_lost(*cs.inputs_from_reference):
+            report["inputs_scrubbed"] = True
+            inputs_ok = None
     report["inputs_match_reference"] = inputs_ok
     rs = cs.result
     if call.is_error or (call.result_text is None and rs.format != "image"):
@@ -110,13 +116,17 @@ def judge_call(call: ToolCall, cs: CallSpec, reference: dict) -> dict:
         if rs.selector.extract:
             ref = values.canon(rs.selector.extract)(reference.get(rs.reference_key))
             report["extracted"] = value
-            # A value the persistence replaced wholesale (a returned host path) and that no
-            # trajectory restored carries nothing to compare: a coverage gap, not a wrong result.
-            report["result_ok"] = None if value == values.SCRUBBED else values.matches(value, ref, rs.match)
+            report["result_ok"] = values.matches(value, ref, rs.match)
         else:
             err = values.diff(value, values.numbers(reference.get(rs.reference_key)))
             report["abs_error"] = None if math.isinf(err) else err
             report["result_ok"] = err <= rs.abs_tol
+        # A result the persistence replaced with placeholders (a returned host path) and
+        # that no trajectory restored carries nothing to compare: a coverage gap, not a
+        # wrong result.
+        if not report["result_ok"] and call.result_lost:
+            report["result_scrubbed"] = True
+            report["result_ok"] = None
     return report
 
 
@@ -165,17 +175,20 @@ def _judge_link(ctx: Context, cs: CallSpec) -> tuple[str, str]:
     consumers = ctx.by_spec.get(cs.name, [])
     if not consumers or not sources:
         return "FAIL", f"{where}: no {'consumer' if not consumers else 'source'} call"
+    compare = [(b, values.link_comparator(b)) for b in link.bindings]
+    args = [arg for b in link.bindings for arg in b.args]
     observed = [c for c in consumers if isinstance(c.input, dict)]
     if not observed:
         return "WARN", f"{where}: tool inputs not observable in this evidence"
-    compare = [(b, values.link_comparator(b)) for b in link.bindings]
-    args = [arg for b in link.bindings for arg in b.args]
     for consumer in observed:
         for source in sources:
             if all(any(consumer.input.get(arg) is not None and same(consumer.input[arg], values.read(source, b.source))
                        for arg in b.args) for b, same in compare):
                 return "PASS", f"{where}: {args} equal a {link.call} result"
     seen = [{arg: c.input.get(arg) for arg in args if c.input.get(arg) is not None} for c in observed]
+    if any(c.input_lost(*args) for c in observed):
+        return "WARN", (f"{where}: {args} are only available scrubbed in this evidence "
+                        f"({seen[:3]}), so the link is not checkable")
     return "FAIL", f"{where}: {args} do not equal any of {len(sources)} {link.call} result(s); inputs seen: {seen[:3]}"
 
 

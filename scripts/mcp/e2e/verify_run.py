@@ -21,8 +21,14 @@ per result:
                     the backend directly, and no listed non-MCP tool (e.g.
                     WebFetch) reached it (suspicious commands/tools are WARN).
                     Commands are scanned as executed (trajectory text; the
-                    saved log has absolute paths scrubbed to <abs_path>); a
+                    saved log has host paths replaced with placeholders); a
                     scrubbed command without trajectory text is a WARN
+
+Persistence replaces host paths with placeholders (<abs_path>, <home>,
+<workspace>, <run_output_dir>, <repo_root>). Tool results, shell commands and
+path-like tool arguments are restored from the trajectory by call id; a
+comparison that only a placeholder made fail is reported as unobservable
+(WARN), never as a wrong result or a wrong input.
 
 Per-task expectations come from ``e2e_check.json`` in the task directory
 (examples in examples/mcp-e2e-tasks/mcp_e2e/*/). It is validated strictly when
@@ -49,8 +55,8 @@ text result), read as a number or list of numbers; ``select`` narrows a list
 field to one element (``reduce`` max/min, ``argmax_of``/``argmin_of`` another
 field, or ``where_key`` equal to the reference value ``equals_reference_key``,
 e.g. R at a given wavelength of a returned spectrum); ``extract`` instead
-applies a named extractor (``arxiv_ids``, ``term_counts``; see
-e2e_verify/extractors.py) to the whole result.
+applies a named extractor (``arxiv_ids``, ``term_counts``, ``file_name``,
+``exported_files``, …; see e2e_verify/extractors.py) to the whole result.
 
 ``result.format`` is ``number`` (the whole text result), ``json`` (``key`` or
 ``extract``) or ``image`` (+ ``media_type``); numbers match within ``abs_tol``,

@@ -1,0 +1,58 @@
+id: mcp_e2e.build123d_plate_measure
+name: "MCP E2E: model, gate, measure and export a bolted cover plate through the build123d MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. It exercises a stateful CAD session (build -> gate -> measure
+# -> recognise -> export -> re-import), two tools whose arguments are host paths,
+# and two artefacts the server writes itself; see
+# examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: engineering
+subdomain: "cad_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/pzfreo/build123d-mcp"
+
+difficulty:
+  estimated_lines: 0-30
+  estimated_time_minutes: 1-5
+  requires_gpu: false
+  requires_network: false
+
+tags: [mcp_e2e, build123d, cad, parametric_modeling, validity_gate, step, stl, tool_chain]
+
+# The generator and the scorers are standard library only: every scored quantity
+# has a closed form, so neither needs build123d or OpenCascade. Generate with
+# `asibench generate`; run the agent with --sandbox none and --mcp-config so that
+# build123d is reachable only through the MCP server.
+runtime:
+  python: ">=3.11"
+  packages: []
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: plate.json
+      type: data
+      description: "Part name, plate dimensions, corner radius, central bore, bolt circle, material and the export stem."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with the measured volume, surface area, mass, Izz, bounding box, hole table and gate verdict."
+    - name: part.step
+      type: data
+      description: "The STEP file written by the server's export tool and copied into the working directory."
+    - name: part.stl
+      type: data
+      description: "The STL file written by the server's export tool and copied into the working directory."

@@ -197,7 +197,7 @@ class Task:
 
     def verify(self, tmp_path: Path, stream: str, *, reference: dict, answer: Any, harness: str = "claude",
                persist: bool = True, raw_stdout: bool = True, trajectory: bool = True,
-               files: dict[str, str] | None = None,
+               files: dict[str, str | bytes] | None = None,
                edit_trajectory: Callable[[list[dict]], None] | None = None) -> dict:
         """Lay out one run result as ``asibench run`` does and return ``verify_one``'s row.
 
@@ -216,8 +216,9 @@ class Task:
         ref.joinpath("reference.json").write_text(json.dumps(reference))
         if answer is not None:
             outputs.joinpath("result.json").write_text(json.dumps(answer))
-        for name, text in (files or {}).items():
-            outputs.joinpath(name).write_text(text)
+        for name, content in (files or {}).items():
+            path = outputs.joinpath(name)
+            path.write_bytes(content) if isinstance(content, bytes) else path.write_text(content)
         agent: dict = {"persisted_outputs": {"dir": outputs.name}}
         stdout = f"{instance_id}__b1.agent_stdout.jsonl"
         if persist:

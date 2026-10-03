@@ -623,9 +623,12 @@ MCP_E2E_GOLDEN=update uv run --frozen pytest -q tests/mcp_e2e
 The update refuses `-k` / `file::test` selections and red runs.
 
 Persistence: `support.persist_like_run` runs the orchestrator's real
-`_sanitize_raw_artifact_text` for Claude and Codex logs (user events
-redacted, absolute paths → `<abs_path>`) and extracts the trajectory from the
-unsanitized log, as `asibench run` does; Codex scenarios are persisted too.
+`_sanitize_raw_artifact_text` for Claude and Codex logs (user events redacted,
+host paths → `<home>` / `<workspace>` / `<run_output_dir>` / `<repo_root>` /
+`<abs_path>`) and extracts the trajectory from the unsanitized log, as
+`asibench run` does; Codex scenarios are persisted too. `conftest.py` pins
+`$HOME` to a sentinel for the whole package, so which placeholder a fixture
+path becomes does not depend on who runs the suite.
 `test_task_s4_grating_spectrum.py` checks that a `ctypes.CDLL('/…/libS4.so')`
 command is scrubbed in the saved log yet still FAILs `no_bypass` (as-executed
 text from the trajectory), and that a scrubbed command without a trajectory is
@@ -635,6 +638,10 @@ a `no_bypass` WARN; `test_verify_evidence.py` checks the same for a Codex
 the trajectory by call id; `test_task_rdkit_conformer.py` checks that when
 nothing unscrubbed is left the returned path is a `tool_correct` WARN (coverage
 gap) rather than a FAIL, while the partially scrubbed pickles still chain;
+`test_task_build123d_plate_measure.py` checks the same for scrubbed tool
+*arguments*: a genuine run's `import_cad_file(path=…)` is restored from the
+trajectory's `key_args` and PASSes `tool_chain`, importing a file the server
+never wrote FAILs it, and exporting to another path is a `tool_correct` WARN;
 `tests/test_trajectory.py` checks that the Claude extractor
 skips events whose `message` is not an object instead of raising.
 
