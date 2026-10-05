@@ -28,6 +28,8 @@ The exact additional-tools/include/max-tool-calls request reported in issue #8
 must fail explicitly before upstream execution on both versions. No agent CLI
 or live model is run. JSON non-object bodies and invalid custom names must
 return client errors rather than crashing the handler.
+Malformed upstream output and tool calls missing call IDs return HTTP 502 in
+both JSON and SSE modes, before sending successful response headers.
 These tests do not validate provider-side encrypted reasoning replay or live
 upstream streaming; those remain separate work under issue #8.
 

@@ -1790,8 +1790,23 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
             self._send_openai_error(502, "Failed to serialize translated Responses response")
             return
 
+        # Validate before either JSON or SSE handling. Otherwise malformed
+        # upstream data can crash the handler or masquerade as an empty success.
+        output = resp_dict.get("output") if isinstance(resp_dict, dict) else None
+        if not isinstance(output, list) or any(not isinstance(item, dict) for item in output):
+            self._send_openai_error(502, "Malformed Responses output: expected an array of objects")
+            return
+        for item in output:
+            if item.get("type") in {"function_call", "custom_tool_call"}:
+                field = "input" if item["type"] == "custom_tool_call" else "arguments"
+                if (any(not isinstance(item.get(key), str) or not item[key]
+                        for key in ("call_id", "name"))
+                        or not isinstance(item.get(field), str)):
+                    self._send_openai_error(502, "Malformed Responses tool call: missing call ID, name or string payload")
+                    return
+
         if any(item.get("type") == "function_call" and item.get("name") in custom_names
-               for item in resp_dict.get("output") or []):
+               for item in output):
             self._send_openai_error(502, "Upstream translation lost the custom tool type; use native Responses passthrough")
             return
 

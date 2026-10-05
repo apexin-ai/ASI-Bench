@@ -493,6 +493,8 @@ passthrough: accepting them at the LiteLLM entry point does not guarantee that
 the downstream Chat conversion preserves them. These requests return HTTP 400
 before model execution, not a successful empty tool turn. This deliberately
 limits the translated protocol; it is not a lossless cross-provider bridge.
+Malformed upstream output or tool calls without usable call IDs fail with HTTP
+502 in both JSON and SSE modes instead of crashing or reporting empty success.
 `additional_tools` declarations are merged into `tools` for LiteLLM conversion;
 tool invocation policy is not overridden. Custom-tool translation requires
 LiteLLM's custom-tool round-trip support (tested with 1.97.0); the currently

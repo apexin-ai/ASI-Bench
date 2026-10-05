@@ -333,3 +333,19 @@ def test_invalid_custom_tool_name_is_client_error(name):
         "input": "hi", "tools": [{"type": "custom", "name": name}],
     }).encode())
     h.send_response.assert_called_once_with(400)
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("output", ["invalid", {}, [None], ["invalid"], [
+    {"type": "custom_tool_call", "id": "ct_1", "name": "exec", "input": "pass"},
+]])
+def test_malformed_upstream_output_is_error(monkeypatch, stream, output):
+    result = response()
+    result["output"] = output
+    monkeypatch.setitem(sys.modules, "litellm", SimpleNamespace(
+        responses=Mock(return_value=result),
+    ))
+    h = handler()
+    h._handle_responses_translated(json.dumps({"input": "hi", "stream": stream}).encode())
+    h.send_response.assert_called_once_with(502)
+    assert not events(h)
