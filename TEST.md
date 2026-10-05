@@ -16,12 +16,18 @@ uv run pytest -q tests/test_api_proxy_responses.py tests/test_third_party_api.py
 ```
 
 Coverage includes custom `input` vs function `arguments`, additional tool
-declarations, caller `include`, request-local `drop_params=False`, original
+declarations, explicit rejection of unsupported `include`/tool limits and
+stateful history, request-local `drop_params=False`, original returned
 reasoning IDs/encrypted content, concurrent proxy requests, monotonic SSE
 sequence numbers, lifecycle ordering, and failed/incomplete terminal events.
 The real-LiteLLM regression mocks model completions and prohibits HTTP: on
 1.82.6 it verifies explicit rejection of unsupported custom-tool conversion;
-on 1.97.0 it verifies a two-turn custom-tool round trip. No agent CLI is run.
+on 1.97.0 it verifies a two-turn custom-tool round trip and executes a fixed,
+asserted test script in a temporary directory to check `artifact.txt == "ok"`.
+The exact additional-tools/include/max-tool-calls request reported in issue #8
+must fail explicitly before upstream execution on both versions. No agent CLI
+or live model is run. JSON non-object bodies and invalid custom names must
+return client errors rather than crashing the handler.
 These tests do not validate provider-side encrypted reasoning replay or live
 upstream streaming; those remain separate work under issue #8.
 

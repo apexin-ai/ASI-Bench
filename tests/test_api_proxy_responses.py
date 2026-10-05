@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import io
 import json
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
@@ -49,11 +50,9 @@ def test_translation_preserves_request_fields_without_global_mutation(monkeypatc
     llm = SimpleNamespace(responses=upstream, drop_params=global_drop)
     monkeypatch.setitem(sys.modules, "litellm", llm)
     body = {
-        "input": [{"id": "rs_original", "type": "reasoning", "summary": [],
-                   "encrypted_content": "opaque-ciphertext"}],
-        "include": ["reasoning.encrypted_content"],
+        "input": "Write a file using exec.",
         "additional_tools": [{"type": "custom", "name": "exec"}],
-        "max_tool_calls": 3, "store": False, "tool_choice": "auto",
+        "temperature": 0.2, "tool_choice": "auto",
     }
     handler()._handle_responses_translated(json.dumps(body).encode())
     kwargs = upstream.call_args.kwargs
@@ -114,7 +113,9 @@ def test_lossy_custom_tool_response_fails_explicitly(monkeypatch, custom_support
 def test_concurrent_translation_does_not_share_reasoning_or_global_policy(monkeypatch):
     def upstream(**kwargs):
         assert kwargs["drop_params"] is False
-        return response(kwargs["input"])
+        n = kwargs["input"]
+        return response([{"type": "reasoning", "id": f"rs_{n}", "summary": [],
+                          "encrypted_content": f"opaque_{n}"}])
 
     llm = SimpleNamespace(responses=upstream, drop_params=True)
     monkeypatch.setitem(sys.modules, "litellm", llm)
@@ -124,7 +125,7 @@ def test_concurrent_translation_does_not_share_reasoning_or_global_policy(monkey
                 "encrypted_content": f"opaque_{n}"}
         h = handler()
         h._handle_responses_translated(json.dumps({
-            "input": [item], "include": ["reasoning.encrypted_content"], "stream": True,
+            "input": str(n), "stream": True,
         }).encode())
         assert events(h)[-1]["response"]["output"] == [item]
 
@@ -211,7 +212,7 @@ def test_unrepresentable_status_fails_before_stream_headers(status):
     assert not events(h)
 
 
-def test_real_litellm_custom_tool_round_trip(monkeypatch):
+def test_real_litellm_custom_tool_round_trip(monkeypatch, tmp_path):
     """Exercise installed LiteLLM conversion; replace only the model completion."""
     monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     import litellm
@@ -223,7 +224,7 @@ def test_real_litellm_custom_tool_round_trip(monkeypatch):
                         Mock(return_value=None))
     monkeypatch.setattr(httpx.Client, "send", Mock(side_effect=AssertionError("No network in this test")))
 
-    script = 'print("hello 世界")\n'
+    script = 'open("artifact.txt", "w").write("ok")'
     completion = Mock(return_value=litellm.ModelResponse(
         model="test-model",
         choices=[{"finish_reason": "tool_calls", "message": {
@@ -256,6 +257,12 @@ def test_real_litellm_custom_tool_round_trip(monkeypatch):
     assert item["call_id"] == "call_exec"
     assert completion.call_args.kwargs["tools"][0]["function"]["name"] == "exec"
 
+    # A tiny test client executes only our fixed, asserted fixture, never a live
+    # model's output. Protocol success must actually allow artifact creation.
+    subprocess.run([sys.executable, "-c", item["input"]], cwd=tmp_path,
+                   check=True, timeout=10)
+    assert (tmp_path / "artifact.txt").read_text() == "ok"
+
     # Replay the original call followed by its result on the next turn.
     body["input"] = [
         {"role": "user", "content": "Write a file using exec."}, item,
@@ -271,3 +278,58 @@ def test_real_litellm_custom_tool_round_trip(monkeypatch):
     assert script in assistant["tool_calls"][0]["function"]["arguments"] or (
         json.loads(assistant["tool_calls"][0]["function"]["arguments"])["content"] == script
     )
+
+
+@pytest.mark.parametrize("fields", [
+    {"include": ["reasoning.encrypted_content"]},
+    {"max_tool_calls": 3},
+    {"previous_response_id": "resp_other_session"},
+    {"conversation": "conv_other_session"},
+    {"input": [{"type": "reasoning", "id": "rs_original", "summary": [],
+                "encrypted_content": "opaque-ciphertext"}]},
+])
+def test_unrepresentable_state_fails_before_upstream(monkeypatch, fields):
+    upstream = Mock(return_value=response())
+    monkeypatch.setitem(sys.modules, "litellm", SimpleNamespace(responses=upstream))
+    h = handler()
+    h._handle_responses_translated(json.dumps({"input": "hi", **fields}).encode())
+    h.send_response.assert_called_once_with(400)
+    upstream.assert_not_called()
+    assert "native Responses" in h.wfile.getvalue().decode()
+
+
+def test_issue8_exact_request_does_not_report_false_success(monkeypatch):
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    import litellm
+
+    upstream = Mock(side_effect=AssertionError("Must reject before model execution"))
+    monkeypatch.setattr(litellm, "completion", upstream)
+    h = handler()
+    h._handle_responses_translated(json.dumps({
+        "input": "Write artifact.txt using exec.", "stream": True,
+        "include": ["reasoning.encrypted_content"],
+        "additional_tools": [{"type": "custom", "name": "exec",
+                              "description": "Execute code."}],
+        "max_tool_calls": 3,
+    }).encode())
+    h.send_response.assert_called_once_with(400)
+    upstream.assert_not_called()
+    assert not events(h)
+    error = h.wfile.getvalue().decode()
+    assert "include" in error and "max_tool_calls" in error
+
+
+@pytest.mark.parametrize("body", [None, [], "hi", 123])
+def test_non_object_request_is_client_error(body):
+    h = handler()
+    h._handle_responses_translated(json.dumps(body).encode())
+    h.send_response.assert_called_once_with(400)
+
+
+@pytest.mark.parametrize("name", [None, "", [], {}])
+def test_invalid_custom_tool_name_is_client_error(name):
+    h = handler()
+    h._handle_responses_translated(json.dumps({
+        "input": "hi", "tools": [{"type": "custom", "name": name}],
+    }).encode())
+    h.send_response.assert_called_once_with(400)

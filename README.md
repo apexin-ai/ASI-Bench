@@ -487,6 +487,12 @@ supports it. Opt-in Responses translation is buffered, not live token streaming.
 It preserves returned reasoning items/IDs and distinguishes custom-tool input
 events from function arguments, including failed and incomplete terminal states.
 Unknown translation parameters fail explicitly instead of being silently omitted.
+Responses-only options (including `include`, `max_tool_calls`, stored-response
+IDs and conversations) and reasoning/item-reference history require native
+passthrough: accepting them at the LiteLLM entry point does not guarantee that
+the downstream Chat conversion preserves them. These requests return HTTP 400
+before model execution, not a successful empty tool turn. This deliberately
+limits the translated protocol; it is not a lossless cross-provider bridge.
 `additional_tools` declarations are merged into `tools` for LiteLLM conversion;
 tool invocation policy is not overridden. Custom-tool translation requires
 LiteLLM's custom-tool round-trip support (tested with 1.97.0); the currently

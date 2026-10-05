@@ -1692,6 +1692,10 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
             self._send_error(400, f"Invalid JSON: {e}")
             return
 
+        if not isinstance(body, dict):
+            self._send_openai_error(400, "Responses request body must be a JSON object")
+            return
+
         body = self._prepare_model_input(body)
         is_stream = bool(body.get("stream"))
 
@@ -1700,18 +1704,28 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
         response_params = {
             "input", "instructions", "max_output_tokens", "reasoning",
             "tools", "tool_choice", "temperature", "top_p",
-            "parallel_tool_calls", "previous_response_id", "metadata",
-            "text", "truncation", "store", "user",
-            "include", "max_tool_calls", "background", "conversation",
-            "prompt", "prompt_cache_key", "prompt_cache_retention",
-            "safety_identifier", "service_tier", "stream_options", "top_logprobs",
+            "parallel_tool_calls", "metadata", "text", "user",
         }
+        # Passing a field to litellm.responses is not proof that the downstream
+        # Chat bridge preserves it. Even newer LiteLLM drops Responses-only
+        # include/tool limits. Stateful IDs also require a session store we do
+        # not own or isolate here. Require native passthrough for these features.
         unknown = set(body) - response_params - {"model", "stream", "additional_tools"}
         if unknown:
             self._send_openai_error(
                 400, "Unsupported Responses translation parameter(s): "
                 + ", ".join(sorted(unknown))
                 + ". Use native Responses passthrough for unsupported features.",
+            )
+            return
+        history = body.get("input")
+        if isinstance(history, list) and any(
+            isinstance(item, dict) and item.get("type") in {"reasoning", "item_reference"}
+            for item in history
+        ):
+            self._send_openai_error(
+                400, "Responses translation cannot guarantee reasoning/item-reference replay; "
+                "use native Responses passthrough with the original history.",
             )
             return
         kwargs = {key: value for key, value in body.items() if key in response_params}
@@ -1732,8 +1746,11 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
         if not isinstance(tools, list) or any(not isinstance(t, dict) for t in tools):
             self._send_openai_error(400, "tools must be an array of tool declarations")
             return
-        custom_names = {t.get("name") for t in tools if t.get("type") == "custom"}
-        history = body.get("input")
+        custom_tools = [t for t in tools if t.get("type") == "custom"]
+        if any(not isinstance(t.get("name"), str) or not t["name"] for t in custom_tools):
+            self._send_openai_error(400, "Custom tools require a non-empty string name")
+            return
+        custom_names = {t["name"] for t in custom_tools}
         has_custom_history = isinstance(history, list) and any(
             isinstance(item, dict) and item.get("type") in {"custom_tool_call", "custom_tool_call_output"}
             for item in history

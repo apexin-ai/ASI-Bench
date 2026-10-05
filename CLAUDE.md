@@ -178,6 +178,8 @@
 - Responses 翻译分支必须保留工具类型、原始 ID 和终止状态；未知字段须明确报错，
   不得修改全局 `litellm.drop_params`。旧 LiteLLM 不支持 custom-tool round trip 时
   明确拒绝并引导 native passthrough。该分支仍是 buffered SSE，不代表原生流式。
+  Responses-only 参数及 reasoning/item-reference 历史在翻译分支须提前拒绝；
+  不得将 LiteLLM 接收参数误认为下游 Chat 协议完整保留参数。
 
 你收到任务后，按以下 9 步流程自主完成：
 
