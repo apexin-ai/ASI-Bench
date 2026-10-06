@@ -180,6 +180,10 @@
   明确拒绝并引导 native passthrough。该分支仍是 buffered SSE，不代表原生流式。
   Responses-only 参数及 reasoning/item-reference 历史在翻译分支须提前拒绝；
   不得将 LiteLLM 接收参数误认为下游 Chat 协议完整保留参数。
+- Claude 对原生 Responses endpoint 仅在显式 `anthropic_via_responses: true` 时启用；
+  必须请求 `reasoning.encrypted_content` 并以 execution 随机密钥签名、绑定会话历史的
+  replay envelope 保留 reasoning ID/密文。篡改、跨 execution/会话 replay、缺失密文、
+  未知参数/内容项和上游失败必须 fail closed；默认仍走兼容 Chat-only endpoint 的路径。
 
 你收到任务后，按以下 9 步流程自主完成：
 

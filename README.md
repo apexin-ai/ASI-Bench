@@ -499,8 +499,27 @@ Malformed upstream output or tool calls without usable call IDs fail with HTTP
 tool invocation policy is not overridden. Custom-tool translation requires
 LiteLLM's custom-tool round-trip support (tested with 1.97.0); the currently
 locked 1.82.6 release is rejected for those requests. Native passthrough does
-not have this translation restriction. This does not establish lossless
-Anthropic reasoning replay across all providers.
+not have this translation restriction.
+
+Claude Code endpoints that implement the native OpenAI Responses API can opt
+into lossless reasoning-state replay:
+
+```bash
+asibench run --agent claude_code_cli \
+  --agent-config '{"model":"gpt-5.4","api_base":"https://example.com/v1","api_key_env":"MODEL_API_KEY","api_protocol":"openai","anthropic_via_responses":true}' \
+  --output-dir out/
+```
+
+This mode sends `store: false` and requests `reasoning.encrypted_content`.
+Returned reasoning IDs, summaries, and encrypted content are carried through
+Anthropic `thinking` / `redacted_thinking` blocks in a signed replay envelope.
+The envelope is bound to the preceding conversation and to a random key scoped
+to that proxy execution, so modified, cross-conversation, or cross-execution
+replay is rejected before an upstream request. Unknown or unrepresentable
+fields, native Anthropic reasoning signatures, missing encrypted content, and
+malformed or failed upstream responses also fail explicitly. Streaming remains
+buffered. Do not enable this option for Chat-Completions-only endpoints; the
+default remains the compatible Chat translation path.
 
 Harness session state (transcripts, history, auto-memory) never carries over
 between instances or repeated executions of the same instance: the OS sandbox
