@@ -220,22 +220,20 @@ class RichardsTopmodelProcessScorer(Scorer):
 
         precip = pd.to_numeric(forcing["precip_mm_day"], errors="coerce").to_numpy(float)
         storage = _column_water_storage_mm(pred_theta, dz)
-        storage_init = float(np.sum(np.asarray(profile["theta_init"], dtype=float) * dz) * 1000.0)
-        # Closure is a self-consistency check on the submission, so the aquifer
-        # storage change must be taken on the submission's own datum: the task
-        # text only says "aquifer_storage += net_flux_mm" and never fixes the
-        # absolute value, so agents legitimately start the accumulator at 0
-        # (or anywhere else).  Using the reference model's hidden datum
-        # ((5 m - water table) * Sy * 1000) here made every literal solution
-        # fail closure by ~200% and hit the 35-point cap.
-        aquifer_init = float(pred_wt["aquifer_storage_mm"].iloc[0])
+        # Each daily output row is the state after that day's update (day 0 is
+        # already the first post-step state).  Use the submission's own datum
+        # and the same post-step interval for every quantity: this avoids the
+        # hidden reference aquifer datum without mixing the initial pre-step
+        # soil state with the day-0 post-step aquifer state.
+        soil_start = float(storage[0])
+        aquifer_start = float(pred_wt["aquifer_storage_mm"].iloc[0])
         aquifer_end = float(pred_wt["aquifer_storage_mm"].iloc[-1])
-        delta_storage = (float(storage[-1]) - storage_init) + (aquifer_end - aquifer_init)
-        cum_in = float(np.nansum(precip))
+        delta_storage = (float(storage[-1]) - soil_start) + (aquifer_end - aquifer_start)
+        cum_in = float(np.nansum(precip[1:]))
         cum_out = float(
-            pred_flux["et_actual"].sum()
-            + pred_flux["runoff_surface"].sum()
-            + pred_flux["baseflow"].sum()
+            pred_flux["et_actual"].iloc[1:].sum()
+            + pred_flux["runoff_surface"].iloc[1:].sum()
+            + pred_flux["baseflow"].iloc[1:].sum()
         )
         # Closure is a self-consistency check (any internally mass-conserving
         # model passes it, including a generic bucket with the wrong physics),

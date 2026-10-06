@@ -1040,6 +1040,12 @@ Lessons — smoke tests:
 
 Lessons — process:
 
+- Hydrology closure scoring must use one consistent post-step interval. The
+  seed31415 `water_table.csv` day-0 row is already after the first update, so
+  pairing it with pre-step `theta_init` and day-0 fluxes silently mixes ranges.
+  Use row 0 through the final state and accumulate fluxes from day 1; validate
+  both datum-shift invariance and a deliberately drifting storage series.
+
 - The golden snapshot pins only the paths the fixtures exercise, so check that a
   branch is covered before relying on it, keep the file byte-identical through
   pure refactors, and never let a test behind `importorskip` feed it. Errors from
