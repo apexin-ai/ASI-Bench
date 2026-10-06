@@ -482,6 +482,45 @@ Without this flag, image attachments are replaced with a short notice before
 the next model request. Direct endpoints outside the framework proxy remain the
 responsibility of the connected agent.
 
+For framework proxies, prefer native Responses passthrough when the endpoint
+supports it. Opt-in Responses translation is buffered, not live token streaming.
+It preserves returned reasoning items/IDs and distinguishes custom-tool input
+events from function arguments, including failed and incomplete terminal states.
+Unknown translation parameters fail explicitly instead of being silently omitted.
+Responses-only options (including `include`, `max_tool_calls`, stored-response
+IDs and conversations) and reasoning/item-reference history require native
+passthrough: accepting them at the LiteLLM entry point does not guarantee that
+the downstream Chat conversion preserves them. These requests return HTTP 400
+before model execution, not a successful empty tool turn. This deliberately
+limits the translated protocol; it is not a lossless cross-provider bridge.
+Malformed upstream output or tool calls without usable call IDs fail with HTTP
+502 in both JSON and SSE modes instead of crashing or reporting empty success.
+`additional_tools` declarations are merged into `tools` for LiteLLM conversion;
+tool invocation policy is not overridden. Custom-tool translation requires
+LiteLLM's custom-tool round-trip support (tested with 1.97.0); the currently
+locked 1.82.6 release is rejected for those requests. Native passthrough does
+not have this translation restriction.
+
+Claude Code endpoints that implement the native OpenAI Responses API can opt
+into lossless reasoning-state replay:
+
+```bash
+asibench run --agent claude_code_cli \
+  --agent-config '{"model":"gpt-5.4","api_base":"https://example.com/v1","api_key_env":"MODEL_API_KEY","api_protocol":"openai","anthropic_via_responses":true}' \
+  --output-dir out/
+```
+
+This mode sends `store: false` and requests `reasoning.encrypted_content`.
+Returned reasoning IDs, summaries, and encrypted content are carried through
+Anthropic `thinking` / `redacted_thinking` blocks in a signed replay envelope.
+The envelope is bound to the preceding conversation and to a random key scoped
+to that proxy execution, so modified, cross-conversation, or cross-execution
+replay is rejected before an upstream request. Unknown or unrepresentable
+fields, native Anthropic reasoning signatures, missing encrypted content, and
+malformed or failed upstream responses also fail explicitly. Streaming remains
+buffered. Do not enable this option for Chat-Completions-only endpoints; the
+default remains the compatible Chat translation path.
+
 Harness session state (transcripts, history, auto-memory) never carries over
 between instances or repeated executions of the same instance: the OS sandbox
 gives each run a one-shot container with a fresh `HOME`, and host-side runs

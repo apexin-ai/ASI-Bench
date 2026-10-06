@@ -175,6 +175,16 @@
 
 ## 任务生命周期
 
+- Responses 翻译分支必须保留工具类型、原始 ID 和终止状态；未知字段须明确报错，
+  不得修改全局 `litellm.drop_params`。旧 LiteLLM 不支持 custom-tool round trip 时
+  明确拒绝并引导 native passthrough。该分支仍是 buffered SSE，不代表原生流式。
+  Responses-only 参数及 reasoning/item-reference 历史在翻译分支须提前拒绝；
+  不得将 LiteLLM 接收参数误认为下游 Chat 协议完整保留参数。
+- Claude 对原生 Responses endpoint 仅在显式 `anthropic_via_responses: true` 时启用；
+  必须请求 `reasoning.encrypted_content` 并以 execution 随机密钥签名、绑定会话历史的
+  replay envelope 保留 reasoning ID/密文。篡改、跨 execution/会话 replay、缺失密文、
+  未知参数/内容项和上游失败必须 fail closed；默认仍走兼容 Chat-only endpoint 的路径。
+
 你收到任务后，按以下 9 步流程自主完成：
 
 1. **领取任务** — 你已被分配任务，阅读本文件和项目代码理解上下文
