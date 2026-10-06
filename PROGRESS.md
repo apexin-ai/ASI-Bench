@@ -1040,6 +1040,12 @@ Lessons — smoke tests:
 
 Lessons — process:
 
+- LiteLLM's Anthropic-to-Responses adapter can flatten `thinking` into text and
+  discard `redacted_thinking`, reasoning IDs, and encrypted content even when
+  the wire API supports those fields. The lossless path added in `5012c87`
+  therefore uses an explicit opt-in bridge with execution-keyed, conversation-
+  bound replay envelopes and rejects unknown or unverifiable state before the
+  upstream call; compatibility translation must never imply semantic parity.
 - Hydrology closure scoring must use one consistent post-step interval. The
   seed31415 `water_table.csv` day-0 row is already after the first update, so
   pairing it with pre-step `theta_init` and day-0 fluxes silently mixes ranges.
