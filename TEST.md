@@ -910,15 +910,15 @@ quantum_espresso --config ~/mcp/quantum_espresso.mcp.json`. No network and no
 credentials; about a minute of single-threaded DFT on bulk Si (2 atoms,
 30/120 Ry, 4×4×4, a 40-point band path), the server's calls and our own
 `pw.x`/`bands.x`/`dos.x` reference runs taking 2–8 s each. Outcome on the
-pinned revision, aarch64 VM (2026-10-07): `PASS` with 44 PASS, 18 WARN, 0 FAIL.
-The L0 part (`pw.x`, `bands.x`, `dos.x`, `projwfc.x` report QE 7.5; 219 `.upf`
-files for 69 elements; 19 tools; `qe_status`) was also 16 / 0 / 0 on amd64
-(2026-10-03). The DFT tools agree with the references to the printed digit
+pinned revision, aarch64 VM and AWS amd64 (2026-10-07): `PASS` with 44 PASS,
+18 WARN, 0 FAIL on both, every compared energy identical across the two
+platforms; amd64 took about twice as long per DFT call (band structure 14.3 s,
+DOS 14.6 s). The DFT tools agree with the references to the printed digit
 (Si SCF `-15.75077338 Ry`, Fermi `6.5233 eV`; band gap 0.551 eV indirect;
 2208 DOS points, dos.x EFermi 6.716 eV), and a reference with `degauss` 0.01
 instead of the documented 0.02 turns all twelve DFT comparisons into FAILs. The
-18 WARN: D1 (43 of 69 elements got an older file in that host's directory
-order; Si got the newest), D2 ×2, D10, D11 ×3 (relax, vc-relax, and
+18 WARN: D1 (43 of 69 elements got an older file in the VM's directory
+order, 33 on amd64; Si got the newest on both), D2 ×2, D10, D11 ×3 (relax, vc-relax, and
 `relax_and_scf`'s relaxation energy), D12, D13 ×3, and seven documented in-band
 errors (unparseable structure, three missing files, `qe_get_job_status` with
 the local runner, two Materials Project tools without a key). The report

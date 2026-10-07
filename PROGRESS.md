@@ -1142,9 +1142,10 @@ Lessons — process:
 
 ## 2026-10-07: quantum_espresso MCP E2E, stage L1
 
-- Shipped (commit: see `git log -- scripts/mcp/e2e/e2e_smoke/servers/quantum_espresso.py`):
-  all 19 tools in the smoke, 44 PASS / 18 WARN / 0 FAIL in 62 s on the aarch64
-  VM; `test_smoke_covers_every_manifest_tool[quantum_espresso]` is green.
+- Shipped (`c71f663`): all 19 tools in the smoke, 44 PASS / 18 WARN / 0 FAIL
+  on the aarch64 VM (62 s) and on AWS amd64 (~2 min), every energy identical
+  across the two; `test_smoke_covers_every_manifest_tool[quantum_espresso]` is
+  green.
 - Fast DFT makes the VM a real test host: with a two-atom cell every pw.x call
   is 2–8 s, so the whole smoke, references included, fits inside one sandbox
   command. Size the L1 workload for that before reaching for AWS.
@@ -1160,6 +1161,6 @@ Lessons — process:
 - Re-run upstream's file scan in the host's directory order and require an
   exact match; compare with the newest version separately. Two checks keep
   "the server is consistent" (FAIL if not) apart from "the defect bit here"
-  (WARN, naming the elements: 43 of 69 on the VM).
+  (WARN, naming the elements: 43 of 69 on the VM, 33 on amd64).
 - `check_rejected`'s `in_band` hook gets the raw tools/call result; decode it.
   A tolerance comparison must recurse into dicts or every nested reply FAILs.

@@ -96,7 +96,7 @@ re-implementing them.
 | `rdkit` | `tandemai-inc/rdkit-mcp-server` (catalog `rdkit_tandem`) | uv-pip-pinned, Py 3.12 | — | 125 / 28 / 0, amd64, 2026-10-03 (aarch64 identical 2026-10-02) |
 | `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, amd64 and aarch64, 2026-10-03 |
 | `gpaw` | `Crystalhihihi/matmcp` | conda-explicit | `micromamba` on `PATH` | 38 / 13 / 0, amd64, 2026-10-03 (24 min single-threaded) |
-| `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | 44 / 18 / 0, aarch64, 2026-10-07 (62 s single-threaded; L0 16 / 0 / 0 on amd64 too) |
+| `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | 44 / 18 / 0, amd64 and aarch64, 2026-10-07 (~2 min / 62 s single-threaded) |
 
 Install the prerequisites before running `setup.py`:
 
@@ -344,7 +344,8 @@ known defects is in each smoke script.
   differ completely: Si got `1.2` (the newest) on both, O and Fe got `1.0` (not
   the newest) on both, and Ag diverged — `1.2` on amd64, `1.0` on aarch64. So
   a Si task happens to be reproducible; that is luck, not a guarantee. A full
-  scan on the aarch64 VM (2026-10-07) gave 43 of the 69 elements an older file.
+  scan gave 43 of the 69 elements an older file on the aarch64 VM and 33 on
+  AWS amd64 (2026-10-07; Si got `1.2` on both).
   The smoke re-runs the scan in directory order (it must match the server),
   reports the stale elements as the D1 WARN and runs its DFT references with
   the file the server picked.
@@ -384,8 +385,11 @@ known defects is in each smoke script.
   Only the first nat rows are forces.
 - Budget: every DFT tool on this Si workload (2 atoms, 30/120 Ry, 4×4×4, 40 band
   points) takes 2–8 s single-threaded on the aarch64 VM (scf 2.0, relax 2.6,
-  vc-relax 3.5, band structure 7.2, DOS 8.0, relax+SCF 4.6); the whole smoke,
-  references included, is about a minute. `seconds_by_step` in the report has
+  vc-relax 3.5, band structure 7.2, DOS 8.0, relax+SCF 4.6) and about twice
+  that on AWS amd64 (3.2, 6.1, 6.1, 14.3, 14.6, 9.9); the whole smoke,
+  references included, is one to two minutes. Every energy the smoke prints —
+  each relaxation step, the final vc-relax SCF `-15.75176482 Ry`, the tight
+  SCFs — was identical on both platforms. `seconds_by_step` in the report has
   the numbers of the host it ran on.
 - `QE_WORKDIR` is deliberately left unset, so work directories are
   `<cwd>/qe_calculations`: a temporary directory under the smoke, the checkout
