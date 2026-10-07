@@ -20,6 +20,7 @@ involved. Upstream code is cloned, never vendored; upstream licenses apply.
 | `e2e_smoke/` | `runner.py` (the shared run and generic checks), `client.py` (stdio client recording non-JSON stdout), `helpers.py`, and `servers/<id>.py` per server (references + server-specific checks, declared as `SMOKE`) |
 | `verify_run.py` | L2 verifier CLI for agent runs; implementation in `e2e_verify/` (spec, extractors, values, evidence, checks) |
 | `measure_gpaw_table.py` | gpaw only: measures the `MEASURED` ground-truth table of `mcp_e2e.gpaw_mos2_bandgap` against the pinned server (~1 h; re-run after a revision or lock bump) |
+| `measure_qe_table.py` | quantum_espresso only: measures the `MEASURED` table of `mcp_e2e.qe_si_bandstructure` (27 chains, ~3 min aarch64; `--ecut` per part + `--merge`; `--check` compares a fresh measurement with the committed table) |
 | `locks/` | committed conda `@EXPLICIT` locks (psi4, gpaw, quantum_espresso) |
 
 Install modes:
@@ -466,3 +467,17 @@ known defects is in each smoke script.
   the checkout must stay clean for `setup.py`.
 - `qe_get_job_status` only means something for the Globus runner; with
   `QE_RUNNER=local` it always answers `not found in registry`.
+- The density cutoff is not on the MCP surface: `ecutrho` stays at the hint
+  table's value (Si 120 Ry) whatever `ecutwfc` a tool is given, so above 30 Ry
+  the dual drops below 4. `mcp_e2e.qe_si_bandstructure` keeps `ecutwfc` ≤ 30.
+- A task cannot recompute the DFT (pw.x exists only in this conda prefix), so
+  `mcp_e2e.qe_si_bandstructure` carries a table measured by
+  `measure_qe_table.py`: 27 band-structure chains over (ecutwfc, grid,
+  npoints_band), 180 s on the aarch64 VM, re-measured identical. The grid comes
+  from the instance's k-spacing by the documented rule and is reconciled with
+  `qe_suggest_kpoints`. Run `measure_qe_table.py --check` on the host that runs
+  the agent before an L2 round: it proves the committed table (and the Si pick)
+  is that host's own answer.
+- `qe_list_files` and `qe_read_bands` take host paths as `output_dir`; the
+  trajectory keeps that argument (`KEY_ARG_NAMES`), so the verifier can follow
+  the chain workflow → listing → band file through scrubbed logs.

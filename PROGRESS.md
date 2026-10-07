@@ -1293,3 +1293,25 @@ Lessons — process:
   (WARN, naming the elements: 43 of 69 on the VM, 33 on amd64).
 - `check_rejected`'s `in_band` hook gets the raw tools/call result; decode it.
   A tolerance comparison must recurse into dicts or every nested reply FAILs.
+
+## 2026-10-07: quantum_espresso MCP E2E, stage L2 (`qe_si_bandstructure`)
+
+- Shipped (commit id: see `git log -- examples/mcp-e2e-tasks/mcp_e2e/qe_si_bandstructure`):
+  five-tool chain `qe_list_pseudopotentials` + `qe_suggest_kpoints` →
+  `qe_workflow_bandstructure` → `qe_list_files` → `qe_read_bands`, every link a
+  result → argument dependency; `measure_qe_table.py` (27 chains, 180 s on the
+  VM, a repeat run identical via `--check`); extractors `kpoint_grid`,
+  `categorized_files`, `categorized_paths`; `output_dir` added to
+  `KEY_ARG_NAMES`. Real-server payloads through the verifier: Claude and Codex
+  6/6 PASS, score 100. `golden.json` 198 → 228, none changed.
+- A path link through a scrubbed log needs the argument in `KEY_ARG_NAMES`
+  before the first agent run; otherwise every run is a permanent WARN. Check
+  the argument name of every path-taking tool when designing the chain.
+- A tool that takes a grid as a string and one that returns it as a list need a
+  canonicalising extractor, not a looser shared `numbers()`.
+- Let the measured spread set the tolerances: band edges are printed to 1 meV,
+  so two instances can differ by exactly one digit; credit ends at half that.
+  Measure the whole grid before choosing what to score: the path length turned
+  out constant over the grid and the VBM independent of the path.
+- The density cutoff is not on the MCP surface (fixed at the hint table's
+  120 Ry), so instance cutoffs stop at 30 Ry to keep the dual ≥ 4.

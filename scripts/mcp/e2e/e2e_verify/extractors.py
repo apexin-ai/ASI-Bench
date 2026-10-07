@@ -155,6 +155,66 @@ def _extract_listed_files(data):
     return out
 
 
+def _extract_categorized_files(data):
+    """Paths of a listing grouped by category: every string in every list under a key
+    ending in ``_files`` (qe-mcp's ``qe_list_files``: ``band_files``, ``input_files``,
+    ``output_files``, …). ``None`` when there is no such list or one holds a non-string."""
+    if not isinstance(data, dict):
+        return None
+    lists = [value for key, value in sorted(data.items())
+             if isinstance(key, str) and key.endswith("_files") and isinstance(value, list)]
+    if not lists or any(not isinstance(item, str) or not item.strip() for value in lists for item in value):
+        return None
+    paths = [item for value in lists for item in value]
+    return paths or None
+
+
+def canon_paths(value):
+    """Exact path strings: a list as its sorted, stripped strings, a single path stripped.
+    For a chained argument that must be one of the paths a listing returned, verbatim."""
+    if isinstance(value, list):
+        out = [v.strip() for v in value if isinstance(v, str) and v.strip()]
+        return sorted(out) if out and len(out) == len(value) else None
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+_GRID_SEPARATORS = re.compile(r"[,\sx×]+")
+
+
+def _extract_kpoint_grid(data):
+    """A Monkhorst–Pack grid: a result's ``kpoints`` field, or the value itself."""
+    return data.get("kpoints") if isinstance(data, dict) else data
+
+
+def canon_kpoint_grid(value):
+    """``"7,7,7"`` from ``[7, 7, 7]``, ``"7,7,7"``, ``"7 7 7"``, ``"7x7x7"`` or a lone
+    ``"7"`` (qe-mcp's own reading of a ``kpoints`` argument): a grid a tool suggests and
+    the string the next tool is given compare equal. Anything else — ``"auto"``,
+    ``"gamma"``, offsets, non-positive or fractional counts — is ``None``."""
+    if isinstance(value, str):
+        parts = [p for p in _GRID_SEPARATORS.split(value.strip()) if p]
+        if len(parts) == 1:
+            parts = parts * 3
+    elif isinstance(value, (list, tuple)):
+        parts = list(value)
+    else:
+        return None
+    if len(parts) != 3:
+        return None
+    out = []
+    for part in parts:
+        if isinstance(part, bool):
+            return None
+        try:
+            number = float(part)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(number) or number != int(number) or number < 1:
+            return None
+        out.append(int(number))
+    return ",".join(map(str, out))
+
+
 _STATUS_NAME_FIELDS = ("check", "name", "id")
 
 
@@ -249,4 +309,7 @@ EXTRACTORS: dict[str, Extractor] = {
     "exported_files": Extractor(_extract_exported_files, canon_exported_files),
     "listed_files": Extractor(_extract_listed_files, canon_exported_files),
     "named_statuses": Extractor(_extract_named_statuses, canon_named_statuses),
+    "categorized_files": Extractor(_extract_categorized_files, canon_exported_files),
+    "categorized_paths": Extractor(_extract_categorized_files, canon_paths),
+    "kpoint_grid": Extractor(_extract_kpoint_grid, canon_kpoint_grid),
 }

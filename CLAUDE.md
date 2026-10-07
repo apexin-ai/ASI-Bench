@@ -141,10 +141,11 @@
   （整体零分由 hard gate 负责）；「答案是否真的来自 MCP 工具」由
   `scripts/mcp/e2e/verify_run.py` 按 `e2e_check.json` 从 run 产物判定，框架评分契约不变，
   schema 以 `verify_run.py` docstring 为准。
-- 只有后端求解器无法进入 task runtime 时（gpaw：GPAW 只存在于 server 的 conda prefix）
-  才允许 generate_gt 携带**实测表**：必须由入库的测量脚本对钉死的 revision + lock 产出、
-  整表替换不得手改，实测维度压到最小，其余一律由纯函数在 generate 时推导，并有离线测试
-  对账脚本记录的 server 自身答案。
+- 只有后端求解器无法进入 task runtime 时（gpaw、quantum_espresso：求解器只存在于 server
+  的 conda prefix）才允许 generate_gt 携带**实测表**：必须由入库的测量脚本对钉死的
+  revision + lock 产出、整表替换不得手改，实测维度压到最小，其余一律由纯函数在 generate
+  时推导，并有离线测试对账脚本记录的 server 自身答案；测量脚本须能 `--check` 与已提交表
+  逐值对比，换 run host 先跑它。
 - verifier 实现在 `e2e_verify/`（仅标准库，`verify_run.py` 只是 CLI）：spec 严格校验，
   未知键、非法枚举、悬空引用一律 `invalid_spec`；取值统一走 `Selector`、比较器共用，新
   值类型只加 extractor 或 comparator，跨 task 共用的比较器不得为了单个测试收紧；工具名

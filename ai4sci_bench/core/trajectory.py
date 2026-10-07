@@ -19,11 +19,12 @@ VALID_STEP_TYPES = frozenset({
     "rate_limit",
 })
 
-KEY_ARG_NAMES = ("file_path", "filename", "path", "command", "pattern", "url")
+KEY_ARG_NAMES = ("file_path", "filename", "path", "output_dir", "command", "pattern", "url")
 """Tool arguments an extractor keeps in a ``tool_call`` step's ``key_args``.
 
-They identify what a call acted on: a file, a path, a shell command, a search
-pattern or a URL. The persisted raw log has absolute host paths replaced with
+They identify what a call acted on: a file, a path, a directory (or file) of
+results to read, a shell command, a search pattern or a URL. The persisted raw
+log has absolute host paths replaced with
 placeholders, so for a path argument the trajectory is the only record of what
 was actually passed (see ``scripts/mcp/e2e/e2e_verify/evidence.py``).
 """
