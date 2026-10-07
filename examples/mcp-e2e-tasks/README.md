@@ -67,6 +67,7 @@ works; it is not a pass rate.
 | `ncbi_gene_protein_card` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `alphafold_isoform_profile` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `qe_si_bandstructure` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
+| `atomictoolkit_vacancy` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 
 In every run at B3/B4 the agent found the tools without being told their names.
 

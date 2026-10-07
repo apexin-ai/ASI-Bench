@@ -903,7 +903,7 @@
   producing one result per attempt.
 - Implementation commit: `0e43cdd`.
 
-## 2026-09-29 – 2026-10-07: MCP end-to-end testing (L0–L2), nine servers and ten fake tasks
+## 2026-09-29 – 2026-10-07: MCP end-to-end testing (L0–L2), ten servers and eleven fake tasks
 
 - Problem: the MCP catalog survey only proved L0 (`initialize` + `tools/list`).
   Nothing showed that an agent inside `asibench run` really calls a tool and
@@ -942,7 +942,9 @@
   `fa97782` `2c85892` `ecde93d` `2ea3e7c`; quantum_espresso L0 `aba718b`
   `f9cf5e0`, L1 `c71f663` `b990157` (all 19 tools against our own `pw.x` runs),
   `qe_si_bandstructure` (five-tool result → argument chain through host paths,
-  measured DFT reference with `--check`) `826c00b`.
+  measured DFT reference with `--check`) `826c00b`; atomictoolkit L1 `1cf155c`
+  (18 tools, 9 unusable as tri-state defects), `atomictoolkit_vacancy` (seven-call
+  file chain through untracked path arguments, compared by file name) `803e92f`.
 - Framework and tooling work this produced: docs condensation `fe3651e`,
   verifier golden snapshot `b47c4f7`, verifier split into `e2e_verify/` with a
   strict spec parser `8ffc458`, `setup.py` installer registry `e24e8fc`, smoke
@@ -1317,4 +1319,6 @@ Lessons — process:
   over 41 seeds; `generate --sandbox task` reproduces it. Real-server payloads
   through the verifier: Claude and Codex 6/6 PASS, score 100.
 - Offline: `tests/mcp_e2e` + `test_ci_workflow` 1154 passed / 3 skipped; golden + 23 new, none changed.
-- Commit: pending.
+- AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4;
+  neither CLI made a task-augmented call, so D2 never stalled a run.
+- Commit: `803e92f`.
