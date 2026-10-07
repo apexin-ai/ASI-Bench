@@ -96,10 +96,7 @@ re-implementing them.
 | `rdkit` | `tandemai-inc/rdkit-mcp-server` (catalog `rdkit_tandem`) | uv-pip-pinned, Py 3.12 | — | 125 / 28 / 0, amd64, 2026-10-03 (aarch64 identical 2026-10-02) |
 | `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, amd64 and aarch64, 2026-10-03 |
 | `gpaw` | `Crystalhihihi/matmcp` | conda-explicit | `micromamba` on `PATH` | 38 / 13 / 0, amd64, 2026-10-03 (24 min single-threaded) |
-| `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | L0 only: 16 / 0 / 0, amd64 and aarch64, 2026-10-03 |
-
-`quantum_espresso` is at L0: the environment checks and `qe_status` run, the
-numerical references for the other 18 tools are not written yet.
+| `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | 44 / 18 / 0, aarch64, 2026-10-07 (62 s single-threaded; L0 16 / 0 / 0 on amd64 too) |
 
 Install the prerequisites before running `setup.py`:
 
@@ -333,7 +330,8 @@ known defects is in each smoke script.
   revision, so `scripts/download_pseudos.py` is never run and no calculation
   needs the network. The two Materials Project tools are the only ones that go
   online, and they need `MP_API_KEY`; do not describe the server as fully
-  offline.
+  offline. Without the key both answer in band before any request
+  (`MP_API_KEY not set` / `Materials Project API key not found. ...`).
 - Which pseudopotential file an element gets is **not** reproducible across
   hosts: `SG15Library._scan_library` iterates `glob("*.upf")` and lets a later
   non-`_FR` file overwrite an earlier one without sorting or comparing
@@ -345,10 +343,14 @@ known defects is in each smoke script.
   on the pseudopotential version. Measured on two hosts whose directory orders
   differ completely: Si got `1.2` (the newest) on both, O and Fe got `1.0` (not
   the newest) on both, and Ag diverged — `1.2` on amd64, `1.0` on aarch64. So
-  a Si task happens to be reproducible; that is luck, not a guarantee.
+  a Si task happens to be reproducible; that is luck, not a guarantee. A full
+  scan on the aarch64 VM (2026-10-07) gave 43 of the 69 elements an older file.
+  The smoke re-runs the scan in directory order (it must match the server),
+  reports the stale elements as the D1 WARN and runs its DFT references with
+  the file the server picked.
 - `qe_read_bands(output_dir)` and `qe_read_dos(output_dir)` want a **file**
   path (`bands.dat.gnu`, the dos `.dat`), not a directory, despite the
-  parameter name; a directory gives `File not found`.
+  parameter name; a directory gives `[Errno 21] Is a directory: ...` (D2).
 - `bands.x` and `dos.x` can only be reached through the workflow tools:
   `server.py` imports `postprocessing.run_bands/run_dos/run_pdos` but never
   registers them, so no tool can produce a PDOS and `qe_read_pdos` can only
@@ -359,9 +361,32 @@ known defects is in each smoke script.
   good fingerprint, since another code will not reproduce it.
 - Defaults worth knowing: cutoffs come from an SG15 hint table (Si 30/120 Ry),
   the automatic k grid is `round(40/|a_i|)` snapped to odd numbers (Si diamond
-  → 11×11×11), `nbnd = 8·natoms`, and `workflow_dos` runs its NSCF step on
-  **twice** the SCF grid — pass `kpoints` explicitly or it becomes very
-  expensive.
+  → 11×11×11), `nbnd = 8·natoms`, the band path has `npoints_band` = 100
+  points, and `workflow_dos` runs its NSCF step (tetrahedra) on **twice an
+  explicit** SCF grid (`4,4,4` → 8×8×8); with `kpoints="auto"` both steps use
+  the automatic grid (11×11×11 for Si).
+- `qe_get_kpath` fails for **every** structure (D10): it sorts the special
+  points by their coordinate arrays and gets `The truth value of an array with
+  more than one element is ambiguous`. `qe_workflow_bandstructure` builds its
+  path without that sort and works; a task must not depend on `qe_get_kpath`.
+- `qe_run_relax` and `qe_run_vc_relax` report the energy, Fermi level, forces
+  and stress of the **first** SCF step (D11: the parser takes the first `!`
+  line), not of the relaxed structure — for the displaced Si cell
+  `-15.74891110 Ry` instead of `Final energy = -15.7507748647 Ry`, and a
+  vc-relax reports the input cell's `-15.75077338 Ry` while the cell relaxes to
+  a = 5.4887 Å. Only the `.out` file in `output_dir` holds the result;
+  `qe_workflow_relax_and_scf`'s `relaxation.energy_eV` has the same defect.
+- `qe_workflow_relax_and_scf` runs its final SCF (`conv_thr` 1e-8) on the
+  **input** geometry (D12; upstream says so in a comment), so its
+  `total_energy` is the unrelaxed one — the relaxation is wasted.
+- `forces_eV_per_angstrom` has 7×nat rows (D13): `verbosity='high'` prints six
+  contribution blocks after the total forces and the parser keeps them all.
+  Only the first nat rows are forces.
+- Budget: every DFT tool on this Si workload (2 atoms, 30/120 Ry, 4×4×4, 40 band
+  points) takes 2–8 s single-threaded on the aarch64 VM (scf 2.0, relax 2.6,
+  vc-relax 3.5, band structure 7.2, DOS 8.0, relax+SCF 4.6); the whole smoke,
+  references included, is about a minute. `seconds_by_step` in the report has
+  the numbers of the host it ran on.
 - `QE_WORKDIR` is deliberately left unset, so work directories are
   `<cwd>/qe_calculations`: a temporary directory under the smoke, the checkout
   (gitignored upstream) under an agent run. Each SCF copies its `.upf` files

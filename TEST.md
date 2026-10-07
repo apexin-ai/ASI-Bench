@@ -740,7 +740,22 @@ the `verify_run` state machine (three gap tolerances, missing results,
 metastability, skipped reference), in-band errors and text/structuredContent
 disagreement, and stubbed servers: the convergence gate FAILs when the
 rejected run leaks a `summary.json`, a figure or a gap, the ignored `query`
-and shared `gs.gpw` probes WARN, stdout pollution is attributed per tool.
+and shared `gs.gpw` probes WARN, stdout pollution is attributed per tool;
+quantum_espresso — banner parsing, the SG15 element index, the directory-order
+pick re-run as `SG15Library` does it (D1) against the newest-version pick, the
+k-grid rule with its odd snapping (ties go up), geometry helpers, our `pw.x` /
+`bands.x` / `dos.x` inputs (documented settings, relax/vc-relax namelists,
+`%.10f` band-path k-points, tetrahedra without smearing), the parsers on
+pw.x 7.5's own layouts (every SCF step, total vs contribution force rows,
+stress in kbar, final energy/cell/positions, ten-per-line `bands.dat`, `.gnu`,
+`dos.dat`), the band-edge rule (direct/indirect/metal), nested comparisons,
+and stubbed servers for every three-state check: a stale pick that follows the
+scan WARNs and one that does not FAILs, `qe_get_kpath` (D10), a directory for
+`output_dir` (D2), force rows (D13), a relaxation reply at the first step
+(D11) vs the final one vs neither, a server output file from a different run,
+a run outside `<cwd>/qe_calculations` or with another pseudopotential, the
+`relax_and_scf` final SCF on the input geometry (D12), and the exact
+`qe_get_job_status` / Materials Project errors.
 
 `test_verify_spec.py` / `test_verify_values.py`: strict parsing (unknown,
 inapplicable and invalid keys, dangling and optional-from-required
@@ -888,18 +903,27 @@ criterion (2 BFGS steps, fmax 0.0495 against 0.05) and reports an indirect
 Gamma->K gap, so ground truth there would be one GPAW release away from
 changing.
 
-For quantum_espresso (L0 only so far): `python3 scripts/mcp/e2e/setup.py
-quantum_espresso` (needs `micromamba`; the conda prefix is ~1.5 GB), then
+For quantum_espresso: `python3 scripts/mcp/e2e/setup.py quantum_espresso`
+(needs `micromamba`; the conda prefix is ~1.5 GB), then
 `~/mcp/quantum_espresso/.venv/bin/python scripts/mcp/e2e/smoke.py
-quantum_espresso --config ~/mcp/quantum_espresso.mcp.json` (no network, ~5 s).
-Outcome on the pinned revision, measured on amd64 and aarch64 (2026-10-03):
-`PASS` with 16 PASS, 0 WARN, 0 FAIL —
-`pw.x`, `bands.x`, `dos.x` and `projwfc.x` each report QE 7.5, the vendored
-SG15 library holds 219 `.upf` files for 69 elements, the handshake lists the 19
-`qe_*` tools, and `qe_status` echoes the launch env with an available
-`LocalQERunner` and the same 69 elements. The report also records the measured
-`qe_versions` and `sg15_elements`. References for the other 18 tools are the L1
-stage and are not written yet.
+quantum_espresso --config ~/mcp/quantum_espresso.mcp.json`. No network and no
+credentials; about a minute of single-threaded DFT on bulk Si (2 atoms,
+30/120 Ry, 4×4×4, a 40-point band path), the server's calls and our own
+`pw.x`/`bands.x`/`dos.x` reference runs taking 2–8 s each. Outcome on the
+pinned revision, aarch64 VM (2026-10-07): `PASS` with 44 PASS, 18 WARN, 0 FAIL.
+The L0 part (`pw.x`, `bands.x`, `dos.x`, `projwfc.x` report QE 7.5; 219 `.upf`
+files for 69 elements; 19 tools; `qe_status`) was also 16 / 0 / 0 on amd64
+(2026-10-03). The DFT tools agree with the references to the printed digit
+(Si SCF `-15.75077338 Ry`, Fermi `6.5233 eV`; band gap 0.551 eV indirect;
+2208 DOS points, dos.x EFermi 6.716 eV), and a reference with `degauss` 0.01
+instead of the documented 0.02 turns all twelve DFT comparisons into FAILs. The
+18 WARN: D1 (43 of 69 elements got an older file in that host's directory
+order; Si got the newest), D2 ×2, D10, D11 ×3 (relax, vc-relax, and
+`relax_and_scf`'s relaxation energy), D12, D13 ×3, and seven documented in-band
+errors (unparseable structure, three missing files, `qe_get_job_status` with
+the local runner, two Materials Project tools without a key). The report
+records `qe_versions`, `sg15_elements`, `sg15_pick` (the Si file and every
+stale element), the workload and `seconds_by_step`.
 
 The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`.

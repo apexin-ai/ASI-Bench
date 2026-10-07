@@ -1139,3 +1139,27 @@ Lessons — process:
   FAILs by design at this stage: it greps the smoke module for every
   `expected_tool`, and an L0 smoke only calls `qe_status`. Resolve it when L1
   lands (or by declaring the stage on `Smoke`), not by weakening the grep.
+
+## 2026-10-07: quantum_espresso MCP E2E, stage L1
+
+- Shipped (commit: see `git log -- scripts/mcp/e2e/e2e_smoke/servers/quantum_espresso.py`):
+  all 19 tools in the smoke, 44 PASS / 18 WARN / 0 FAIL in 62 s on the aarch64
+  VM; `test_smoke_covers_every_manifest_tool[quantum_espresso]` is green.
+- Fast DFT makes the VM a real test host: with a two-atom cell every pw.x call
+  is 2–8 s, so the whole smoke, references included, fits inside one sandbox
+  command. Size the L1 workload for that before reaching for AWS.
+- A reference for a DFT server can be the same binary, run outside the server
+  from our own input: write only the physics the server documents (mass,
+  prefix and outdir are ours), parse the text ourselves, compare to the printed
+  digit. Prove it discriminates with one mutation (`degauss` 0.01 FAILed all
+  twelve DFT checks) instead of trusting a green run.
+- Read the parser, not the docstring: `re.search` on a multi-step output
+  returns the first step (D11), and a "relax then SCF" workflow ran its SCF on
+  the input geometry (D12). Both look correct until a reference prints every
+  step.
+- Re-run upstream's file scan in the host's directory order and require an
+  exact match; compare with the newest version separately. Two checks keep
+  "the server is consistent" (FAIL if not) apart from "the defect bit here"
+  (WARN, naming the elements: 43 of 69 on the VM).
+- `check_rejected`'s `in_band` hook gets the raw tools/call result; decode it.
+  A tolerance comparison must recurse into dicts or every nested reply FAILs.
