@@ -139,27 +139,36 @@ def summary_not_found(data) -> str | None:
 
 
 GENE_TABLE_ID = re.compile(r"^Gene ID:\s*(\d+)", re.MULTILINE)
+# A plus-strand gene has no strand marker at all (measured 2026-10-07 on CFTR, SOD1
+# and HBA1), so the group is optional; the orientation is taken from the coordinates
+# either way and the marker, when present, is only cross-checked against them.
 GENE_TABLE_LOCUS = re.compile(
-    r"^Reference\s+\S+.*?\s(?P<accession>[A-Z]{2}_\d+\.\d+)\s+\((?P<strand>plus|minus) strand\)"
-    r"\s+from:\s*(?P<start>\d+)\s+to:\s*(?P<stop>\d+)", re.MULTILINE)
+    r"^Reference\s+\S+.*?\s(?P<accession>[A-Z]{2}_\d+\.\d+)\s+"
+    r"(?:\((?P<strand>plus|minus) strand\)\s+)?from:\s*(?P<start>\d+)\s+to:\s*(?P<stop>\d+)", re.MULTILINE)
 
 
 def parse_gene_table(text: str) -> dict:
     """Gene ID, title line and the reference-assembly locus of an ``efetch rettype=gene_table``.
 
-    The locus line is 1-based inclusive and names the strand explicitly::
+    The locus line is 1-based inclusive, counts down on the minus strand and spells the
+    strand out only when it is the minus one::
 
         Reference GRCh38.p14 Primary Assembly NC_000017.11  (minus strand) from: 7687490 to: 7668421
+        Reference GRCh38.p14 Primary Assembly NC_000021.9  from: 31659693 to: 31668931
+
+    ``strand`` therefore comes from the coordinates (as it does for the esummary locus),
+    and ``strand_marker`` keeps what the line said so a disagreement can be reported.
     """
     lines = [line for line in text.splitlines() if line.strip()]
     gene_id = GENE_TABLE_ID.search(text)
     locus = GENE_TABLE_LOCUS.search(text)
     out = {"gene_id": gene_id.group(1) if gene_id else None,
            "title": lines[0].strip() if lines else "",
-           "accession": None, "strand": None, "start": None, "stop": None}
+           "accession": None, "strand": None, "start": None, "stop": None, "strand_marker": None}
     if locus:
-        out.update(accession=locus.group("accession"), strand=locus.group("strand"),
-                   start=int(locus.group("start")), stop=int(locus.group("stop")))
+        start, stop = int(locus.group("start")), int(locus.group("stop"))
+        out.update(accession=locus.group("accession"), strand="minus" if start > stop else "plus",
+                   start=start, stop=stop, strand_marker=locus.group("strand"))
     return out
 
 
@@ -396,6 +405,11 @@ def check_gene_summary(session: Session) -> None:
         soft.append(f"no genomicinfo entry for {table['accession']}; compared {info.get('chraccver')!r}")
     else:
         problems.extend(locus_diffs(locus, table))
+    if table.get("strand_marker") and table["strand_marker"] != table["strand"]:
+        # The orientation is read from the coordinates; a marker that contradicts them is
+        # an upstream inconsistency, not a reason to mislabel the locus.
+        soft.append(f"gene_table says ({table['strand_marker']} strand) while its own coordinates "
+                    f"run {table['start']}..{table['stop']}")
     try:
         gene = reference_datasets(gene_id)
     except RuntimeError as exc:

@@ -20,10 +20,10 @@ Gene ID: 7157, updated on 15-Sep-2026
 Reference GRCh38.p14 Primary Assembly NC_000017.11  (minus strand) from: 7687490 to: 7668421
 RNA transcript variant 14 NR_176326.1, 10 exons,  total annotated spliced exon length: 2399
 """
-PLUS_STRAND_TABLE = """BRCA1 BRCA1 DNA repair associated[Homo sapiens]
-Gene ID: 672, updated on 01-Sep-2026
+PLUS_STRAND_TABLE = """SOD1 superoxide dismutase 1[Homo sapiens]
+Gene ID: 6647, updated on 13-Sep-2026
 
-Reference GRCh38.p14 Primary Assembly NC_000017.11  (plus strand) from: 43044295 to: 43125483
+Reference GRCh38.p14 Primary Assembly NC_000021.9  from: 31659693 to: 31668931
 """
 GENE_RECORD = {"uid": "7157", "name": "TP53", "description": "tumor protein p53",
                "nomenclaturesymbol": "TP53", "nomenclaturename": "tumor protein p53",
@@ -84,12 +84,22 @@ def test_unwrap_separates_data_from_in_band_errors():
 def test_parse_gene_table_reads_id_title_and_a_minus_strand_locus():
     parsed = ncbi.parse_gene_table(GENE_TABLE)
     assert parsed == {"gene_id": "7157", "title": "TP53 tumor protein p53[Homo sapiens]",
-                      "accession": "NC_000017.11", "strand": "minus", "start": 7687490, "stop": 7668421}
+                      "accession": "NC_000017.11", "strand": "minus", "start": 7687490, "stop": 7668421,
+                      "strand_marker": "minus"}
     assert ncbi.gene_table_symbol(parsed["title"]) == "TP53"
+    # A plus-strand gene carries no strand marker at all (measured 2026-10-07 on SOD1, CFTR,
+    # HBA1), so the orientation comes from the coordinates and the marker is only a cross-check.
     plus = ncbi.parse_gene_table(PLUS_STRAND_TABLE)
-    assert (plus["strand"], plus["start"], plus["stop"]) == ("plus", 43044295, 43125483)
+    assert (plus["accession"], plus["strand"], plus["start"], plus["stop"], plus["strand_marker"]) == \
+        ("NC_000021.9", "plus", 31659693, 31668931, None)
+    spelled_out = ncbi.parse_gene_table(PLUS_STRAND_TABLE.replace("NC_000021.9  from",
+                                                                 "NC_000021.9  (plus strand) from"))
+    assert spelled_out == {**plus, "strand_marker": "plus"}
+    contradictory = ncbi.parse_gene_table(PLUS_STRAND_TABLE.replace("NC_000021.9  from",
+                                                                   "NC_000021.9  (minus strand) from"))
+    assert (contradictory["strand"], contradictory["strand_marker"]) == ("plus", "minus")
     empty = ncbi.parse_gene_table("")
-    assert empty["gene_id"] is None and empty["start"] is None
+    assert empty["gene_id"] is None and empty["start"] is None and empty["strand_marker"] is None
 
 
 def test_normalise_locus_shifts_0_based_coordinates_and_labels_the_strand():
@@ -246,6 +256,16 @@ def test_gene_summary_only_warns_when_the_alpha_datasets_reference_disagrees(mon
     session = session_for({ncbi.GENE_SUMMARY: rpc_json(esummary([{**GENE_RECORD, **mutation}]))})
     ncbi.check_gene_summary(session)
     assert session.report.checks[0]["status"] == "WARN"
+
+
+def test_gene_summary_warns_when_the_gene_table_marker_contradicts_its_own_coordinates(monkeypatch):
+    """The locus is still read from the coordinates (which carry the orientation on both
+    strands), so a contradictory marker is reported instead of mislabelling the strand."""
+    _patch_references(monkeypatch, table=GENE_TABLE.replace("(minus strand)", "(plus strand)"))
+    session = session_for({ncbi.GENE_SUMMARY: rpc_json(esummary([GENE_RECORD]))})
+    ncbi.check_gene_summary(session)
+    check = session.report.checks[0]
+    assert check["status"] == "WARN" and "(plus strand)" in check["detail"]
 
 
 def test_gene_summary_blames_its_own_reference_when_the_gene_table_is_unparsable(monkeypatch):
