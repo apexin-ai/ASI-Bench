@@ -181,6 +181,24 @@ def test_json_result_marks_tool_errors_and_fails_non_json():
     assert report_statuses(report) == {"c": "FAIL"}
 
 
+def test_caller_passes_a_declared_timeout_and_otherwise_leaves_the_client_default():
+    """A slow host must not turn a correct result into a FAIL (plane-wave DFT tools)."""
+    seen = []
+
+    class Recording(StubClient):
+        def call_tool(self, name, arguments, **kwargs):
+            seen.append(kwargs.get("timeout"))
+            return super().call_tool(name, arguments)
+
+    report = runner.Report()
+    client = Recording({"t": rpc_text("fine")})
+    runner.Caller(client, report)("c", "t", {})
+    runner.Caller(client, report, timeout=7200.0)("c", "t", {})
+    runner.Caller(client, report, timeout=7200.0)("c", "t", {}, timeout=30.0)
+    assert seen == [None, 7200.0, 30.0]
+    assert report_statuses(report) == {}
+
+
 def test_smoke_cli_knows_every_manifest_server():
     cli = support.load(BUNDLE / "smoke.py", "mcp_e2e_smoke_cli")
     for sid in setup.load_manifest():

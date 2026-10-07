@@ -278,7 +278,9 @@ def same_geometry(given, source, abs_tol: float) -> bool:
 
 def matches(value, ref, mode: str) -> bool:
     """Canonical values: equal, identical; subset, every key of a dict value has the
-    reference count; member, the reference scalar is in the value list."""
+    reference count; superset, every element of a reference list is in the value list
+    (a listing that also carries entries the task does not pin); member, the reference
+    scalar is in the value list."""
     if value is None or ref is None:
         return False
     if mode == "member":
@@ -286,6 +288,9 @@ def matches(value, ref, mode: str) -> bool:
     if mode == "subset":
         return isinstance(value, dict) and isinstance(ref, dict) and bool(value) and \
             all(k in ref and ref[k] == v for k, v in value.items())
+    if mode == "superset":
+        return isinstance(value, list) and isinstance(ref, list) and bool(ref) and \
+            all(item in value for item in ref)
     return value == ref or same_text(value, ref)
 
 

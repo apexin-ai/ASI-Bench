@@ -35,6 +35,7 @@ An E2E pass needs both. The verifier reads the run artefacts and the task's
 | `mcp_e2e.psi4_opt_freq` | `psi4` | `optimize` → `frequency` at the returned geometry | PySCF DF-RHF + geomeTRIC |
 | `mcp_e2e.rdkit_conformer` | `rdkit` | `smiles_to_mol` → `EmbedMolecule` → `mol_to_sdf` (writes the file), `Max`/`MinPartialCharge` | RDKit ETKDGv3 at the instance's seed + Gasteiger charges |
 | `mcp_e2e.build123d_plate_measure` | `build123d` | `execute` → `validate` → `measure` → `find_holes`/`find_hole_patterns` → `export` (STEP+STL) → `import_cad_file` (one session) | closed form: box − bore − corner slivers − bolt circle, extruded (stdlib only) |
+| `mcp_e2e.gpaw_mos2_bandgap` | `gpaw` | `fetch_structure` → `relax_structure` → `check_convergence` → `calc_band_dos` → `verify_run` → `get_run_artifacts` (one run) | DFT **measured** against the pinned server by [`measure_gpaw_table.py`](../../scripts/mcp/e2e/measure_gpaw_table.py); k-grid, convergence recommendation and verification verdict recomputed in stdlib |
 
 How each task picks its instances, scores answers and keeps the tool the only
 practical source of the numbers is described in its `generate_gt.py` and
@@ -58,6 +59,7 @@ works; it is not a pass rate.
 | `psi4_opt_freq` | 2026-10-02 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `rdkit_conformer` | 2026-10-03 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `build123d_plate_measure` | 2026-10-03 | 4 × 100, 4/4 | 396/400 (b1 96), 4/4 |
+| `gpaw_mos2_bandgap` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 
 In every run at B3/B4 the agent found the tools without being told their names.
 
@@ -112,6 +114,14 @@ The agent can still find the backend library elsewhere on the host; catching
 that is what `no_bypass` is for. `--mcp-config` also turns on web search
 (Claude: WebSearch/WebFetch, Codex: web_search).
 
+`gpaw_mos2_bandgap` is the slow one: a correct chain is about 430 s of
+single-threaded plane-wave DFT (the hard-coded convergence sweep alone is
+~60%), so it needs `--timeout 1800`. Its reference is measured rather than
+recomputed — GPAW exists only inside the server's conda environment — so after
+bumping the server revision or the conda lock, re-run
+`scripts/mcp/e2e/measure_gpaw_table.py` and replace the `MEASURED` table in
+`generate_gt.py` wholesale.
+
 ## Adding a task
 
 1. Add the server to `scripts/mcp/e2e/manifest.json` and make its smoke test pass.
@@ -133,6 +143,7 @@ that is what `no_bypass` is for. `--mcp-config` also turns on web search
    | nested keys, geometry chain | `psi4_opt_freq` |
    | opaque strings a tool chain passes on | `rdkit_conformer` |
    | path arguments, binary artefacts, closed-form reference | `build123d_plate_measure` |
+   | measured reference, forbidden one-call shortcut, listing and status extractors | `gpaw_mos2_bandgap` |
 
 4. Prompts name the server and the tool (e.g. "`pyscf_rhf_energy` of the
    `pyscf` server"). Never use a harness-specific name such as

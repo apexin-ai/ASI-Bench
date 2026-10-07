@@ -153,7 +153,7 @@ _SOURCE_KEYS = {"call", "result_key", "select"}
 _SELECT_KEYS = {"reduce", "argmax_of", "argmin_of", "where_key", "equals_reference_key"}
 
 FORMATS = ("number", "json", "image")
-RESULT_MATCH = ("equal", "subset", "member")
+RESULT_MATCH = ("equal", "subset", "superset", "member")
 ANSWER_MATCH = ("equal", "member")
 CHAIN_COMPARE = ("geometry",)
 WHOLE_RESULT = "*"          # inputs_from_call map value: the source's whole result (e.g. one returned string)

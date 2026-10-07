@@ -75,17 +75,23 @@ def json_result(report: Report, check: str, result: dict | None, *, structured: 
 
 
 class Caller:
-    """tools/call wrapper: records FAILs for transport/tool errors and stdout lines per tool."""
+    """tools/call wrapper: records FAILs for transport/tool errors and stdout lines per tool.
 
-    def __init__(self, client: StdioMCP, report: Report) -> None:
+    ``timeout`` (seconds) is for servers whose tools legitimately run longer than the
+    client default — a slow host must not turn a correct result into a FAIL."""
+
+    def __init__(self, client: StdioMCP, report: Report, *, timeout: float | None = None) -> None:
         self.client = client
         self.report = report
+        self.timeout = timeout
         self.stdout_by_tool: Counter = Counter()
 
-    def __call__(self, check: str, tool: str, arguments: dict, *, allow_error: bool = False) -> dict | None:
+    def __call__(self, check: str, tool: str, arguments: dict, *, allow_error: bool = False,
+                 timeout: float | None = None) -> dict | None:
         before = len(self.client.non_json_stdout)
+        limit = timeout or self.timeout
         try:
-            resp = self.client.call_tool(tool, arguments)
+            resp = self.client.call_tool(tool, arguments, **({"timeout": limit} if limit else {}))
         except MCPError as exc:
             self.report.add("L1", check, "FAIL", str(exc))
             return None
@@ -100,9 +106,11 @@ class Caller:
             return None
         return result
 
-    def json(self, check: str, tool: str, arguments: dict, *, allow_error: bool = False, structured: bool = False):
+    def json(self, check: str, tool: str, arguments: dict, *, allow_error: bool = False,
+             structured: bool = False, timeout: float | None = None):
         """tools/call + :func:`json_result`."""
-        return json_result(self.report, check, self(check, tool, arguments, allow_error=allow_error),
+        return json_result(self.report, check,
+                           self(check, tool, arguments, allow_error=allow_error, timeout=timeout),
                            structured=structured)
 
 
@@ -172,6 +180,7 @@ class Smoke:
     server: str                                   # manifest id
     run_l1: Callable[["Session"], None]           # the server's L1 checks, on session.call
     packages: tuple[str, ...] = ()                # versions recorded in the report
+    call_timeout: float | None = None             # tools/call timeout for slow tools (seconds)
     extra_env: dict[str, str] = field(default_factory=dict)
     pass_proxies: bool = False                    # network servers: pass the caller's proxy settings
     expected_cwd_files: tuple[str, ...] = ()      # artefacts the tools are expected to write into cwd
@@ -298,7 +307,7 @@ def main(smoke: Smoke, argv: list[str] | None = None) -> int:
                                            stderr_path=stderr_path)
         try:
             if _handshake(client, report, sorted(entry["expected_tools"])):
-                session.call = Caller(client, report)
+                session.call = Caller(client, report, timeout=smoke.call_timeout)
                 smoke.run_l1(session)
                 check_unknown_tool(client, report)
             alive = client.proc.poll() is None
