@@ -197,7 +197,7 @@ def test_cases_are_deterministic_and_varied():
     # instance space is much larger than the measured grid.
     assert len({(c["ecut"], c["kpts_density"]) for c in cases}) == 6
     assert len({tuple(c[k] for k in ("ecut", "kpts_density", "tol_mev_per_atom",
-                                     "gap_tol_ev")) for c in cases}) == 3 * 2 * 2 * 2
+                                     "gap_tol_ev")) for c in cases}) == 3 * 2 * 2 * 1
     # 350 eV was measured and dropped: its relaxation stops on the force threshold.
     assert 350 not in generate_gt.ECUTS
     assert all(c["use_builtin"] is True and c["query"] == "MoS2" for c in cases)
@@ -320,7 +320,14 @@ def test_reference_is_derived_from_the_measured_table():
     assert REFERENCE["recommended_kpts_density"] == 25.0      # tolerance 0.3 meV/atom
     assert REFERENCE["converged"] is True and REFERENCE["params_verified"] is True
     assert REFERENCE["verdict"] == "fail"                     # gap tolerance 0.005 eV
-    assert REFERENCE["verify_check_labels"][0] == "convergence_gate:pass"
+    assert REFERENCE["verify_deterministic_labels"] == [
+        "convergence_gate:pass", "relax_convergence:pass", "band_gap_vs_mp:fail",
+        "gap_character:info"]
+    # structure_drift is deliberately absent: upstream's naive Cartesian comparison
+    # makes it a per-run coin flip (see GAP_TOL_EV in generate_gt.py).
+    assert not any("structure_drift" in label
+                   for label in REFERENCE["verify_deterministic_labels"])
+    assert "verify_check_labels" not in REFERENCE
     assert REFERENCE["run_artifact_names"] == list(generate_gt.REQUIRED_RUN_ARTIFACTS)
     # The listing is longer than the required set, so the verifier matches a superset.
     assert len(REFERENCE["run_artifact_names"]) < REFERENCE["artifact_count"]
@@ -397,13 +404,16 @@ def test_real_table_agrees_with_the_derivations_the_generator_makes():
         for gap_tol in generate_gt.GAP_TOL_EV:
             derived = generate_gt.verify_checks(
                 gate_converged=gate["converged"], relax_converged=True,
-                max_force=data["relax_max_force_ev_per_a"], drift_a=0.0,
+                max_force=data["relax_max_force_ev_per_a"], drift_a=None,
                 band_gap_ev=data["band_gap_ev"], band_gap_ref=generate_gt.BAND_GAP_REF,
                 gap_type=data["gap_type"], gap_tol_ev=gap_tol)
             key = repr(gap_tol)
             assert derived["verdict"] == data["measured_verdict_by_gap_tol"][key], (point, gap_tol)
-            assert [f"{c['check']}:{c['status']}" for c in derived["checks"]] \
-                == data["measured_verify_labels_by_gap_tol"][key], (point, gap_tol)
+            # The derivable checks are what the server reported, minus structure_drift.
+            got = [f"{c['check']}:{c['status']}" for c in derived["checks"]]
+            measured = data["measured_verify_labels_by_gap_tol"][key]
+            assert [m for m in measured if not m.startswith("structure_drift:")] == got, point
+            assert len(measured) == len(got) + 1, point
 
 
 def test_real_table_keeps_every_instance_off_a_verify_branch_boundary():
@@ -620,7 +630,7 @@ def test_missing_reference_is_an_evaluator_failure(tmp_path):
 # Verifier scenarios
 # --------------------------------------------------------------------------
 
-def _payloads(run_id=RUN_ID, reference=None):
+def _payloads(run_id=RUN_ID, reference=None, drift_status="pass"):
     """What the pinned server returns for this instance's chain."""
     ref = reference or REFERENCE
     return {
@@ -645,7 +655,12 @@ def _payloads(run_id=RUN_ID, reference=None):
                   "cbm": {"label": ref["cbm_label"], "band": 13, "energy_ev": -0.3},
                   "band_path": ref["band_path"], "params_verified": ref["params_verified"],
                   "bands_png": f"runs/{run_id}/bands.png", "dos_png": f"runs/{run_id}/dos.png"},
-        "verify": {"ok": True, "verdict": ref["verdict"], "checks": ref["verify_checks"],
+        # The server also reports structure_drift, whose status flips per run; the
+        # spec matches the derivable checks as a superset, so both land here.
+        "verify": {"ok": True, "verdict": ref["verdict"],
+                   "checks": [*ref["verify_checks"][:2],
+                              {"check": "structure_drift", "status": drift_status},
+                              *ref["verify_checks"][2:]],
                    "blocking_failures": ref["blocking_failures"]},
         # The real listing carries GPAW's per-calculation text logs on top of the
         # artefacts the chain is required to leave, which is why the spec matches a superset.
@@ -818,3 +833,28 @@ def test_a_produced_script_importing_the_solver_is_a_bypass(tmp_path):
                       "relax.py": "from gpaw import GPAW\nprint(1)\n"})
     assert _status(row)["no_bypass"] == "FAIL"
 
+
+
+def test_the_verdict_may_not_depend_on_the_drift_check(monkeypatch):
+    """`structure_drift` is a per-run coin flip (upstream compares raw Cartesian
+    positions and ASE wraps a denormal negative x to +a), so a tolerance whose
+    verdict moves with it cannot be a ground truth. The generator refuses one."""
+    for drift in (0.0, 10.0):
+        out = generate_gt.verify_checks(
+            gate_converged=True, relax_converged=True, max_force=0.0066, drift_a=drift,
+            band_gap_ev=REFERENCE["band_gap_ev"], band_gap_ref=generate_gt.BAND_GAP_REF,
+            gap_type="direct", gap_tol_ev=CASE["gap_tol_ev"])
+        assert out["verdict"] == REFERENCE["verdict"] == "fail"
+    # 0.3 eV passes the gap check, so the drift flake decides the verdict -> refused.
+    assert 0.3 not in generate_gt.GAP_TOL_EV
+    with pytest.raises(generate_gt.GenerationError, match="depends on structure_drift"):
+        generate_gt.reference({**CASE, "gap_tol_ev": 0.3})
+
+
+def test_a_drift_warning_does_not_break_the_verify_call(tmp_path):
+    """The server reports structure_drift either way; both must verify."""
+    for status in ("pass", "warn"):
+        row = _run(tmp_path / status, _stream(_calls(payloads=_payloads(drift_status=status))),
+                   _answer())
+        assert row["checks"]["tool_correct"]["per_call"]["verify"]["status"] == "PASS", status
+        assert row["verdict"] == "PASS", (status, row["checks"])

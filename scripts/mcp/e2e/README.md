@@ -289,6 +289,20 @@ known defects is in each smoke script.
   and the `verify_run` verdict — with the same pure functions this smoke
   validates. Only `(ecut, kpts_density)` needs measuring; `tol_mev_per_atom` just
   picks a row of the fixed sweep and `gap_tol_ev` a branch of the verifier.
+- `verify_run`'s `structure_drift` check is **not reproducible**. Upstream takes
+  `norm(a1.positions - a0.positions).max()` over the two CIFs (`verify.py:153`)
+  with no minimum-image convention, and ASE wraps coordinates when it reads a
+  CIF. `a2_x` is negative in this hexagonal cell, so an infinitesimal *positive*
+  fractional y becomes an infinitesimal *negative* Cartesian x and wraps to
+  `+a`. Mo's y force is zero by symmetry, but floating-point summation leaves a
+  denormal residue, so identical parameters on the same host give `y = 0.0` in
+  one run and `1.17e-19` in the next: 1e-19 of input, 3.18 A of reported drift,
+  and the check flips pass/warn per run (observed 0.020 A in 14 runs,
+  3.180 A in the 15th). A task must keep this check out of its ground truth, and
+  out of anything derived from it — verdicts are fail > warn > pass, so only a
+  verdict that some *failing* check already decides is derivable. The L1 smoke
+  cannot catch this: its own `drift` reimplements the same naive formula, so it
+  agrees with the server either way.
 - Relaxation below ecut 400 eV stops on the force threshold rather than at a
   minimum: at 350 eV BFGS halts after 2 steps with fmax 0.0495 against the 0.05
   criterion and reports an *indirect* Gamma->K gap, while 400-500 eV converge in

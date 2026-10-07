@@ -1128,8 +1128,39 @@ Lessons — what the measurement itself decided (AWS amd64, 8 chains, 3799 s,
   needs reference-into-value. Added a `superset` mode rather than bending the
   shared comparator (`tests/mcp_e2e/test_verify_values.py` pins both directions).
 
+Lessons — what the first agent run found (b1, Claude, 2026-10-07):
+
+- A faithful L1 reimplementation of an upstream formula hides the bug it
+  reproduces. `verify_run`'s `structure_drift` is `norm(a1.positions -
+  a0.positions).max()` with no minimum-image convention; ASE wraps on read, and
+  this hexagonal cell has `a2_x < 0`, so a denormal *positive* fractional y
+  (1.17e-19, left by floating-point force summation where symmetry says zero)
+  becomes a tiny *negative* Cartesian x and wraps to `+a`. 1e-19 of input, 3.18 A
+  of output, flipping pass/warn per run on identical parameters. The L1 smoke
+  computes its drift the same naive way, so it agreed with the server in all 14
+  earlier runs and could never have flagged it. L1 green does not mean the
+  quantity is *derivable*; that only shows up when an L2 ground truth has to be a
+  function of the instance parameters.
+- A non-derivable check poisons everything downstream of it. The verdict is
+  fail > warn > pass, so the drift flake moved `verdict` for every gap tolerance
+  that does not already have a failing check — the table had recorded `pass` at
+  `gap_tol_ev=0.3` purely by luck. The fix is not to patch the expected label but
+  to pick parameters where the flake cannot reach the answer (`GAP_TOL_EV` is now
+  the single value that makes `band_gap_vs_mp` fail) and to let the generator
+  *assert* that immunity: `reference()` now recomputes the verdict with the drift
+  check forced both ways and refuses the instance if they differ.
+- Compare a tool's report as a superset of the derivable part, not as the whole
+  thing. `named_statuses` + `match: superset` lets the server keep reporting
+  checks whose status a task cannot predict.
+
 Lessons — process:
 
+- Diagnose before patching, and make the cheap decisive measurement. Four rounds
+  of "is it the environment / the files / the code" cost nothing because each
+  round was a read, not a re-run: the run directories, the two CIFs, the upstream
+  source and a fresh-process `verify_run` on two run ids. The first plausible
+  story (a stale environment inheriting a user-site ASE) was wrong, and guessing
+  it into a patch would have hidden a real non-determinism behind a wrong fix.
 - Never `tail` the output of a `git checkout`. In the Cowork VM git cannot unlink
   files until `allow_cowork_file_delete` is granted, so the checkout half-failed
   and left main's content under the feature branch's HEAD while the only visible

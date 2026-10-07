@@ -108,8 +108,8 @@
       "result": {
         "format": "json",
         "extract": "named_statuses",
-        "reference_key": "verify_check_labels",
-        "match": "equal"
+        "reference_key": "verify_deterministic_labels",
+        "match": "superset"
       }
     },
     {

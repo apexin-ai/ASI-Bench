@@ -829,6 +829,14 @@ E = -22.0734417 eV, recommended ecut 300 eV / density 15), so an L2 tolerance
 of 1e-6 eV is safe across platforms; it is GPAW *releases* that shift the
 values by meV.
 
+`mcp_e2e.gpaw_mos2_bandgap` additionally pins that its answers survive upstream's
+non-reproducible `structure_drift` check:
+`test_the_verdict_may_not_depend_on_the_drift_check` forces that check both ways
+and requires the verdict to be unchanged (and that the generator refuses a
+tolerance where it is not), and
+`test_a_drift_warning_does_not_break_the_verify_call` runs the verifier against a
+simulated server that reports the check as `pass` and as `warn`.
+
 Ground truth for `mcp_e2e.gpaw_mos2_bandgap` comes from the same installation:
 `~/mcp/gpaw/.venv/bin/python scripts/mcp/e2e/measure_gpaw_table.py --config
 ~/mcp/gpaw.mcp.json --output ~/mcp/gpaw-table.json` drives one full chain per

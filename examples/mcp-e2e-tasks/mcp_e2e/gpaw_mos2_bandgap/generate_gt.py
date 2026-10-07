@@ -88,16 +88,27 @@ KPTS_DENSITIES = (15.0, 25.0)
 # strict enough to recommend a finer one, which flips params_verified for some
 # cutoff/density pairs.
 TOL_MEV_PER_ATOM = (5.0, 0.3)
-# |gap - the server's hard-coded MP reference| is 0.0138-0.0154 eV over the
-# measured grid, so these two select the outer branches of verify_run's state
-# machine: 0.005 eV fails the gap check (verdict "fail"), 0.3 eV passes it, both
-# with at least 6 meV to spare. The middle "warn" branch is
-# deliberately unused: it spans (tol, 1.5*tol], i.e. only 0.5*tol ~ 6 meV at the
-# tolerance that would centre it on this gap, which leaves no room for the few
-# meV GPAW releases move the gap by (see GAP_BRANCH_MARGIN_EV). A
-# pass_with_warnings verdict is still reachable, through a convergence gate that
-# did not converge at the strict tolerance.
-GAP_TOL_EV = (0.005, 0.3)
+# A single value, even though verify_run takes it as a parameter, because only a
+# tolerance that makes the gap check *fail* yields a derivable verdict.
+#
+# verify_run's `structure_drift` check is not derivable at all: upstream compares
+# raw Cartesian positions (`norm(a1.positions - a0.positions).max()`,
+# verify.py:153) with no minimum-image convention, and ASE wraps coordinates when
+# it reads a CIF. In this hexagonal cell a2_x is negative, so an infinitesimal
+# *positive* fractional y gives an infinitesimal *negative* Cartesian x, which
+# wraps to +a. Mo's y force is zero by symmetry, but floating-point summation
+# leaves a denormal residue, so the same parameters on the same host give
+# y = 0.0 in one run and 1.17e-19 in the next: 1e-19 of input becomes 3.18 A of
+# reported drift, and the check flips between pass and warn per run.
+#
+# Verdicts are fail > warn > pass, so that flake moves the verdict unless some
+# check already fails. |gap - the MP reference| is 0.0138-0.0154 eV over the
+# measured grid, so 0.005 eV makes `band_gap_vs_mp` fail with at least 6 meV of
+# branch margin, and the verdict is "fail" whichever way the drift lands.
+# `reference()` asserts that immunity instead of trusting this comment; the
+# "warn" branch of the gap check is unusable for the separate reason in
+# GAP_BRANCH_MARGIN_EV.
+GAP_TOL_EV = (0.005,)
 
 # Fixed arguments: the prompt pins them at every level, so they are not a way to
 # trade accuracy for time and the reference is unambiguous.
@@ -487,6 +498,14 @@ def params_verified(gate: dict, ecut: int, kpts_density: float) -> bool:
 # The verification state machine (verify.verify_run)
 # ---------------------------------------------------------------------------
 
+def verdict_of(gate: dict, measured: dict, case: dict) -> str:
+    """The verdict with no ``structure_drift`` check, i.e. the derivable one."""
+    return verify_checks(gate_converged=gate["converged"], relax_converged=True,
+                         max_force=measured["relax_max_force_ev_per_a"], drift_a=None,
+                         band_gap_ev=measured["band_gap_ev"], band_gap_ref=BAND_GAP_REF,
+                         gap_type=measured["gap_type"], gap_tol_ev=case["gap_tol_ev"])["verdict"]
+
+
 def gap_branch_margin(band_gap_ev: float, band_gap_ref: float, gap_tol_ev: float) -> float:
     """Distance of ``|gap - ref|`` from the nearest ``verify_run`` branch boundary."""
     difference = abs(band_gap_ev - band_gap_ref)
@@ -577,16 +596,25 @@ def reference(case: dict) -> dict:
             f"{margin:.6f} eV from a verify_run branch boundary at gap_tol_ev="
             f"{case['gap_tol_ev']}; the verdict would be decided by noise, so choose other "
             "GAP_TOL_EV values")
+    # The drift check is a per-run coin flip, so the verdict may not depend on it.
+    for drift in (0.0, 10.0):
+        if verify_checks(gate_converged=gate["converged"], relax_converged=True,
+                         max_force=measured["relax_max_force_ev_per_a"], drift_a=drift,
+                         band_gap_ev=measured["band_gap_ev"], band_gap_ref=BAND_GAP_REF,
+                         gap_type=measured["gap_type"],
+                         gap_tol_ev=case["gap_tol_ev"])["verdict"] != verdict_of(
+                             gate, measured, case):
+            raise GenerationError(
+                f"the verdict at gap_tol_ev={case['gap_tol_ev']} depends on structure_drift, "
+                "which flips per run; choose a tolerance that makes band_gap_vs_mp fail")
     verdict = verify_checks(
         gate_converged=gate["converged"],
         relax_converged=True,
         max_force=measured["relax_max_force_ev_per_a"],
-        # The monolayer relaxes by well under 0.01 A, two orders below the
-        # 0.5 A threshold, so structure_drift is a constant pass. verify_run
-        # does not report the drift itself, but it does report that check, and
-        # the offline tests compare the whole measured check list with the one
-        # derived here for every grid point.
-        drift_a=0.0,
+        # No structure_drift check: its status is not a function of the instance
+        # (see GAP_TOL_EV above), so the reference omits it and the verifier
+        # matches the remaining checks as a subset of what the server reports.
+        drift_a=None,
         band_gap_ev=measured["band_gap_ev"],
         band_gap_ref=BAND_GAP_REF,
         gap_type=measured["gap_type"],
@@ -615,7 +643,9 @@ def reference(case: dict) -> dict:
         "verdict": verdict["verdict"],
         "verify_checks": verdict["checks"],
         # What the verifier compares get_run_artifacts and verify_run against.
-        "verify_check_labels": [f"{c['check']}:{c['status']}" for c in verdict["checks"]],
+        # These are the checks whose status follows from the instance; the server
+        # also reports structure_drift, which does not (see GAP_TOL_EV).
+        "verify_deterministic_labels": [f"{c['check']}:{c['status']}" for c in verdict["checks"]],
         "run_artifact_names": list(REQUIRED_RUN_ARTIFACTS),
         "blocking_failures": verdict["blocking_failures"],
         "artifact_count": measured["artifact_count"],
