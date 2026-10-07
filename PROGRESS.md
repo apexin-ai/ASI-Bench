@@ -942,7 +942,9 @@
   `fa97782` `2c85892` `ecde93d` `2ea3e7c`; quantum_espresso L0 `aba718b`
   `f9cf5e0`, L1 `c71f663` `b990157` (all 19 tools against our own `pw.x` runs),
   `qe_si_bandstructure` (five-tool result → argument chain through host paths,
-  measured DFT reference with `--check`) `826c00b`.
+  measured DFT reference with `--check`) `826c00b`; openroad L1 `c396ccc` (first
+  Node server: `npm-ci` installer and `executables` host probe; references from
+  a closed-form LEF/DEF, the same `openroad` run directly, and a fake ORFS tree).
 - Framework and tooling work this produced: docs condensation `fe3651e`,
   verifier golden snapshot `b47c4f7`, verifier split into `e2e_verify/` with a
   strict spec parser `8ffc458`, `setup.py` installer registry `e24e8fc`, smoke
@@ -1007,6 +1009,12 @@ Lessons — evidence and observability:
   from the text block hid that until an AWS run scored 400/400 with every
   provenance check failing. Equally, probe the real event stream before writing a
   parser (Codex item schema, its own `list_mcp_resources*` calls).
+- Assert the invariant of a killed process group, not who noticed first:
+  cancelling an ORFS run ends make by SIGTERM on one run and by exit 2 (its
+  recipe died first) on the next — status and "process gone" are what matter.
+  Likewise the openroad session output is PTY text with a racy completion
+  sentinel: compare against a direct run and classify only the exact race
+  signature as WARN.
 - A test fixture standing in for a production code path must call it: six copies
   of a hand-written persistence helper encoded the same blind spot as the code
   under test.

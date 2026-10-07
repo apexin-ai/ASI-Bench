@@ -117,7 +117,7 @@ re-implementing them.
 | `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, amd64 and aarch64, 2026-10-03 |
 | `gpaw` | `Crystalhihihi/matmcp` | conda-explicit | `micromamba` on `PATH` | 38 / 13 / 0, amd64, 2026-10-03 (24 min single-threaded) |
 | `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | 44 / 18 / 0, amd64 and aarch64, 2026-10-07 (~2 min / 62 s single-threaded) |
-| `openroad` | `The-OpenROAD-Project/OpenROAD-MCP` (TypeScript, tag v1.1.0) | npm-ci, `typescript/`, Py 3.12 venv for the smoke only | `node` 22+, `npm`, `openroad`, `make`, `g++`, `python3` in `/usr/bin` or `/bin` | not run on a real `openroad` yet (VM aarch64 with a Tcl stand-in for `openroad`: 103 / 5 / 1, the FAIL being the unpinned dev checkout, 2026-10-07) |
+| `openroad` | `The-OpenROAD-Project/OpenROAD-MCP` (TypeScript, tag v1.1.0) | npm-ci, `typescript/`, Py 3.12 venv for the smoke only | `node` 22+, `npm`, `openroad`, `make`, `g++`, `python3` in `/usr/bin` or `/bin` | 103 / 4 / 0, amd64, 2026-10-07 (openroad `v2.0-17598-ga008522d8`; no sentinel-echo race in three runs) |
 
 Install the prerequisites before running `setup.py`:
 
@@ -530,4 +530,6 @@ known defects is in each smoke script.
   `l1pdk`, design `l1design`, images, metrics with a repeated key, tagged logs,
   `rules-base.json`, a stub `Makefile`), so the five ORFS tools are exercised
   without ORFS or yosys. A run's metrics count only if written after it
-  started; cancel and timeout kill the run's whole process group.
+  started; cancel and timeout kill the run's whole process group. Which
+  process notices first varies: make either dies of the SIGTERM (`signal`) or
+  reaps its killed recipe and exits 2 (`exit_code`, no signal).

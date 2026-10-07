@@ -1233,6 +1233,20 @@ def wait_job(session: Session, check: str, job_id: str, limit: float = 30.0) -> 
         time.sleep(0.5)
 
 
+def job_ended(job: dict) -> list[str]:
+    """Problems with a killed job's end record. The process group gets SIGTERM at once: make
+    either dies of it (``signal``) or first reaps its killed recipe and exits 2 (``exit_code``,
+    no signal) -- both are a finished run."""
+    if job.get("finished_at") is None or (job.get("signal") is None and job.get("exit_code") is None):
+        return [f"not ended: finished_at={job.get('finished_at')} signal={job.get('signal')} "
+                f"exit_code={job.get('exit_code')}"]
+    return []
+
+
+def how_ended(job: dict) -> str:
+    return f"signal {job['signal']}" if job.get("signal") else f"make exit {job.get('exit_code')}"
+
+
 def process_gone(pid: int, limit: float = 5.0) -> bool:
     """True once ``pid`` no longer exists (or is a zombie awaiting its reaper)."""
     deadline = time.monotonic() + limit
@@ -1339,21 +1353,20 @@ def check_flow_runs(session: Session) -> None:
                                                           "cancelled": True}, data))
         done = wait_job(session, "get_orfs_job[cancelled]", jobs["slow2"])
         if done is not None:
-            problems = problems_of({"status": "cancelled", "error": "Cancelled by request"}, done)
-            if done.get("finished_at") is None or done.get("signal") is None:
-                problems.append(f"finished_at={done.get('finished_at')} signal={done.get('signal')}")
+            problems = problems_of({"status": "cancelled", "error": "Cancelled by request"}, done) + job_ended(done)
             if pids.get("slow2") is None or not process_gone(pids["slow2"]):
                 problems.append(f"the recipe's process {pids.get('slow2')} is still running")
             add(session, "get_orfs_job[cancelled]", problems,
-                f"cancelled by signal {done.get('signal')}; the recipe's sleep (pid {pids.get('slow2')}) is gone")
+                f"cancelled ({how_ended(done)}); the recipe's sleep (pid {pids.get('slow2')}) is gone")
     if "slow1" in jobs:
         done = wait_job(session, "get_orfs_job[timed out]", jobs["slow1"])
         if done is not None:
-            problems = problems_of({"status": "timed_out", "error": "Flow run exceeded 2s and was terminated"}, done)
+            problems = problems_of({"status": "timed_out", "error": "Flow run exceeded 2s and was terminated"},
+                                   done) + job_ended(done)
             if pids.get("slow1") is None or not process_gone(pids["slow1"]):
                 problems.append(f"the recipe's process {pids.get('slow1')} is still running")
             add(session, "get_orfs_job[timed out]", problems,
-                f"timeout_seconds=2 ended the run by signal {done.get('signal')}; its process group is gone")
+                f"timeout_seconds=2 ended the run ({how_ended(done)}); its process group is gone")
     data = ok_payload(session, "get_orfs_job[list]", "get_orfs_job", {})
     if data is not None:
         got = {j.get("job_id"): j.get("status") for j in data.get("jobs") or []}

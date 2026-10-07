@@ -205,6 +205,15 @@ def test_make_command_matches_the_server_argv():
         "FLOW_VARIANT=l1run A=1 B=x")
 
 
+def test_job_ended_accepts_signal_or_exit_code():
+    done = "2026-10-07T13:10:19.912Z"
+    assert orl.job_ended({"finished_at": done, "signal": "SIGTERM", "exit_code": None}) == []
+    assert orl.job_ended({"finished_at": done, "signal": None, "exit_code": 2}) == []     # seen on AWS
+    assert orl.job_ended({"finished_at": None, "signal": None, "exit_code": None})
+    assert orl.job_ended({"finished_at": done, "signal": None, "exit_code": None})
+    assert orl.how_ended({"signal": None, "exit_code": 2}) == "make exit 2"
+
+
 def test_process_gone():
     proc = subprocess.Popen(["true"])
     proc.wait()
