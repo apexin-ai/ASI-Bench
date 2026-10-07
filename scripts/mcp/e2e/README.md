@@ -63,8 +63,15 @@ uv run asibench mcp check --config ~/mcp/<id>.mcp.json
 ```
 
 For a server with a shared `checkout` the interpreter is
-`~/mcp/<checkout>/.venv/bin/python` (`arxiv` → `~/mcp/tooluniverse`); the
-config path stays `~/mcp/<id>.mcp.json`.
+`~/mcp/<checkout>/.venv/bin/python` (`arxiv`, `alphafold_db` and `ncbi` →
+`~/mcp/tooluniverse`); the config path stays `~/mcp/<id>.mcp.json`. The second
+and third id of a group need no clone and no new `.venv`, only their own config:
+
+```sh
+python3 scripts/mcp/e2e/setup.py alphafold_db --root ~/mcp
+~/mcp/tooluniverse/.venv/bin/python scripts/mcp/e2e/smoke.py alphafold_db \
+  --config ~/mcp/alphafold_db.mcp.json --report ~/mcp/alphafold_db-smoke-report.json
+```
 
 Run the smoke with the server's own venv: the reference needs the same
 scientific library. The server is started from a temporary cwd/HOME/TMPDIR
@@ -89,7 +96,9 @@ re-implementing them.
 | id | Upstream | Install | Needs | Last smoke (PASS / WARN / FAIL) |
 |---|---|---|---|---|
 | `pyscf` | `lixin19/mcp2pyscf` | uv-sync-frozen, Py 3.13 | — | 21 / 8 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-09-29) |
-| `arxiv` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to arxiv.org | 16 / 8 / 0, amd64, 2026-10-02 (pre-shared-checkout layout; aarch64 PASS 2026-09-30) |
+| `arxiv` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to arxiv.org | 16 / 8 / 0, amd64, 2026-10-03 (unchanged by the move to the shared checkout; aarch64 PASS 2026-09-30) |
+| `alphafold_db` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to alphafold.ebi.ac.uk | 16 / 7 / 0, amd64, 2026-10-03 |
+| `ncbi` | `mims-harvard/ToolUniverse` (SMCP) | uv-sync-frozen, Py 3.12, checkout `tooluniverse` | network to eutils.ncbi.nlm.nih.gov and api.ncbi.nlm.nih.gov | 13 / 5 / 0, amd64, 2026-10-03 |
 | `jsbsim` | `flyintothesky/jsbsim-mcp` | uv-pip-pinned, Py 3.12 | — | 17 / 17 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
 | `s4` | `prof-davifr/mcp-s4-rcwa` | uv-pip-pinned, Py 3.12 | x86-64 (AVX2/FMA/BMI2), `libblas3 liblapack3` | 41 / 7 / 0, amd64, 2026-10-02 |
 | `psi4` | `Keith9922/chemaster` (`calc_psi4`) | conda-explicit | `micromamba` on `PATH` | 14 / 11 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
@@ -134,6 +143,65 @@ known defects is in each smoke script.
 - Results are live data. Tasks must use closed date windows, put OR groups in
   parentheses (otherwise the date clause binds only to the last term), and
   must not score abstracts.
+
+**alphafold_db**
+
+- Same checkout, pin and cwd rules as `arxiv` (one `tooluniverse` checkout
+  serves all three ids).
+- Live data has no date window, so stability comes from an independent query of
+  the same endpoint plus recomputation: the model entry is compared field by
+  field with a raw query made by the smoke (internal consistency alone would let
+  a stale payload pass), `sequenceChecksum` is `md5(uniprotSequence)`,
+  `globalMetricValue` and the
+  `fractionPlddt*` bins can be recomputed from the model `pdbUrl` (CA
+  B-factors), and MUTAGEN values are per-position means of the AlphaMissense
+  `-aa-substitutions.csv` the annotation links to. The file carries two
+  decimals, so a recomputed mean needs a ~0.02 tolerance.
+- Tasks must not score pLDDT, any `*Url`, `latestVersion` or
+  `modelCreatedDate`: AlphaFold DB is at model v6 and these change with every
+  model version. The AlphaMissense scores are a fixed 2023 release and are safe.
+- `alphafold_get_prediction` returns **one model per isoform** (P04637: 9),
+  each with its own isoform accession (`P04637-2`) and `entryId`
+  (`AF-P04637-2-F1`). Select by `entryId`, never by position.
+- `alphafold_get_summary.structures` mixes in predicted complexes (AF3-style
+  HETERODIMERs) and grows upstream: for P69905 it holds 16 entries and
+  `AF-P69905-F1` is at index 8. Select by `model_identifier`.
+- `alphafold_get_annotations` returns AlphaMissense scores (`description:
+  "AM score"`), not the "experimental mutagenesis data mapped from UniProt"
+  its description claims, and the description's "returns empty for every
+  accession" note is stale.
+- Only *declared* parameters reach the tool: FastMCP rejects an undeclared
+  argument, so the config's `auto_query_params` silently overwriting a caller's
+  `type` (a real defect of the Python API) cannot be triggered over MCP —
+  `type=NONSENSE` is a validation error. `sequence_checksum` is declared, so it
+  does get through and is forwarded as a query parameter the API ignores.
+- Every failure is in-band: an entry name (`HBA_HUMAN`) or a malformed
+  accession is HTTP 400 upstream, which the tool reports as
+  `{"status": "error"}` with `isError: false`.
+
+**ncbi**
+
+- Same checkout, pin and cwd rules as `arxiv`.
+- Thin `esearch`/`esummary` wrappers, so every payload is nested under
+  `data` → `esearchresult` / `result`.
+- Address proteins by **GI number**: a GI pins one record version, so `slen`,
+  `accessionversion` and `title` do not drift; an accession follows the latest
+  version.
+- `genomicinfo[].chrstart/chrstop` are **0-based**, and `chrstart > chrstop` is
+  how a minus-strand gene is expressed. `efetch rettype=gene_table` reports the
+  same locus 1-based with the strand spelled out (+1 on both ends). Never fetch
+  `efetch db=gene retmode=xml` for a reference: 34 MB for TP53.
+- Tasks must not score the gene `summary` text, `exoncount`, `geneweight`,
+  `createdate`/`updatedate`, or counts for free-text queries; `idlist` for a
+  `SYM[Symbol] AND organism[Organism]` query, `maplocation` and `chraccver`
+  are stable.
+- Every failure is in-band with HTTP 200, in three different shapes: a
+  top-level `error` (id that is not a uid), a per-uid `error` (unknown uid),
+  and an empty `uids` list with no message at all. `retmax=0` is accepted and
+  returns an empty `idlist` next to a non-zero `count`.
+- The wrapper sends neither `tool=` nor `email=` and injects no `api_key`, so
+  only the shared 3 requests/s budget is available; the smoke serialises its
+  calls and its own reference requests.
 
 **jsbsim**
 

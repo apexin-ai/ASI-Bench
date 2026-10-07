@@ -755,13 +755,36 @@ scan WARNs and one that does not FAILs, `qe_get_kpath` (D10), a directory for
 (D11) vs the final one vs neither, a server output file from a different run,
 a run outside `<cwd>/qe_calculations` or with another pseudopotential, the
 `relax_and_scf` final SCF on the input geometry (D12), and the exact
-`qe_get_job_status` / Materials Project errors.
+`qe_get_job_status` / Materials Project errors;
+alphafold_db — the `{status, data, metadata}` wrapper split,
+the field-by-field comparison with an independently fetched entry (and that a
+new model version alone never differs), pLDDT read from a four-residue PDB
+fixture and binned at 50/70/90, AlphaMissense
+per-position means, isoform accessions (`P04637-2`) accepted while a mismatched
+`entryId` FAILs, summary selected by `model_identifier` (index 0 would be the
+wrong model), the pLDDT mean tolerance and the one-residue bin-edge WARN, the
+documented empty annotation state WARNing while an HTTP 500 or an
+`isError=true` sentinel FAILs, the undeclared-`type` three-state (the MCP layer
+rejecting it is a PASS, a silent `auto_query_params` override a WARN), and the
+`return_schema` drift check read from a fake checkout; ncbi — `gene_table`
+parsing for both strands (a plus-strand table carries no strand marker at all,
+so requiring one made every plus-strand gene read as an unparsable reference),
+the 0-based → 1-based locus shift (comparing the raw
+values is the mistake the test pins), the reference-assembly entry chosen over
+index 0, FASTA residue counting, the three in-band failure shapes plus zero hits
+with no error field (a WARN, not a FAIL — only records for an impossible id
+FAIL), a `retmax` dropped as falsy, an unusable `gene_table` reference blamed on
+the smoke rather than on the tool, Datasets `v2alpha` disagreements kept to
+WARN, and the identification check read from a fake checkout.
 
 `test_verify_spec.py` / `test_verify_values.py`: strict parsing (unknown,
 inapplicable and invalid keys, dangling and optional-from-required
 references, regexes, schema-1 normalisation, requirement grouping, `select` on
 a call result) and value reading (`select` modes, structured-output
-unwrapping, string/number chaining, geometry comparison).
+unwrapping, string/number chaining, geometry comparison, and the generic
+`json_scalars` extractor: scalar leaves at any depth of a record keyed by the
+requested uid, `None`/`False` never answerable, and a number canonicalised
+together with its string spelling).
 
 `test_verify_evidence.py`: event shapes from real `codex exec --json` runs
 (codex-cli 0.159.2): the Codex extractor (call ids, server/tool, text results,
@@ -789,7 +812,19 @@ start geometry, in-band `ok:false`, default method; gpaw_mos2_bandgap: a second
 `run_id` breaking the chain, the one-call `run_verified_workflow` shortcut as a
 bypass, an artefact listing that is not the run directory, a different
 verification report, while `find`/`cp` in the server's own directory stay
-PASS). With PySCF and geomeTRIC installed (`uv run --with pyscf==2.14.0 --with
+PASS; ncbi_gene_protein_card: a gene record read for an id the search did not return
+or fetched by symbol instead of uid breaks the chain, a value the record does
+not carry fails `answer_from_tool` while the per-call check still passes (the
+call result only pins the record's identity), all three in-band E-utilities
+failure shapes plus an empty `uids` list count as failed calls, and
+Biopython/entrez-direct/`datasets`/`curl` are bypasses while a plain WebSearch
+is a WARN; alphafold_isoform_profile: every one of the three tools is required, the
+`accession` alias of `qualifier` is a WARN, a score the annotation never carried
+fails, the documented empty annotation state is a failed call, and fetching the
+AlphaMissense CSV or UniProt is a bypass; its generator refuses equal isoform
+lengths, disagreeing length fields, a tied top score, a score exactly at the
+threshold, CSV disagreement and payloads above the 40 000-character cap).
+With PySCF and geomeTRIC installed (`uv run --with pyscf==2.14.0 --with
 geometric==1.1.1 ...`) the psi4 file also regenerates seed 31415 and compares
 with the recorded reference.
 
