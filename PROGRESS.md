@@ -903,7 +903,7 @@
   producing one result per attempt.
 - Implementation commit: `0e43cdd`.
 
-## 2026-09-29 – 2026-10-03: MCP end-to-end testing (L0–L2), seven servers and eight fake tasks
+## 2026-09-29 – 2026-10-07: MCP end-to-end testing (L0–L2), eight servers and nine fake tasks
 
 - Problem: the MCP catalog survey only proved L0 (`initialize` + `tools/list`).
   Nothing showed that an agent inside `asibench run` really calls a tool and
@@ -937,21 +937,24 @@
   `rdkit_conformer` (opaque-pickle chain, tool writes a file) `86905ae`;
   build123d L1 `6c8e727` (42 tools, closed-form CAD references),
   `build123d_plate_measure` (stateful CAD session, path arguments, binary
-  artefacts) `73ea607`.
+  artefacts) `73ea607`; gpaw L1 `22cd6b1` `929fa2f` `07899d6`,
+  `gpaw_mos2_bandgap` (six-tool `run_id` chain, measured DFT reference)
+  `fa97782` `2c85892` `ecde93d` `2ea3e7c`.
 - Framework and tooling work this produced: docs condensation `fe3651e`,
   verifier golden snapshot `b47c4f7`, verifier split into `e2e_verify/` with a
   strict spec parser `8ffc458`, `setup.py` installer registry `e24e8fc`, smoke
   scripts into `e2e_smoke/` with a shared runner `cbf026f`, tests regrouped into
   `tests/mcp_e2e/` `9fe5843`, persistence path-scrubbing fixed for shell
   commands `879dfc0`, for tool results `86905ae` and for tool arguments
-  `913d94e`, `$HOME` pinned in the MCP E2E tests `81d31e2`.
+  `913d94e`, `$HOME` pinned in the MCP E2E tests `81d31e2`, `listed_files` /
+  `named_statuses` extractors and a `superset` result match `2c85892` `ecde93d`.
 - Verification: every task passed B1–B4 on AWS Linux amd64 with both Claude Code
   (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`, effort medium) with every
   verifier check PASS, and at full local score except `build123d_plate_measure`
   on Codex b1 (396/400: it reported the bolt circle's diameter where the bolt
   hole's was asked for, which the prompt now spells out); per-task dates in
   `examples/mcp-e2e-tasks/README.md`, per-server smoke counts in
-  `scripts/mcp/e2e/README.md`. Offline coverage is `tests/mcp_e2e/` (469 tests)
+  `scripts/mcp/e2e/README.md`. Offline coverage is `tests/mcp_e2e/` (661 tests)
   with the golden snapshot pinning every `verify_one` outcome.
 
 Lessons — evidence and observability:
@@ -985,6 +988,9 @@ Lessons — evidence and observability:
   suite runs as that very user — four tests passed in CI and failed on the AWS
   E2E box. Pin `$HOME` in the tests (`81d31e2`) instead of choosing "unlikely"
   literals.
+- Compare a tool's report as a superset of its derivable part (`superset`), and
+  count what the run really leaves on disk: gpaw writes a text log per SCF, 24
+  files where the chain requires 10.
 - Build test streams from what the client really shows. A FastMCP tool with a
   return annotation declares an `outputSchema`, so Claude Code passes
   `structuredContent = {"result": …}` instead of the text block; streams built
@@ -1024,6 +1030,27 @@ Lessons — task design:
   it, and "the whole instance is zero" belongs to the hard gate. Never tighten a
   comparator shared by every task to make one test fail — choose a difference
   above its detection floor instead.
+- When the solver cannot enter a task runtime, carry a measured table (gpaw,
+  `fa97782` `ecde93d`): measure only the dimensions the solver depends on, derive
+  the rest with the L1-validated pure functions, record the server's own answer
+  for every derived field and assert the derivation against it offline. Fix the
+  instance grid *after* measuring — ecut 350 eV stopped on the force criterion
+  (fmax 0.0495 vs 0.05) and was dropped — and set the zero-credit tolerance from
+  the measured distance between neighbouring instances.
+- A discrete ground truth must not sit near a decision boundary, and must not
+  depend on anything that is not a function of the instance. gpaw's
+  `structure_drift` compares raw Cartesian positions with no minimum-image
+  convention, so a denormal Mo y (1e-19) wraps to `+a` and the check flips per
+  run (`2ea3e7c`); because verdicts are fail > warn > pass it also moved the
+  verdict. Keep such a check out of the reference, choose parameters where it
+  cannot reach the answer, and let the generator assert that.
+- An L1 reference that reimplements an upstream formula reproduces its bugs: the
+  smoke's own drift used the same naive formula, agreed with the server in all
+  14 runs and could never flag it. L1 green does not mean a quantity is
+  derivable.
+- Ask for artefacts the tool replies do not already contain (gpaw's figures exist
+  only on disk), and gate only the schema, so an agent that drove the chain but
+  could not find the server's directory loses those points, not the instance.
 
 Lessons — smoke tests:
 
@@ -1037,8 +1064,29 @@ Lessons — smoke tests:
   be the one that dies; tolerances must be absolute rather than scaled by the
   value; and a defect that depends on scheduling order needs repeated probes (12
   calls before `batch_map`'s `fail_fast` race showed up reliably).
+- A tool that computes for minutes needs its own `tools/call` timeout: the
+  client default of 300 s turned a correct `run_verified_workflow` result into a
+  FAIL on a loaded host (gpaw L1, 22cd6b1). Declare `Smoke.call_timeout`, print
+  each step before it starts and record `seconds_by_step` in the report —
+  otherwise a 30-minute smoke is indistinguishable from a hung one.
+- Reference values from the same library and conda lock agree to ~1e-10 eV
+  across aarch64 and amd64 (GPAW plane-wave DFT), so cross-platform drift is not
+  what a ground truth has to tolerate — upstream *releases* are (2-3 meV between
+  gpaw 25.7 and 26.7).
 
 Lessons — process:
+
+- LiteLLM's Anthropic-to-Responses adapter can flatten `thinking` into text and
+  discard `redacted_thinking`, reasoning IDs, and encrypted content even when
+  the wire API supports those fields. The lossless path added in `5012c87`
+  therefore uses an explicit opt-in bridge with execution-keyed, conversation-
+  bound replay envelopes and rejects unknown or unverifiable state before the
+  upstream call; compatibility translation must never imply semantic parity.
+- Hydrology closure scoring must use one consistent post-step interval. The
+  seed31415 `water_table.csv` day-0 row is already after the first update, so
+  pairing it with pre-step `theta_init` and day-0 fluxes silently mixes ranges.
+  Use row 0 through the final state and accumulate fluxes from day 1; validate
+  both datum-shift invariance and a deliberately drifting storage series.
 
 - The golden snapshot pins only the paths the fixtures exercise, so check that a
   branch is covered before relying on it, keep the file byte-identical through
@@ -1054,6 +1102,11 @@ Lessons — process:
   in `sys.modules` before `exec_module` or dataclasses break on Python 3.14;
   `AGENTS.md` must stay byte-identical to `CLAUDE.md`
   (`tests/test_ci_workflow.py`).
+- Diagnose with reads before re-runs: four rounds on the gpaw drift (run
+  directories, the two CIFs, upstream source, a fresh-process `verify_run` on two
+  run ids) cost no compute, and the first plausible story (an inherited user-site
+  ASE) was wrong. In the VM, never `tail` a `git checkout`: without the delete
+  permission it half-fails and leaves the old branch's files under the new HEAD.
 - When the VM cannot commit and the base branch moves, develop in a scratch clone
   rebased with a throwaway identity and resolve append-only conflicts (PROGRESS,
   README) by keeping both sides; keep scratch directories under the session home,

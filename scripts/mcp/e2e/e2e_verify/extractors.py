@@ -122,6 +122,68 @@ def canon_exported_files(value):
     return canon_file_name(value)
 
 
+# --- listings and named-check reports -----------------------------------------
+
+_LISTING_KEYS = ("artifacts", "files", "paths", "entries")
+_PATH_FIELDS = ("path", "file", "filename", "name")
+
+
+def _extract_listed_files(data):
+    """Paths of a file listing: a list of path strings, or of objects carrying a
+    ``path`` / ``file`` / ``filename`` / ``name`` field — either the whole result
+    or the single list under an ``artifacts`` / ``files`` / ``paths`` / ``entries``
+    key. Pairs with :func:`canon_exported_files`, so what is compared is the set
+    of file names, not host-specific directories."""
+    if isinstance(data, dict):
+        lists = [data[key] for key in _LISTING_KEYS if isinstance(data.get(key), list)]
+        if len(lists) != 1:
+            return None
+        data = lists[0]
+    if not isinstance(data, list) or not data:
+        return None
+    out = []
+    for item in data:
+        if isinstance(item, str):
+            out.append(item)
+            continue
+        if not isinstance(item, dict):
+            return None
+        named = [item[field] for field in _PATH_FIELDS if isinstance(item.get(field), str)]
+        if not named:
+            return None
+        out.append(named[0])
+    return out
+
+
+_STATUS_NAME_FIELDS = ("check", "name", "id")
+
+
+def _extract_named_statuses(data):
+    """``['convergence_gate:pass', ...]`` from a report whose ``checks`` list holds
+    objects with a name field and a ``status``, in the report's own order."""
+    items = data.get("checks") if isinstance(data, dict) else None
+    if not isinstance(items, list) or not items:
+        return None
+    out = []
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("status"), str):
+            return None
+        named = [item[field] for field in _STATUS_NAME_FIELDS if isinstance(item.get(field), str)]
+        if not named:
+            return None
+        out.append(f"{named[0]}:{item['status']}")
+    return out
+
+
+def canon_named_statuses(value):
+    """A list of ``name:status`` strings, stripped and lower-cased. Order is kept:
+    the order of a verification report is part of what a task pins."""
+    if not isinstance(value, list) or not value:
+        return None
+    out = [v.strip().lower() for v in value if isinstance(v, str) and v.strip()]
+    return out if len(out) == len(value) else None
+
+
 # --- records keyed by the identifier that was requested -----------------------
 
 def _extract_json_scalars(data):
@@ -185,4 +247,6 @@ EXTRACTORS: dict[str, Extractor] = {
     "rdkit_mol": Extractor(_extract_mol_field, canon_text),
     "file_name": Extractor(lambda data: data if isinstance(data, str) else None, canon_file_name),
     "exported_files": Extractor(_extract_exported_files, canon_exported_files),
+    "listed_files": Extractor(_extract_listed_files, canon_exported_files),
+    "named_statuses": Extractor(_extract_named_statuses, canon_named_statuses),
 }

@@ -120,6 +120,59 @@ def test_whole_result_selector_and_text_extractors():
     assert verify.values.read(verify.evidence.ToolCall(result_text=None), name) is None
 
 
+def test_listed_files_extractor_reads_any_file_listing():
+    """A listing result is compared by file name, not by the host directory it names."""
+    read = lambda data: verify.values.read(                                   # noqa: E731
+        verify.evidence.ToolCall(result_text=json.dumps(data)),
+        verify.spec.Selector(extract="listed_files"))
+    want = ["bands.png", "dos.png"]
+    assert read({"ok": True, "artifacts": [{"path": "runs/x/dos.png", "bytes": 1},
+                                           {"path": "runs/x/bands.png", "bytes": 2}]}) == want
+    assert read({"files": ["/abs/dos.png", "/abs/bands.png"]}) == want
+    assert read(["runs/x/bands.png", "runs/x/dos.png"]) == want
+    assert read({"entries": [{"name": "bands.png"}, {"filename": "dos.png"}]}) == want
+    # The reference side canonicalises the same way, so a spec lists bare names.
+    assert verify.extractors.EXTRACTORS["listed_files"].canon(want) == want
+    # Shapes it must refuse rather than guess at
+    for bad in ({"artifacts": [], "files": []}, {"artifacts": [{"bytes": 1}]},
+                {"artifacts": [1, 2]}, {"nothing": ["a.png"]}, {}, "a.png"):
+        assert read(bad) is None, bad
+
+
+def test_named_statuses_extractor_reads_a_report_of_named_checks():
+    read = lambda data: verify.values.read(                                   # noqa: E731
+        verify.evidence.ToolCall(result_text=json.dumps(data)),
+        verify.spec.Selector(extract="named_statuses"))
+    report = {"verdict": "pass_with_warnings",
+              "checks": [{"check": "convergence_gate", "status": "pass"},
+                         {"check": "band_gap_vs_mp", "status": "warn"}]}
+    want = ["convergence_gate:pass", "band_gap_vs_mp:warn"]
+    assert read(report) == want
+    assert read({"checks": [{"name": "a", "status": "PASS"}]}) == ["a:pass"]
+    assert verify.extractors.EXTRACTORS["named_statuses"].canon(want) == want
+    # Order is part of the report, so a reordered list is a different value.
+    assert read(report) != list(reversed(want))
+    for bad in ({"checks": []}, {"checks": [{"check": "a"}]}, {"checks": [{"status": "pass"}]},
+                {"checks": "pass"}, {"verdict": "pass"}, ["a:pass"]):
+        assert read(bad) is None, bad
+
+
+def test_superset_match_accepts_a_longer_listing():
+    """A file listing carries entries a task does not pin (GPAW's per-calculation logs),
+    so the required ones only have to be present."""
+    required = ["bands.png", "summary.json"]
+    listing = ["bands.png", "scf_300.txt", "summary.json"]
+    assert verify.values.matches(listing, required, "superset")
+    assert not verify.values.matches(listing, [*required, "missing.json"], "superset")
+    assert not verify.values.matches(required, listing, "superset")      # direction matters
+    # equal still means equal, and the dict-only subset mode is untouched
+    assert not verify.values.matches(listing, required, "equal")
+    assert verify.values.matches({"a": 1}, {"a": 1, "b": 2}, "subset")
+    assert not verify.values.matches(listing, required, "subset")
+    for empty in ([], None):
+        assert not verify.values.matches(listing, empty, "superset")
+
+
 def test_json_scalars_reads_records_keyed_by_the_requested_identifier():
     """E-utilities keys a record by the uid that was asked for, so no static dotted path
     reaches ``slen``; the extractor collects the scalar leaves instead."""

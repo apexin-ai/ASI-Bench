@@ -1,0 +1,219 @@
+{
+  "schema_version": 2,
+  "server": "gpaw",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": [
+    "calc_band_dos",
+    "check_convergence",
+    "fetch_structure",
+    "get_run_artifacts",
+    "relax_structure",
+    "run_verified_workflow",
+    "verify_run"
+  ],
+  "calls": [
+    {
+      "name": "fetch",
+      "tool": "fetch_structure",
+      "inputs_from_reference": {
+        "query": "query",
+        "use_builtin": "use_builtin"
+      },
+      "result": {
+        "format": "json",
+        "key": "band_gap_ref",
+        "reference_key": "band_gap_ref",
+        "abs_tol": 0
+      }
+    },
+    {
+      "name": "relax",
+      "tool": "relax_structure",
+      "inputs_from_reference": {
+        "ecut": "ecut",
+        "kpts_density": "kpts_density",
+        "fmax": "fmax",
+        "max_steps": "max_steps",
+        "engine": "engine"
+      },
+      "inputs_from_call": {
+        "call": "fetch",
+        "map": {
+          "run_id": "run_id"
+        }
+      },
+      "result": {
+        "format": "json",
+        "key": "total_energy_ev",
+        "reference_key": "relax_total_energy_ev",
+        "abs_tol": 1e-06
+      }
+    },
+    {
+      "name": "convergence",
+      "tool": "check_convergence",
+      "inputs_from_reference": {
+        "tol_mev_per_atom": "tol_mev_per_atom",
+        "engine": "engine"
+      },
+      "inputs_from_call": {
+        "call": "fetch",
+        "map": {
+          "run_id": "run_id"
+        }
+      },
+      "result": {
+        "format": "json",
+        "key": "recommended_kpts_density",
+        "reference_key": "recommended_kpts_density",
+        "abs_tol": 0
+      }
+    },
+    {
+      "name": "bands",
+      "tool": "calc_band_dos",
+      "inputs_from_reference": {
+        "ecut": "ecut",
+        "kpts_density": "kpts_density",
+        "npoints": "npoints",
+        "window_ev": "window_ev",
+        "engine": "engine"
+      },
+      "inputs_from_call": {
+        "call": "fetch",
+        "map": {
+          "run_id": "run_id"
+        }
+      },
+      "result": {
+        "format": "json",
+        "key": "band_gap_ev",
+        "reference_key": "band_gap_ev",
+        "abs_tol": 1e-06
+      }
+    },
+    {
+      "name": "verify",
+      "tool": "verify_run",
+      "inputs_from_reference": {
+        "gap_tol_ev": "gap_tol_ev"
+      },
+      "inputs_from_call": {
+        "call": "fetch",
+        "map": {
+          "run_id": "run_id"
+        }
+      },
+      "result": {
+        "format": "json",
+        "extract": "named_statuses",
+        "reference_key": "verify_deterministic_labels",
+        "match": "superset"
+      }
+    },
+    {
+      "name": "artifacts",
+      "tool": "get_run_artifacts",
+      "inputs_from_call": {
+        "call": "fetch",
+        "map": {
+          "run_id": "run_id"
+        }
+      },
+      "result": {
+        "format": "json",
+        "extract": "listed_files",
+        "reference_key": "run_artifact_names",
+        "match": "superset"
+      }
+    }
+  ],
+  "answers": [
+    {
+      "prediction_key": "relax_total_energy_ev",
+      "from_call": "relax",
+      "result_key": "total_energy_ev",
+      "reference_key": "relax_total_energy_ev",
+      "abs_tol": 1e-06
+    },
+    {
+      "prediction_key": "relax_max_force_ev_per_a",
+      "from_call": "relax",
+      "result_key": "max_force_ev_per_a",
+      "reference_key": "relax_max_force_ev_per_a",
+      "abs_tol": 1e-06
+    },
+    {
+      "prediction_key": "relax_n_steps",
+      "from_call": "relax",
+      "result_key": "n_steps",
+      "reference_key": "relax_n_steps",
+      "abs_tol": 0
+    },
+    {
+      "prediction_key": "relax_kpts",
+      "from_call": "relax",
+      "result_key": "kpts",
+      "reference_key": "relax_kpts",
+      "abs_tol": 0
+    },
+    {
+      "prediction_key": "scf_total_energy_ev",
+      "from_call": "bands",
+      "result_key": "total_energy_ev",
+      "reference_key": "scf_total_energy_ev",
+      "abs_tol": 1e-06
+    },
+    {
+      "prediction_key": "fermi_ev",
+      "from_call": "bands",
+      "result_key": "fermi_ev",
+      "reference_key": "fermi_ev",
+      "abs_tol": 1e-06
+    },
+    {
+      "prediction_key": "band_gap_ev",
+      "from_call": "bands",
+      "result_key": "band_gap_ev",
+      "reference_key": "band_gap_ev",
+      "abs_tol": 1e-06
+    },
+    {
+      "prediction_key": "recommended_ecut_ev",
+      "from_call": "convergence",
+      "result_key": "recommended_ecut_ev",
+      "reference_key": "recommended_ecut_ev",
+      "abs_tol": 0
+    },
+    {
+      "prediction_key": "recommended_kpts_density",
+      "from_call": "convergence",
+      "result_key": "recommended_kpts_density",
+      "reference_key": "recommended_kpts_density",
+      "abs_tol": 0
+    }
+  ],
+  "bypass_tools": {
+    "mcp__gpaw__run_verified_workflow": ""
+  },
+  "bypass_patterns": [
+    "(import|from)\\s+(gpaw|ase)\\b",
+    "\\b(pip|pip3|uv|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\b(gpaw|gpaw-data|ase|pymatgen|abipy|asap3|quantum-espresso)\\b",
+    "\\buvx\\b[^\\n]*\\b(gpaw|ase)\\b",
+    "\\bpython3?\\s+-m\\s+matmcp\\b|\\bmatmcp\\.(server|workflows|engines|verify)\\b",
+    "(gpaw|matmcp)[^\\s'\"]*/\\.venv/bin/(python|gpaw)",
+    "\\bgpaw\\s+(info|install-data|python|run|dataset)\\b",
+    "\\b(pw\\.x|ph\\.x|vasp|abinit|siesta)\\b"
+  ],
+  "suspicious_patterns": [
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ],
+  "suspicious_tools": {
+    "WebFetch": "(?i)\\b(gpaw|mos2|band\\s*gap|molybdenum)\\b",
+    "WebSearch": "(?i)\\b(gpaw|mos2|band\\s*gap|molybdenum)\\b",
+    "web_fetch": "(?i)\\b(gpaw|mos2|band\\s*gap|molybdenum)\\b",
+    "web_search": "(?i)\\b(gpaw|mos2|band\\s*gap|molybdenum)\\b"
+  }
+}

@@ -141,6 +141,10 @@
   （整体零分由 hard gate 负责）；「答案是否真的来自 MCP 工具」由
   `scripts/mcp/e2e/verify_run.py` 按 `e2e_check.json` 从 run 产物判定，框架评分契约不变，
   schema 以 `verify_run.py` docstring 为准。
+- 只有后端求解器无法进入 task runtime 时（gpaw：GPAW 只存在于 server 的 conda prefix）
+  才允许 generate_gt 携带**实测表**：必须由入库的测量脚本对钉死的 revision + lock 产出、
+  整表替换不得手改，实测维度压到最小，其余一律由纯函数在 generate 时推导，并有离线测试
+  对账脚本记录的 server 自身答案。
 - verifier 实现在 `e2e_verify/`（仅标准库，`verify_run.py` 只是 CLI）：spec 严格校验，
   未知键、非法枚举、悬空引用一律 `invalid_spec`；取值统一走 `Selector`、比较器共用，新
   值类型只加 extractor 或 comparator，跨 task 共用的比较器不得为了单个测试收紧；工具名
@@ -176,6 +180,16 @@
   私有数据、商业软件或许可证。
 
 ## 任务生命周期
+
+- Responses 翻译分支必须保留工具类型、原始 ID 和终止状态；未知字段须明确报错，
+  不得修改全局 `litellm.drop_params`。旧 LiteLLM 不支持 custom-tool round trip 时
+  明确拒绝并引导 native passthrough。该分支仍是 buffered SSE，不代表原生流式。
+  Responses-only 参数及 reasoning/item-reference 历史在翻译分支须提前拒绝；
+  不得将 LiteLLM 接收参数误认为下游 Chat 协议完整保留参数。
+- Claude 对原生 Responses endpoint 仅在显式 `anthropic_via_responses: true` 时启用；
+  必须请求 `reasoning.encrypted_content` 并以 execution 随机密钥签名、绑定会话历史的
+  replay envelope 保留 reasoning ID/密文。篡改、跨 execution/会话 replay、缺失密文、
+  未知参数/内容项和上游失败必须 fail closed；默认仍走兼容 Chat-only endpoint 的路径。
 
 你收到任务后，按以下 9 步流程自主完成：
 

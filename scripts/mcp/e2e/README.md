@@ -19,7 +19,8 @@ involved. Upstream code is cloned, never vendored; upstream licenses apply.
 | `smoke.py` | L0/L1 smoke CLI: `smoke.py <id> --config …`, JSON report |
 | `e2e_smoke/` | `runner.py` (the shared run and generic checks), `client.py` (stdio client recording non-JSON stdout), `helpers.py`, and `servers/<id>.py` per server (references + server-specific checks, declared as `SMOKE`) |
 | `verify_run.py` | L2 verifier CLI for agent runs; implementation in `e2e_verify/` (spec, extractors, values, evidence, checks) |
-| `locks/` | committed conda `@EXPLICIT` locks (psi4) |
+| `measure_gpaw_table.py` | gpaw only: measures the `MEASURED` ground-truth table of `mcp_e2e.gpaw_mos2_bandgap` against the pinned server (~1 h; re-run after a revision or lock bump) |
+| `locks/` | committed conda `@EXPLICIT` locks (psi4, gpaw) |
 
 Install modes:
 
@@ -103,13 +104,14 @@ re-implementing them.
 | `psi4` | `Keith9922/chemaster` (`calc_psi4`) | conda-explicit | `micromamba` on `PATH` | 14 / 11 / 0, amd64, 2026-10-02 (aarch64 PASS 2026-10-02, old layout) |
 | `rdkit` | `tandemai-inc/rdkit-mcp-server` (catalog `rdkit_tandem`) | uv-pip-pinned, Py 3.12 | — | 125 / 28 / 0, amd64, 2026-10-03 (aarch64 identical 2026-10-02) |
 | `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, amd64 and aarch64, 2026-10-03 |
+| `gpaw` | `Crystalhihihi/matmcp` | conda-explicit | `micromamba` on `PATH` | 38 / 13 / 0, amd64, 2026-10-03 (24 min single-threaded) |
 
 Install the prerequisites before running `setup.py`:
 
 ```sh
 sudo apt-get install libblas3 liblapack3            # s4, admin, once
 mkdir -p ~/.local/bin && curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
-  | tar -xj -C ~/.local bin/micromamba               # psi4
+  | tar -xj -C ~/.local bin/micromamba               # psi4, gpaw
 ```
 
 ## Notes for task authors
@@ -292,3 +294,85 @@ known defects is in each smoke script.
   not build a task on them.
 - No display, Xvfb, network or CAD application is needed: `render_view` and
   `health_check` pass headless.
+
+**gpaw**
+
+- This is the matmcp server (catalog `gpaw`); GPAW comes from conda-forge, so
+  the install is `conda-explicit` and the smoke must run with the server's own
+  prefix. No network, no PAW data download (`gpaw-data` ships the setups) and no
+  `GPAW_SETUP_PATH`.
+- Only one structure is reachable without a Materials Project key: the built-in
+  2H-MoS2 monolayer. With `use_builtin=true` the `query` is ignored (it only
+  names the run directory), and every other query needs `MP_API_KEY`, so tasks
+  can vary parameters but not the material. `mp-api` is nevertheless a hard
+  dependency: `fetch_structure` imports `MPRester` before the built-in branch.
+- Each tool works on a run directory, `runs/<run_id>/`, under `MATMCP_REPO`
+  (the checkout, as `setup.py` renders the config; upstream gitignores `runs/`).
+  The `run_id` is the server's own timestamp + uuid4, which chains the tools
+  together: a task should require it to be passed on verbatim.
+- The order of calls matters. `calc_band_dos` only reports
+  `params_verified: true` when a `check_convergence` gate has passed at or below
+  its own `ecut`/`kpts_density`, so the gate has to run first. The reply then
+  carries a `verification_note` that `summary.json` does not: an agent copying
+  the file loses the warning.
+- `gs.gpw` is one shared mutable restart file per run, written by every SCF
+  (`check_convergence` included) and read by the band structure: a task must fix
+  the call order and must not mix an old `summary.json` with a newer `gs.gpw`.
+- `check_convergence` sweeps a hard-coded range (ecut 300-800 eV, density
+  10-45) regardless of the run's parameters, takes about a minute, and only
+  `tol_mev_per_atom` moves the k-grid recommendation (`tol_gap_ev` is not on the
+  MCP surface). Densities that realize the same grid are evaluated once.
+- `run_verified_workflow` runs the whole chain as Python functions, so it
+  produces every artefact from a single tools/call and leaves no evidence of the
+  individual steps: a task about the chain has to forbid it. Its convergence
+  gate is real — bad parameters give `rejected_unconverged` with no gap and no
+  figures (and a Chinese rejection notice).
+- `calc_band_dos` prints ~123 non-JSON lines to stdout (GPAW's own SCF table:
+  `band_eigs` reopens the restart file without `txt=`). Claude Code and Codex
+  tolerate it, stricter clients may not.
+- All errors come back in band (`isError: false`, `{"ok": false, "error": ...}`),
+  including path traversal, unknown runs, `engine="qe"` (no pseudopotentials)
+  and unknown engines. The `traceback_tail` contains host paths.
+- Keep `OMP_NUM_THREADS=1` (the launch env does): the thread count moves the
+  last digits of the energies. Across hosts the same conda lock agrees to
+  ~1e-10 eV on energies and the gap and ~1e-8 eV on the Fermi level (aarch64 vs
+  amd64), but values drift by a few meV between GPAW releases, so ground truth
+  has to pin the lock. The FastMCP banner on stderr cannot be switched off when
+  the server is started as `python -m matmcp.server`; it does not touch the
+  transport.
+- Budget time, not just correctness: the whole smoke is 24 min of
+  single-threaded plane-wave DFT (amd64, 2026-10-03), one `run_verified_workflow`
+  call alone being several minutes. The smoke declares `call_timeout` (2 h)
+  because the client default of 300 s turned a correct workflow call into a
+  FAIL, prints each step before it starts and records `seconds_by_step` in the
+  report — use those numbers for an L2 task's `--timeout`.
+- The built-in path needs no network and no credentials, but one check
+  deliberately asks for a Materials Project structure without a key and expects
+  it to fail (HTTP 401, or a connection error on an offline host): that is the
+  only call that reaches out.
+- A task cannot recompute the DFT: GPAW exists only in this conda prefix and a
+  task runtime may not build one. `mcp_e2e.gpaw_mos2_bandgap` therefore carries
+  a measured table, produced by `measure_gpaw_table.py` (one chain per grid
+  point; eight chains took 63 min on amd64), and derives everything else — k-grid, convergence recommendation, `params_verified`
+  and the `verify_run` verdict — with the same pure functions this smoke
+  validates. Only `(ecut, kpts_density)` needs measuring; `tol_mev_per_atom` just
+  picks a row of the fixed sweep and `gap_tol_ev` a branch of the verifier.
+- `verify_run`'s `structure_drift` check is **not reproducible**. Upstream takes
+  `norm(a1.positions - a0.positions).max()` over the two CIFs (`verify.py:153`)
+  with no minimum-image convention, and ASE wraps coordinates when it reads a
+  CIF. `a2_x` is negative in this hexagonal cell, so an infinitesimal *positive*
+  fractional y becomes an infinitesimal *negative* Cartesian x and wraps to
+  `+a`. Mo's y force is zero by symmetry, but floating-point summation leaves a
+  denormal residue, so identical parameters on the same host give `y = 0.0` in
+  one run and `1.17e-19` in the next: 1e-19 of input, 3.18 A of reported drift,
+  and the check flips pass/warn per run (observed 0.020 A in 14 runs,
+  3.180 A in the 15th). A task must keep this check out of its ground truth, and
+  out of anything derived from it — verdicts are fail > warn > pass, so only a
+  verdict that some *failing* check already decides is derivable. The L1 smoke
+  cannot catch this: its own `drift` reimplements the same naive formula, so it
+  agrees with the server either way.
+- Relaxation below ecut 400 eV stops on the force threshold rather than at a
+  minimum: at 350 eV BFGS halts after 2 steps with fmax 0.0495 against the 0.05
+  criterion and reports an *indirect* Gamma->K gap, while 400-500 eV converge in
+  3 steps at ~0.0065 eV/A and give the direct K->K gap. A task must not build
+  instances on that corner.

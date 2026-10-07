@@ -220,24 +220,20 @@ class RichardsTopmodelProcessScorer(Scorer):
 
         precip = pd.to_numeric(forcing["precip_mm_day"], errors="coerce").to_numpy(float)
         storage = _column_water_storage_mm(pred_theta, dz)
-        storage_init = float(np.sum(np.asarray(profile["theta_init"], dtype=float) * dz) * 1000.0)
-        # Mirror the reference model's initial-state clamp.  Some valid
-        # parameter combinations place the requested water table above the
-        # bottom-layer center; run_simulation first moves it to the same 0.05 m
-        # separation used by the Darcy boundary before deriving storage.
-        z_bottom_center = float(np.asarray(profile["layer_centers_m"], dtype=float)[-1])
-        initial_water_table = max(
-            float(site["init_water_table_m"]),
-            z_bottom_center + 0.05,
-        )
-        aquifer_init = max(0.0, (5.0 - initial_water_table) * 0.20 * 1000.0)
+        # Each daily output row is the state after that day's update (day 0 is
+        # already the first post-step state).  Use the submission's own datum
+        # and the same post-step interval for every quantity: this avoids the
+        # hidden reference aquifer datum without mixing the initial pre-step
+        # soil state with the day-0 post-step aquifer state.
+        soil_start = float(storage[0])
+        aquifer_start = float(pred_wt["aquifer_storage_mm"].iloc[0])
         aquifer_end = float(pred_wt["aquifer_storage_mm"].iloc[-1])
-        delta_storage = (float(storage[-1]) - storage_init) + (aquifer_end - aquifer_init)
-        cum_in = float(np.nansum(precip))
+        delta_storage = (float(storage[-1]) - soil_start) + (aquifer_end - aquifer_start)
+        cum_in = float(np.nansum(precip[1:]))
         cum_out = float(
-            pred_flux["et_actual"].sum()
-            + pred_flux["runoff_surface"].sum()
-            + pred_flux["baseflow"].sum()
+            pred_flux["et_actual"].iloc[1:].sum()
+            + pred_flux["runoff_surface"].iloc[1:].sum()
+            + pred_flux["baseflow"].iloc[1:].sum()
         )
         # Closure is a self-consistency check (any internally mass-conserving
         # model passes it, including a generic bucket with the wrong physics),

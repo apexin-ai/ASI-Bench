@@ -27,11 +27,16 @@ identifier from a user-supplied model name and explicit ``api_protocol``.
 from __future__ import annotations
 
 import asyncio
+import base64
+import copy
+import hashlib
+import hmac
 import http.server
 import json
 import logging
 import os
 from pathlib import Path
+import secrets
 import threading
 import time
 import urllib.error
@@ -600,6 +605,30 @@ def to_chat_completions_model(model: str) -> str:
     return model
 
 
+def _litellm_supports_custom_tools() -> bool:
+    """Older LiteLLM releases silently flatten custom tools in the Chat bridge."""
+    try:
+        from litellm.responses.litellm_completion_transformation.custom_tools import (
+            build_tool_call_item_kwargs,
+        )
+    except ImportError:
+        return False
+    # Probe the reconstruction capability without invoking a model or keeping
+    # per-session state. This is available in the tested LiteLLM 1.97.0 release.
+    try:
+        item = build_tool_call_item_kwargs(
+            "call_probe", "exec", '{"content":"probe"}', "completed", {"exec"},
+        )
+    except Exception:
+        return False
+    return (isinstance(item, dict) and item.get("type") == "custom_tool_call"
+            and item.get("input") == "probe")
+
+
+class _ProtocolTranslationError(ValueError):
+    """A request cannot be represented losslessly by the selected bridge."""
+
+
 class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
     """HTTP handler that bridges Anthropic Messages API to litellm."""
 
@@ -607,6 +636,8 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
     litellm_model: str
     litellm_api_base: str | None
     litellm_api_key: str | None
+    anthropic_via_responses: bool = False
+    reasoning_replay_key: bytes
     supports_image_input: bool = False
 
     def do_POST(self) -> None:
@@ -624,11 +655,17 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             self._send_error(400, f"Invalid JSON: {e}")
             return
+        if not isinstance(body, dict):
+            self._send_anthropic_error(400, "Messages request body must be a JSON object")
+            return
 
         body = prepare_model_input_for_endpoint(
             body,
             supports_image_input=self.supports_image_input,
         )
+        if self.anthropic_via_responses:
+            self._handle_anthropic_via_responses(body)
+            return
         is_stream = body.get("stream", False)
 
         kwargs = self._build_litellm_kwargs(body)
@@ -697,6 +734,467 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                 kwargs[key] = body[key]
 
         return kwargs
+
+    def _handle_anthropic_via_responses(self, body: dict[str, Any]) -> None:
+        """Translate Messages to Responses with lossless reasoning-state replay."""
+        try:
+            kwargs = self._build_anthropic_responses_kwargs(body)
+        except _ProtocolTranslationError as exc:
+            self._send_anthropic_error(400, str(exc))
+            return
+
+        try:
+            import litellm
+            response = litellm.responses(**kwargs)
+        except Exception as exc:
+            logger.exception("anthropic-to-responses: upstream call failed")
+            self._send_anthropic_error(502, f"Upstream error: {type(exc).__name__}: {exc}")
+            return
+
+        try:
+            raw = response.model_dump() if hasattr(response, "model_dump") else dict(response)
+            translated = self._responses_to_anthropic(
+                raw, self._conversation_digest(body.get("messages", [])),
+            )
+        except _ProtocolTranslationError as exc:
+            self._send_anthropic_error(502, str(exc))
+            return
+        except Exception:
+            logger.exception("anthropic-to-responses: malformed upstream response")
+            self._send_anthropic_error(502, "Malformed Responses response")
+            return
+
+        if body.get("stream", False):
+            self._handle_synthetic_streaming(translated)
+        else:
+            self._handle_non_streaming(translated)
+
+    def _build_anthropic_responses_kwargs(self, body: dict[str, Any]) -> dict[str, Any]:
+        supported = {
+            "model", "messages", "max_tokens", "stream", "system", "temperature",
+            "top_p", "metadata", "tools", "tool_choice", "thinking",
+        }
+        unknown = set(body) - supported
+        if unknown:
+            raise _ProtocolTranslationError(
+                "Unsupported Anthropic-to-Responses parameter(s): "
+                + ", ".join(sorted(unknown))
+            )
+
+        messages = body.get("messages")
+        if not isinstance(messages, list):
+            raise _ProtocolTranslationError("messages must be an array")
+        max_tokens = body.get("max_tokens")
+        if not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or max_tokens <= 0:
+            raise _ProtocolTranslationError("max_tokens must be a positive integer")
+
+        kwargs: dict[str, Any] = {
+            "model": self.litellm_model,
+            "input": self._anthropic_messages_to_responses_input(messages),
+            "max_output_tokens": max_tokens,
+            "include": ["reasoning.encrypted_content"],
+            "store": False,
+            "stream": False,
+            "drop_params": False,
+        }
+        if self.litellm_api_base:
+            kwargs["api_base"] = self.litellm_api_base
+        if self.litellm_api_key:
+            kwargs["api_key"] = self.litellm_api_key
+
+        system = body.get("system")
+        if system is not None:
+            kwargs["instructions"] = self._anthropic_system_text(system)
+        for key in ("temperature", "top_p"):
+            if body.get(key) is not None:
+                kwargs[key] = body[key]
+        metadata = body.get("metadata")
+        if metadata is not None:
+            if not isinstance(metadata, dict):
+                raise _ProtocolTranslationError("metadata must be an object")
+            if metadata.get("user_id") is not None:
+                kwargs["user"] = str(metadata["user_id"])[:64]
+        if body.get("tools") is not None:
+            kwargs["tools"] = self._anthropic_tools_to_responses(body["tools"])
+        if body.get("tool_choice") is not None:
+            kwargs["tool_choice"] = self._anthropic_tool_choice_to_responses(body["tool_choice"])
+        if body.get("thinking") is not None:
+            kwargs["reasoning"] = self._anthropic_thinking_to_responses(body["thinking"])
+        return kwargs
+
+    def _anthropic_messages_to_responses_input(
+        self, messages: list[Any],
+    ) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        replayed: dict[str, dict[str, Any]] = {}
+        replayed_tools: dict[str, dict[str, Any]] = {}
+
+        def append_message(role: str, parts: list[dict[str, Any]]) -> None:
+            if parts:
+                result.append({"type": "message", "role": role, "content": parts.copy()})
+                parts.clear()
+
+        for message_index, message in enumerate(messages):
+            if not isinstance(message, dict) or message.get("role") not in {"user", "assistant"}:
+                raise _ProtocolTranslationError("Each message requires a user or assistant role")
+            role = message["role"]
+            content = message.get("content", "")
+            if isinstance(content, str):
+                part_type = "input_text" if role == "user" else "output_text"
+                result.append({
+                    "type": "message", "role": role,
+                    "content": [{"type": part_type, "text": content}],
+                })
+                continue
+            if not isinstance(content, list):
+                raise _ProtocolTranslationError("Message content must be text or an array")
+
+            parts: list[dict[str, Any]] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    raise _ProtocolTranslationError("Message content blocks must be objects")
+                block_type = block.get("type")
+                if block_type == "text":
+                    text = block.get("text")
+                    if not isinstance(text, str):
+                        raise _ProtocolTranslationError("Text blocks require string text")
+                    parts.append({
+                        "type": "input_text" if role == "user" else "output_text",
+                        "text": text,
+                    })
+                elif role == "user" and block_type == "image":
+                    source = block.get("source")
+                    if not isinstance(source, dict):
+                        raise _ProtocolTranslationError("Image blocks require a source object")
+                    if source.get("type") == "base64" and isinstance(source.get("data"), str):
+                        media_type = source.get("media_type", "image/jpeg")
+                        url = f"data:{media_type};base64,{source['data']}"
+                    elif source.get("type") == "url" and isinstance(source.get("url"), str):
+                        url = source["url"]
+                    else:
+                        raise _ProtocolTranslationError("Unsupported Anthropic image source")
+                    parts.append({"type": "input_image", "image_url": url})
+                elif role == "user" and block_type == "tool_result":
+                    append_message(role, parts)
+                    tool_use_id = block.get("tool_use_id")
+                    if not isinstance(tool_use_id, str) or not tool_use_id:
+                        raise _ProtocolTranslationError("tool_result requires tool_use_id")
+                    replayed_tool = replayed_tools.get(tool_use_id)
+                    if replayed_tool is None:
+                        raise _ProtocolTranslationError(
+                            "tool_result does not reference a replayed ASI-Bench tool call"
+                        )
+                    result.append({
+                        "type": "function_call_output",
+                        "call_id": replayed_tool["call_id"],
+                        "output": self._anthropic_tool_result_text(block.get("content")),
+                    })
+                elif role == "assistant" and block_type == "tool_use":
+                    append_message(role, parts)
+                    tool_use_id = block.get("id")
+                    name = block.get("name")
+                    tool_input = block.get("input", {})
+                    if (not isinstance(tool_use_id, str) or not tool_use_id
+                            or not isinstance(name, str) or not name
+                            or not isinstance(tool_input, dict)):
+                        raise _ProtocolTranslationError("tool_use requires ID, name, and object input")
+                    tool_call = self._decode_tool_replay(
+                        tool_use_id, self._conversation_digest(messages[:message_index]),
+                    )
+                    if tool_call["name"] != name:
+                        raise _ProtocolTranslationError("Replayed tool name does not match its envelope")
+                    try:
+                        original_input = json.loads(tool_call["arguments"])
+                    except json.JSONDecodeError as exc:
+                        raise _ProtocolTranslationError("Malformed tool replay envelope") from exc
+                    if original_input != tool_input:
+                        raise _ProtocolTranslationError("Replayed tool input does not match its envelope")
+                    result.append(tool_call)
+                    replayed_tools[tool_use_id] = tool_call
+                elif role == "assistant" and block_type in {"thinking", "redacted_thinking"}:
+                    append_message(role, parts)
+                    field = "signature" if block_type == "thinking" else "data"
+                    token = block.get(field)
+                    if not isinstance(token, str):
+                        raise _ProtocolTranslationError(
+                            f"{block_type} requires an ASI-Bench replay {field}"
+                        )
+                    reasoning = self._decode_reasoning_replay(
+                        token, self._conversation_digest(messages[:message_index]),
+                    )
+                    prior = replayed.get(reasoning["id"])
+                    if prior is not None and prior != reasoning:
+                        raise _ProtocolTranslationError("Conflicting reasoning replay items")
+                    if prior is None:
+                        result.append(reasoning)
+                        replayed[reasoning["id"]] = reasoning
+                else:
+                    raise _ProtocolTranslationError(
+                        f"Unsupported {role} content block for Responses translation: {block_type!r}"
+                    )
+            append_message(role, parts)
+        return result
+
+    @staticmethod
+    def _anthropic_system_text(system: Any) -> str:
+        if isinstance(system, str):
+            return system
+        if isinstance(system, list) and all(
+            isinstance(block, dict) and block.get("type") == "text"
+            and isinstance(block.get("text"), str) for block in system
+        ):
+            return "\n".join(block["text"] for block in system)
+        raise _ProtocolTranslationError("system must be text or an array of text blocks")
+
+    @staticmethod
+    def _anthropic_tool_result_text(content: Any) -> str:
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list) and all(
+            isinstance(part, dict) and part.get("type") == "text"
+            and isinstance(part.get("text"), str) for part in content
+        ):
+            return "\n".join(part["text"] for part in content)
+        raise _ProtocolTranslationError("Only text tool_result content can be translated")
+
+    @staticmethod
+    def _anthropic_tools_to_responses(tools: Any) -> list[dict[str, Any]]:
+        if not isinstance(tools, list):
+            raise _ProtocolTranslationError("tools must be an array")
+        translated: list[dict[str, Any]] = []
+        for tool in tools:
+            if not isinstance(tool, dict):
+                raise _ProtocolTranslationError("Tool declarations must be objects")
+            name = tool.get("name")
+            schema = tool.get("input_schema", {"type": "object"})
+            if not isinstance(name, str) or not name or not isinstance(schema, dict):
+                raise _ProtocolTranslationError("Tools require a name and object input_schema")
+            translated_tool: dict[str, Any] = {
+                "type": "function", "name": name, "parameters": schema,
+            }
+            if isinstance(tool.get("description"), str):
+                translated_tool["description"] = tool["description"]
+            translated.append(translated_tool)
+        return translated
+
+    @staticmethod
+    def _anthropic_tool_choice_to_responses(choice: Any) -> str | dict[str, Any]:
+        if not isinstance(choice, dict):
+            raise _ProtocolTranslationError("tool_choice must be an object")
+        choice_type = choice.get("type")
+        if choice_type == "auto":
+            return "auto"
+        if choice_type == "any":
+            return "required"
+        if choice_type == "none":
+            return "none"
+        if choice_type == "tool" and isinstance(choice.get("name"), str):
+            return {"type": "function", "name": choice["name"]}
+        raise _ProtocolTranslationError("Unsupported Anthropic tool_choice")
+
+    @staticmethod
+    def _anthropic_thinking_to_responses(thinking: Any) -> dict[str, str]:
+        if not isinstance(thinking, dict):
+            raise _ProtocolTranslationError("thinking must be an object")
+        thinking_type = thinking.get("type")
+        if thinking_type == "adaptive":
+            return {"effort": "medium", "summary": "detailed"}
+        if thinking_type != "enabled":
+            raise _ProtocolTranslationError("Only enabled or adaptive thinking can be translated")
+        budget = thinking.get("budget_tokens")
+        if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
+            raise _ProtocolTranslationError("enabled thinking requires positive budget_tokens")
+        effort = "high" if budget >= 10000 else "medium" if budget >= 5000 else "low"
+        return {"effort": effort, "summary": "detailed"}
+
+    @staticmethod
+    def _conversation_digest(messages: Any) -> str:
+        payload = json.dumps(
+            messages, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        ).encode()
+        return hashlib.sha256(payload).hexdigest()
+
+    def _encode_signed_replay(
+        self, kind: str, item: dict[str, Any], conversation_digest: str,
+    ) -> str:
+        envelope = {"conversation": conversation_digest, "item": item}
+        payload = json.dumps(
+            envelope, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        ).encode()
+        encoded = base64.urlsafe_b64encode(payload).rstrip(b"=").decode()
+        signature = hmac.new(self.reasoning_replay_key, encoded.encode(), hashlib.sha256).digest()
+        encoded_signature = base64.urlsafe_b64encode(signature).rstrip(b"=").decode()
+        return f"asibench-{kind}-v1.{encoded}.{encoded_signature}"
+
+    def _decode_signed_replay(
+        self, token: str, kind: str, expected_conversation: str | None,
+    ) -> dict[str, Any]:
+        try:
+            prefix, encoded, encoded_signature = token.split(".")
+            if prefix != f"asibench-{kind}-v1":
+                raise ValueError
+            expected = hmac.new(self.reasoning_replay_key, encoded.encode(), hashlib.sha256).digest()
+            supplied = base64.b64decode(
+                encoded_signature + "=" * (-len(encoded_signature) % 4),
+                altchars=b"-_", validate=True,
+            )
+            if not hmac.compare_digest(expected, supplied):
+                raise ValueError
+            payload = base64.b64decode(
+                encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True,
+            )
+            envelope = json.loads(payload)
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            raise _ProtocolTranslationError(
+                "Invalid or expired ASI-Bench replay envelope"
+            ) from exc
+        if (not isinstance(envelope, dict) or set(envelope) != {"conversation", "item"}
+                or not isinstance(envelope.get("conversation"), str)
+                or not isinstance(envelope.get("item"), dict)):
+            raise _ProtocolTranslationError("Malformed replay envelope")
+        if (expected_conversation is not None
+                and not hmac.compare_digest(envelope["conversation"], expected_conversation)):
+            raise _ProtocolTranslationError(
+                "Replay envelope belongs to a different conversation"
+            )
+        return envelope["item"]
+
+    def _encode_reasoning_replay(
+        self, item: dict[str, Any], conversation_digest: str,
+    ) -> str:
+        return self._encode_signed_replay("reasoning", item, conversation_digest)
+
+    def _decode_reasoning_replay(
+        self, token: str, expected_conversation: str | None = None,
+    ) -> dict[str, Any]:
+        item = self._decode_signed_replay(token, "reasoning", expected_conversation)
+        if (set(item) != {
+                "type", "id", "summary", "encrypted_content"}
+                or item.get("type") != "reasoning"
+                or not isinstance(item.get("id"), str) or not item["id"]
+                or not isinstance(item.get("summary"), list)
+                or not isinstance(item.get("encrypted_content"), str)
+                or not item["encrypted_content"]):
+            raise _ProtocolTranslationError("Malformed reasoning replay envelope")
+        return item
+
+    def _encode_tool_replay(
+        self, item: dict[str, Any], conversation_digest: str,
+    ) -> str:
+        return self._encode_signed_replay("tool", item, conversation_digest)
+
+    def _decode_tool_replay(
+        self, token: str, expected_conversation: str,
+    ) -> dict[str, Any]:
+        item = self._decode_signed_replay(token, "tool", expected_conversation)
+        if (set(item) != {"type", "id", "call_id", "name", "arguments", "status"}
+                or item.get("type") != "function_call"
+                or any(not isinstance(item.get(key), str) or not item[key]
+                       for key in ("id", "call_id", "name"))
+                or not isinstance(item.get("arguments"), str)
+                or not isinstance(item.get("status"), str)):
+            raise _ProtocolTranslationError("Malformed tool replay envelope")
+        return item
+
+    def _responses_to_anthropic(
+        self, response: dict[str, Any], conversation_digest: str,
+    ) -> dict[str, Any]:
+        if not isinstance(response, dict):
+            raise _ProtocolTranslationError("Malformed Responses response")
+        status = response.get("status")
+        if status == "failed":
+            error = response.get("error")
+            detail = error.get("message") if isinstance(error, dict) else "unknown upstream failure"
+            raise _ProtocolTranslationError(f"Responses request failed: {detail}")
+        if status not in {"completed", "incomplete"}:
+            raise _ProtocolTranslationError(f"Unsupported Responses status: {status!r}")
+        output = response.get("output")
+        if not isinstance(output, list) or any(not isinstance(item, dict) for item in output):
+            raise _ProtocolTranslationError("Malformed Responses output")
+
+        content: list[dict[str, Any]] = []
+        stop_reason = "max_tokens" if status == "incomplete" else "end_turn"
+        for item in output:
+            item_type = item.get("type")
+            if item_type == "reasoning":
+                reasoning = {
+                    "type": "reasoning", "id": item.get("id"),
+                    "summary": item.get("summary", []),
+                    "encrypted_content": item.get("encrypted_content"),
+                }
+                if (not isinstance(reasoning["id"], str) or not reasoning["id"]
+                        or not isinstance(reasoning["summary"], list)
+                        or not isinstance(reasoning["encrypted_content"], str)
+                        or not reasoning["encrypted_content"]):
+                    raise _ProtocolTranslationError(
+                        "Responses reasoning item lacks an ID or encrypted_content"
+                    )
+                token = self._encode_reasoning_replay(reasoning, conversation_digest)
+                summaries = [
+                    summary.get("text") for summary in reasoning["summary"]
+                    if isinstance(summary, dict) and isinstance(summary.get("text"), str)
+                ]
+                if summaries:
+                    content.extend({"type": "thinking", "thinking": text, "signature": token}
+                                   for text in summaries)
+                else:
+                    content.append({"type": "redacted_thinking", "data": token})
+            elif item_type == "message":
+                parts = item.get("content")
+                if not isinstance(parts, list):
+                    raise _ProtocolTranslationError("Malformed Responses message content")
+                for part in parts:
+                    if not isinstance(part, dict) or part.get("type") != "output_text" \
+                            or not isinstance(part.get("text"), str):
+                        raise _ProtocolTranslationError("Unsupported Responses message content")
+                    content.append({"type": "text", "text": part["text"]})
+            elif item_type == "function_call":
+                item_id = item.get("id")
+                call_id = item.get("call_id")
+                name = item.get("name")
+                arguments = item.get("arguments")
+                if (not isinstance(item_id, str) or not item_id
+                        or not isinstance(call_id, str) or not call_id
+                        or not isinstance(name, str) or not name
+                        or not isinstance(arguments, str)):
+                    raise _ProtocolTranslationError("Malformed Responses function call")
+                try:
+                    tool_input = json.loads(arguments)
+                except json.JSONDecodeError as exc:
+                    raise _ProtocolTranslationError("Responses function arguments are not JSON") from exc
+                if not isinstance(tool_input, dict):
+                    raise _ProtocolTranslationError("Responses function arguments must be an object")
+                tool_call = {
+                    "type": "function_call", "id": item_id, "call_id": call_id,
+                    "name": name, "arguments": arguments,
+                    "status": item.get("status") or "completed",
+                }
+                token = self._encode_tool_replay(tool_call, conversation_digest)
+                content.append({"type": "tool_use", "id": token, "name": name,
+                                "input": tool_input})
+                stop_reason = "tool_use"
+            else:
+                raise _ProtocolTranslationError(
+                    f"Unsupported Responses output item: {item_type!r}"
+                )
+
+        if status == "incomplete":
+            stop_reason = "max_tokens"
+
+        usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+        return {
+            "id": response.get("id", "msg_responses_proxy"),
+            "type": "message", "role": "assistant",
+            "content": content or [{"type": "text", "text": ""}],
+            "model": response.get("model", self.litellm_model),
+            "stop_reason": stop_reason, "stop_sequence": None,
+            "usage": {
+                "input_tokens": usage.get("input_tokens", 0),
+                "output_tokens": usage.get("output_tokens", 0),
+            },
+        }
 
     def _handle_non_streaming(self, response: Any) -> None:
         try:
@@ -785,6 +1283,17 @@ class _LiteLLMProxyHandler(http.server.BaseHTTPRequestHandler):
                             "index": idx,
                             "delta": {"type": "signature_delta", "signature": signature},
                         })
+                elif btype == "redacted_thinking":
+                    data = block.get("data")
+                    if not isinstance(data, str) or not data:
+                        raise _ProtocolTranslationError(
+                            "redacted_thinking response block requires replay data"
+                        )
+                    self._write_sse("content_block_start", {
+                        "type": "content_block_start",
+                        "index": idx,
+                        "content_block": {"type": "redacted_thinking", "data": data},
+                    })
                 else:
                     self._write_sse("content_block_start", {
                         "type": "content_block_start",
@@ -870,6 +1379,9 @@ class LiteLLMProxy:
         Whether the upstream endpoint accepts image content blocks. Defaults
         to ``False`` so unknown endpoints fail safe; visual endpoints must opt
         in explicitly.
+    anthropic_via_responses : bool
+        Use the upstream native Responses API and preserve encrypted reasoning
+        replay. Defaults to ``False`` for Chat-Completions-only endpoints.
     """
 
     def __init__(
@@ -879,12 +1391,15 @@ class LiteLLMProxy:
         api_key: str | None = None,
         port: int = 0,
         supports_image_input: bool = False,
+        anthropic_via_responses: bool = False,
     ) -> None:
         self.model = model
         self.api_base = api_base
         self.api_key = api_key
         self._port = port
         self.supports_image_input = supports_image_input
+        self._anthropic_via_responses = anthropic_via_responses
+        self._reasoning_replay_key = secrets.token_bytes(32)
         self._server: http.server.HTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -901,6 +1416,8 @@ class LiteLLMProxy:
             "litellm_api_base": self.api_base,
             "litellm_api_key": self.api_key,
             "supports_image_input": self.supports_image_input,
+            "anthropic_via_responses": self._anthropic_via_responses,
+            "reasoning_replay_key": self._reasoning_replay_key,
         })
         self._server = http.server.ThreadingHTTPServer(
             ("127.0.0.1", self._port), handler,
@@ -1676,19 +2193,76 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
             self._send_error(400, f"Invalid JSON: {e}")
             return
 
+        if not isinstance(body, dict):
+            self._send_openai_error(400, "Responses request body must be a JSON object")
+            return
+
         body = self._prepare_model_input(body)
         is_stream = bool(body.get("stream"))
 
-        # Build litellm.responses kwargs.
-        kwargs: dict[str, Any] = {"model": self.litellm_model}
-        for key in (
+        # Keep the allowlist explicit: arbitrary LiteLLM kwargs could override
+        # routing or credentials. Unknown fields must fail rather than disappear.
+        response_params = {
             "input", "instructions", "max_output_tokens", "reasoning",
             "tools", "tool_choice", "temperature", "top_p",
-            "parallel_tool_calls", "previous_response_id", "metadata",
-            "text", "truncation", "store", "user",
+            "parallel_tool_calls", "metadata", "text", "user",
+        }
+        # Passing a field to litellm.responses is not proof that the downstream
+        # Chat bridge preserves it. Even newer LiteLLM drops Responses-only
+        # include/tool limits. Stateful IDs also require a session store we do
+        # not own or isolate here. Require native passthrough for these features.
+        unknown = set(body) - response_params - {"model", "stream", "additional_tools"}
+        if unknown:
+            self._send_openai_error(
+                400, "Unsupported Responses translation parameter(s): "
+                + ", ".join(sorted(unknown))
+                + ". Use native Responses passthrough for unsupported features.",
+            )
+            return
+        history = body.get("input")
+        if isinstance(history, list) and any(
+            isinstance(item, dict) and item.get("type") in {"reasoning", "item_reference"}
+            for item in history
         ):
-            if key in body and body[key] is not None:
-                kwargs[key] = body[key]
+            self._send_openai_error(
+                400, "Responses translation cannot guarantee reasoning/item-reference replay; "
+                "use native Responses passthrough with the original history.",
+            )
+            return
+        kwargs = {key: value for key, value in body.items() if key in response_params}
+        kwargs["model"] = self.litellm_model
+
+        # The CLI extension supplies extra declarations separately. LiteLLM's
+        # Responses-to-Chat converter discovers custom tool names from `tools`.
+        # Merge declarations without flattening custom tools into function tools.
+        if "additional_tools" in body:
+            additional_tools = body["additional_tools"]
+            tools = body.get("tools") or []
+            if not isinstance(tools, list) or not isinstance(additional_tools, list):
+                self._send_openai_error(400, "tools and additional_tools must be arrays")
+                return
+            kwargs["tools"] = tools + additional_tools
+
+        tools = kwargs.get("tools") or []
+        if not isinstance(tools, list) or any(not isinstance(t, dict) for t in tools):
+            self._send_openai_error(400, "tools must be an array of tool declarations")
+            return
+        custom_tools = [t for t in tools if t.get("type") == "custom"]
+        if any(not isinstance(t.get("name"), str) or not t["name"] for t in custom_tools):
+            self._send_openai_error(400, "Custom tools require a non-empty string name")
+            return
+        custom_names = {t["name"] for t in custom_tools}
+        has_custom_history = isinstance(history, list) and any(
+            isinstance(item, dict) and item.get("type") in {"custom_tool_call", "custom_tool_call_output"}
+            for item in history
+        )
+        if (custom_names or has_custom_history) and not _litellm_supports_custom_tools():
+            self._send_openai_error(
+                400, "Installed LiteLLM cannot preserve custom tools in Responses translation. "
+                "Use native Responses passthrough or a LiteLLM version with custom-tool "
+                "round-trip support (tested with 1.97.0).",
+            )
+            return
 
         if self.litellm_api_base:
             kwargs["api_base"] = self.litellm_api_base
@@ -1702,10 +2276,9 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
 
         try:
             import litellm
-            # drop unsupported params (e.g. reasoning_effort for Anthropic)
-            # instead of raising — MiMo / Codex CLIs pass Responses-shaped
-            # params that don't universally map.
-            litellm.drop_params = True
+            # Do not change process-global policy (other sessions share it), or
+            # ask LiteLLM to silently discard execution-critical parameters.
+            kwargs["drop_params"] = False
             response = litellm.responses(**kwargs)
         except Exception as e:
             logger.exception("responses translation: litellm.responses failed")
@@ -1715,10 +2288,28 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
         try:
             resp_dict = response.model_dump() if hasattr(response, "model_dump") else dict(response)
         except Exception:
-            try:
-                resp_dict = json.loads(json.dumps(response, default=str))
-            except Exception:
-                resp_dict = {"error": "Failed to serialize response"}
+            self._send_openai_error(502, "Failed to serialize translated Responses response")
+            return
+
+        # Validate before either JSON or SSE handling. Otherwise malformed
+        # upstream data can crash the handler or masquerade as an empty success.
+        output = resp_dict.get("output") if isinstance(resp_dict, dict) else None
+        if not isinstance(output, list) or any(not isinstance(item, dict) for item in output):
+            self._send_openai_error(502, "Malformed Responses output: expected an array of objects")
+            return
+        for item in output:
+            if item.get("type") in {"function_call", "custom_tool_call"}:
+                field = "input" if item["type"] == "custom_tool_call" else "arguments"
+                if (any(not isinstance(item.get(key), str) or not item[key]
+                        for key in ("call_id", "name"))
+                        or not isinstance(item.get(field), str)):
+                    self._send_openai_error(502, "Malformed Responses tool call: missing call ID, name or string payload")
+                    return
+
+        if any(item.get("type") == "function_call" and item.get("name") in custom_names
+               for item in output):
+            self._send_openai_error(502, "Upstream translation lost the custom tool type; use native Responses passthrough")
+            return
 
         if is_stream:
             self._handle_synthetic_responses_streaming(resp_dict)
@@ -1734,26 +2325,38 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
                 pass
 
     def _handle_synthetic_responses_streaming(self, resp_dict: dict) -> None:
-        """Emit a minimal Responses API SSE sequence from a completed response.
+        """Replay a buffered response without changing item types, IDs or status.
 
-        We synthesize the events the OpenCode / MiMo family of CLIs actually
-        consume: ``response.created`` → per-output-item added/done →
-        ``response.completed``. Text output items also stream a single
-        ``response.output_text.delta`` with the full text and a matching
-        ``.done`` event so the CLI's incremental UI still updates.
-
-        Reasoning items are skipped in the streamed sequence — some CLIs
-        treat a stream that starts with a reasoning delta as an empty
-        assistant turn and never look at the subsequent message item.
+        This is still buffered, not a reconstruction of upstream token timing.
+        Reject response shapes that cannot be represented before sending SSE
+        headers. In particular, a pending response must never look completed.
         """
+        status = resp_dict.get("status")
+        if status not in {"completed", "failed", "incomplete"}:
+            self._send_openai_error(502, f"Cannot synthesize Responses status: {status!r}")
+            return
+        output = resp_dict.get("output") or []
+        if not isinstance(output, list) or any(
+            not isinstance(item, dict)
+            or item.get("type") not in {"message", "reasoning", "function_call", "custom_tool_call"}
+            or not item.get("id")
+            for item in output
+        ):
+            self._send_openai_error(502, "Unsupported Responses output item or missing item ID; use native Responses passthrough")
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "close")
         self.end_headers()
 
+        sequence_number = 0
+
         def emit(event_type: str, payload: dict) -> None:
-            payload = {"type": event_type, **payload}
+            nonlocal sequence_number
+            payload = {"type": event_type, "sequence_number": sequence_number, **payload}
+            sequence_number += 1
             frame = f"event: {event_type}\ndata: {json.dumps(payload, default=str)}\n\n"
             try:
                 self.wfile.write(frame.encode())
@@ -1761,40 +2364,33 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError):
                 raise
 
-        # Rewrite item IDs so message ids get msg_... prefix that Responses
-        # consumers expect (litellm hands back chatcmpl-... for both the
-        # response and its message item, which confuses OpenCode-family CLIs).
-        response_id = resp_dict.get("id") or "resp_synth"
-        if not response_id.startswith("resp_"):
-            response_id = "resp_" + response_id.replace("chatcmpl-", "")
-        resp_dict = dict(resp_dict)
-        resp_dict["id"] = response_id
-
-        rewritten_output: list[dict] = []
-        for i, item in enumerate(resp_dict.get("output") or []):
-            item = dict(item)
-            if item.get("type") == "message" and not str(item.get("id", "")).startswith("msg_"):
-                item["id"] = f"msg_{response_id}_{i}"
-            rewritten_output.append(item)
-        resp_dict["output"] = rewritten_output
-
         try:
-            emit("response.created", {"response": resp_dict})
-            emit("response.in_progress", {"response": resp_dict})
+            initial = {**resp_dict, "status": "in_progress", "output": [],
+                       "error": None, "incomplete_details": None, "usage": None}
+            emit("response.created", {"response": initial})
+            emit("response.in_progress", {"response": initial})
 
-            for idx, item in enumerate(resp_dict["output"]):
+            for idx, item in enumerate(output):
                 itype = item.get("type")
-                if itype == "reasoning":
-                    # Skip reasoning entirely in the streamed sequence.
-                    continue
-
-                emit("response.output_item.added", {"output_index": idx, "item": item})
+                added = copy.deepcopy(item)
+                if "status" in added:
+                    added["status"] = "in_progress"
+                if itype == "message":
+                    added["content"] = []
+                elif itype == "function_call":
+                    added["arguments"] = ""
+                elif itype == "custom_tool_call":
+                    added["input"] = ""
+                emit("response.output_item.added", {"output_index": idx, "item": added})
 
                 if itype == "message":
                     for cidx, part in enumerate(item.get("content") or []):
+                        added_part = dict(part)
+                        if part.get("type") in ("output_text", "text"):
+                            added_part["text"] = ""
                         emit("response.content_part.added", {
                             "output_index": idx, "content_index": cidx,
-                            "item_id": item.get("id"), "part": part,
+                            "item_id": item.get("id"), "part": added_part,
                         })
                         if part.get("type") in ("output_text", "text"):
                             text = part.get("text", "") or ""
@@ -1811,20 +2407,20 @@ class _LiteLLMOpenAIProxyHandler(http.server.BaseHTTPRequestHandler):
                             "item_id": item.get("id"), "part": part,
                         })
                 elif itype in ("function_call", "custom_tool_call"):
-                    args = item.get("arguments", "") or ""
-                    if args:
-                        emit("response.function_call_arguments.delta", {
-                            "output_index": idx, "item_id": item.get("id"),
-                            "delta": args,
-                        })
-                        emit("response.function_call_arguments.done", {
-                            "output_index": idx, "item_id": item.get("id"),
-                            "arguments": args,
-                        })
+                    field = "input" if itype == "custom_tool_call" else "arguments"
+                    event = ("response.custom_tool_call_input" if itype == "custom_tool_call"
+                             else "response.function_call_arguments")
+                    value = item.get(field, "") or ""
+                    emit(event + ".delta", {
+                        "output_index": idx, "item_id": item.get("id"), "delta": value,
+                    })
+                    emit(event + ".done", {
+                        "output_index": idx, "item_id": item.get("id"), field: value,
+                    })
 
                 emit("response.output_item.done", {"output_index": idx, "item": item})
 
-            emit("response.completed", {"response": resp_dict})
+            emit("response." + status, {"response": resp_dict})
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception:

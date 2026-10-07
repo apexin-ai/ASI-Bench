@@ -8,6 +8,38 @@ agent CLI cannot trigger paid/external execution unexpectedly:
 uv run pytest -q
 ```
 
+Issue #8 Responses translation regressions run without paid model requests:
+
+```bash
+uv run pytest -q tests/test_api_proxy_responses.py \
+  tests/test_api_proxy_anthropic_responses.py tests/test_third_party_api.py \
+  tests/test_api_proxy_image_inputs.py tests/test_mimo_adapter.py
+```
+
+Coverage includes custom `input` vs function `arguments`, additional tool
+declarations, explicit rejection of unsupported `include`/tool limits and
+stateful history, request-local `drop_params=False`, original returned
+reasoning IDs/encrypted content, concurrent proxy requests, monotonic SSE
+sequence numbers, lifecycle ordering, and failed/incomplete terminal events.
+The real-LiteLLM regression mocks model completions and prohibits HTTP: on
+1.82.6 it verifies explicit rejection of unsupported custom-tool conversion;
+on 1.97.0 it verifies a two-turn custom-tool round trip and executes a fixed,
+asserted test script in a temporary directory to check `artifact.txt == "ok"`.
+The exact additional-tools/include/max-tool-calls request reported in issue #8
+must fail explicitly before upstream execution on both versions. No agent CLI
+or live model is run. JSON non-object bodies and invalid custom names must
+return client errors rather than crashing the handler.
+Malformed upstream output and tool calls missing call IDs return HTTP 502 in
+both JSON and SSE modes, before sending successful response headers.
+The Anthropic-to-Responses suite verifies two-turn encrypted reasoning replay,
+original reasoning IDs, visible and redacted thinking, signed replay-envelope
+integrity, conversation/execution isolation, concurrent requests, terminal
+states, and fail-closed malformed data. A loopback HTTP endpoint exercises the
+locked LiteLLM release and confirms `include: ["reasoning.encrypted_content"]`
+and `store: false` reach `/v1/responses`; it makes no external or paid request.
+Live upstream streaming is not claimed because both translation directions are
+deliberately buffered.
+
 The `CI` GitHub Actions workflow runs this suite automatically on every push
 and pull request with Python 3.11 and 3.13. It also runs the focused custom-task
 Docker integration suite once on Ubuntu, including pi and Claude Code overlays.
@@ -672,8 +704,9 @@ stdio server from a pinned scratch checkout (config equals the rendered
 manifest, handshake, unknown tool, stdout attribution per tool, cwd leftovers
 minus declared artefacts) around the `prepare` / `run_l1` / `after` hooks; a
 config that differs from the manifest FAILs; `check_rejected` and
-`json_result` classification; every manifest tool is called by its smoke and
-`smoke.py` resolves every manifest id.
+`json_result` classification; a `Caller` passes a declared tools/call timeout
+through to the client and leaves its default alone otherwise; every manifest
+tool is called by its smoke and `smoke.py` resolves every manifest id.
 
 `test_smoke_<id>.py`: pyscf — atom-string/XYZ/float-list parsing, invariant
 distance comparison, PNG headers, in-band error split, plot and visualize
@@ -694,7 +727,16 @@ confinement, `batch_map` item unpacking and the `fail_fast` / default image
 name / `(*args, **kwargs)` / lost-property verdicts, tool tables covering the
 manifest without overlap, hand anchors, and stubbed servers: descriptor checks
 FAIL when an option is ignored, oxidation-number and invalid-input probes,
-the coverage check; alphafold_db — the `{status, data, metadata}` wrapper split,
+the coverage check; gpaw — the k-grid policy (hexagonal ×3 rule, vacuum by
+atom span, wrap-around gap), the convergence recommendation on the recorded
+MoS2 sweep (tolerance dependence, metallic fallback, sweep ceiling, wrong
+arithmetic), gap analysis (direct/indirect/metallic, ties, k-point labels),
+the `verify_run` state machine (three gap tolerances, missing results,
+metastability, skipped reference), in-band errors and text/structuredContent
+disagreement, and stubbed servers: the convergence gate FAILs when the
+rejected run leaks a `summary.json`, a figure or a gap, the ignored `query`
+and shared `gs.gpw` probes WARN, stdout pollution is attributed per tool;
+alphafold_db — the `{status, data, metadata}` wrapper split,
 the field-by-field comparison with an independently fetched entry (and that a
 new model version alone never differs), pLDDT read from a four-residue PDB
 fixture and binned at 50/70/90, AlphaMissense
@@ -746,8 +788,11 @@ default cap, WebFetch/shell HTTP bypass, workspace trap; jsbsim_engine_run:
 chunked steps WARN, another session id, no state read, trim WARN;
 s4_grating_spectrum: default harmonics, uncopied spectrum values, RCWA code
 WARN; psi4_opt_freq: reformatted geometry still chains, frequencies at the
-start geometry, in-band `ok:false`, default method;
-ncbi_gene_protein_card: a gene record read for an id the search did not return
+start geometry, in-band `ok:false`, default method; gpaw_mos2_bandgap: a second
+`run_id` breaking the chain, the one-call `run_verified_workflow` shortcut as a
+bypass, an artefact listing that is not the run directory, a different
+verification report, while `find`/`cp` in the server's own directory stay
+PASS; ncbi_gene_protein_card: a gene record read for an id the search did not return
 or fetched by symbol instead of uid breaks the chain, a value the record does
 not carry fails `answer_from_tool` while the per-call check still passes (the
 call result only pins the record's identity), all three in-band E-utilities
@@ -758,9 +803,24 @@ is a WARN; alphafold_isoform_profile: every one of the three tools is required, 
 fails, the documented empty annotation state is a failed call, and fetching the
 AlphaMissense CSV or UniProt is a bypass; its generator refuses equal isoform
 lengths, disagreeing length fields, a tied top score, a score exactly at the
-threshold, CSV disagreement and payloads near the 100 000-character truncation). With PySCF and geomeTRIC
-installed (`uv run --with pyscf==2.14.0 --with geometric==1.1.1 ...`) the psi4
-file also regenerates seed 31415 and compares with the recorded reference.
+threshold, CSV disagreement and payloads above the 40 000-character cap).
+With PySCF and geomeTRIC installed (`uv run --with pyscf==2.14.0 --with
+geometric==1.1.1 ...`) the psi4 file also regenerates seed 31415 and compares
+with the recorded reference.
+
+`test_task_gpaw_mos2_bandgap.py` is the one task whose DFT reference cannot be
+recomputed in a test, so it runs on a synthetic `SAMPLE_MEASURED` table
+engineered to reach every branch (both convergence tolerances, both
+`verify_run` verdicts, `params_verified` true and false) and checks the derived
+policy against it; the recorded unit cell stands in for `ase.build.mx2`, so the
+module imports without GPAW or ASE. Three further tests read the committed
+`MEASURED` table instead: that it covers the whole `(ecut, kpts_density)` grid,
+that the pure functions reproduce the gate *and the verification verdict the
+server itself answered* at every grid point and gap tolerance, and that no
+instance's gap sits within 3 meV of a `verify_run` branch boundary (they skip if
+the table is ever emptied for a re-measurement). Only
+`test_mx2_structure_matches_the_hardcoded_cell` and the generator test need ASE
+(`uv run --with ase==3.29.0 ...`); the latter puts the real builder back.
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
@@ -813,6 +873,50 @@ names, two `GetSubstructMatch` cases, six property tools plus the SDF
 follow-up, unordered `batch_map` results and `fail_fast`). Upstream
 mutations (MolWt → ExactMolWt, rounded TPSA, ignored `includeHs`, swapped
 image size, dropped `useRandomCoords`, disabled pruning) each FAIL.
+For gpaw (Linux x86-64 or aarch64, `micromamba` on `PATH`):
+`python3 scripts/mcp/e2e/setup.py gpaw`, then `~/mcp/gpaw/.venv/bin/python
+scripts/mcp/e2e/smoke.py gpaw --config ~/mcp/gpaw.mcp.json`. No credentials,
+and only one check reaches the network (a Materials Project query without a
+key, expected to fail with 401). It takes 24 min of single-threaded plane-wave
+DFT (amd64, 2026-10-03): one relaxation, a convergence sweep, three band
+calculations, two one-call workflows and one relaxation plus three SCFs as
+references. Each step prints before it starts and the report's
+`seconds_by_step` says where the time went; the smoke raises the tools/call
+timeout to 2 h because the client default of 300 s failed a correct
+`run_verified_workflow` call. Outcome on the pinned revision: `PASS` with
+38 PASS, 0 FAIL
+and 13 WARN (ignored `query`, MP query without credentials, three in-band
+errors from `relax_structure`, fixed sweep range, path traversal, unknown run,
+unpersisted `verification_note`, overwritten `gs.gpw`, the whole chain behind
+one `run_verified_workflow` call, `calc_band_dos` stdout lines and the shared
+stdout check). The two platforms agree on the same conda lock to ~1e-10 eV on
+energies and the gap and ~1e-8 eV on the Fermi level (MoS2 monolayer: gap
+1.6754359249486146 eV on aarch64, 1.6754359250622177 eV on amd64, direct K→K,
+E = -22.0734417 eV, recommended ecut 300 eV / density 15), so an L2 tolerance
+of 1e-6 eV is safe across platforms; it is GPAW *releases* that shift the
+values by meV.
+
+`mcp_e2e.gpaw_mos2_bandgap` additionally pins that its answers survive upstream's
+non-reproducible `structure_drift` check:
+`test_the_verdict_may_not_depend_on_the_drift_check` forces that check both ways
+and requires the verdict to be unchanged (and that the generator refuses a
+tolerance where it is not), and
+`test_a_drift_warning_does_not_break_the_verify_call` runs the verifier against a
+simulated server that reports the check as `pass` and as `warn`.
+
+Ground truth for `mcp_e2e.gpaw_mos2_bandgap` comes from the same installation:
+`~/mcp/gpaw/.venv/bin/python scripts/mcp/e2e/measure_gpaw_table.py --config
+~/mcp/gpaw.mcp.json --output ~/mcp/gpaw-table.json` drives one full chain per
+`(ecut, kpts_density)` grid point, one of which also re-gates at the second
+tolerance to confirm the generator may derive the recommendation rather than
+measure it, and writes the `MEASURED` literal to paste into `generate_gt.py`.
+Measured 2026-10-03 on AWS amd64: eight chains in 3799 s. Re-run it after
+bumping the server revision or the conda lock; `--only 400:25` is an
+eight-minute dry run. The run that produced the committed table also decided the
+instance grid: ecut 350 eV was dropped because its relaxation stops on the force
+criterion (2 BFGS steps, fmax 0.0495 against 0.05) and reports an indirect
+Gamma->K gap, so ground truth there would be one GPAW release away from
+changing.
 
 The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`.
