@@ -903,7 +903,7 @@
   producing one result per attempt.
 - Implementation commit: `0e43cdd`.
 
-## 2026-09-29 – 2026-10-07: MCP end-to-end testing (L0–L2), eight servers and nine fake tasks
+## 2026-09-29 – 2026-10-07: MCP end-to-end testing (L0–L2), nine servers and ten fake tasks
 
 - Problem: the MCP catalog survey only proved L0 (`initialize` + `tools/list`).
   Nothing showed that an agent inside `asibench run` really calls a tool and
@@ -939,7 +939,10 @@
   `build123d_plate_measure` (stateful CAD session, path arguments, binary
   artefacts) `73ea607`; gpaw L1 `22cd6b1` `929fa2f` `07899d6`,
   `gpaw_mos2_bandgap` (six-tool `run_id` chain, measured DFT reference)
-  `fa97782` `2c85892` `ecde93d` `2ea3e7c`.
+  `fa97782` `2c85892` `ecde93d` `2ea3e7c`; quantum_espresso L0 `aba718b`
+  `f9cf5e0`, L1 `c71f663` `b990157` (all 19 tools against our own `pw.x` runs),
+  `qe_si_bandstructure` (five-tool result → argument chain through host paths,
+  measured DFT reference with `--check`) `826c00b`.
 - Framework and tooling work this produced: docs condensation `fe3651e`,
   verifier golden snapshot `b47c4f7`, verifier split into `e2e_verify/` with a
   strict spec parser `8ffc458`, `setup.py` installer registry `e24e8fc`, smoke
@@ -947,14 +950,16 @@
   `tests/mcp_e2e/` `9fe5843`, persistence path-scrubbing fixed for shell
   commands `879dfc0`, for tool results `86905ae` and for tool arguments
   `913d94e`, `$HOME` pinned in the MCP E2E tests `81d31e2`, `listed_files` /
-  `named_statuses` extractors and a `superset` result match `2c85892` `ecde93d`.
+  `named_statuses` extractors and a `superset` result match `2c85892` `ecde93d`,
+  `output_dir` kept in trajectories (`KEY_ARG_NAMES`) and the `kpoint_grid` /
+  `categorized_files` / `categorized_paths` extractors `826c00b`.
 - Verification: every task passed B1–B4 on AWS Linux amd64 with both Claude Code
   (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`, effort medium) with every
   verifier check PASS, and at full local score except `build123d_plate_measure`
   on Codex b1 (396/400: it reported the bolt circle's diameter where the bolt
   hole's was asked for, which the prompt now spells out); per-task dates in
   `examples/mcp-e2e-tasks/README.md`, per-server smoke counts in
-  `scripts/mcp/e2e/README.md`. Offline coverage is `tests/mcp_e2e/` (661 tests)
+  `scripts/mcp/e2e/README.md`. Offline coverage is `tests/mcp_e2e/` (1063 tests)
   with the golden snapshot pinning every `verify_one` outcome.
 
 Lessons — evidence and observability:
@@ -978,6 +983,11 @@ Lessons — evidence and observability:
   compare first and only call a mismatch unobservable when a placeholder caused
   it, otherwise a deliberately scrub-tolerant comparison (rdkit pickles) is
   downgraded to WARN.
+- Before the first agent run, check that every path argument a `tool_chain`
+  link compares is in `KEY_ARG_NAMES` (qe-mcp's `output_dir` was not, `826c00b`),
+  or every honest run is a permanent WARN. A tool that takes a grid as text and
+  one that returns it as a list need a canonicalising extractor (`kpoint_grid`),
+  not a looser shared `numbers()`.
 - A required tool in `e2e_check.json` is a promise every prompt level must make. The
   build123d B4 run built, gated, measured and exported correctly and still failed
   `tool_called`, because only B1–B3 asked for the written STEP to be read back. Put each
@@ -1030,13 +1040,18 @@ Lessons — task design:
   it, and "the whole instance is zero" belongs to the hard gate. Never tighten a
   comparator shared by every task to make one test fail — choose a difference
   above its detection floor instead.
-- When the solver cannot enter a task runtime, carry a measured table (gpaw,
-  `fa97782` `ecde93d`): measure only the dimensions the solver depends on, derive
-  the rest with the L1-validated pure functions, record the server's own answer
-  for every derived field and assert the derivation against it offline. Fix the
-  instance grid *after* measuring — ecut 350 eV stopped on the force criterion
-  (fmax 0.0495 vs 0.05) and was dropped — and set the zero-credit tolerance from
-  the measured distance between neighbouring instances.
+- When the solver cannot enter a task runtime, carry a measured table (gpaw
+  `fa97782` `ecde93d`, quantum_espresso `826c00b`): measure only the dimensions
+  the solver depends on, derive the rest with the L1-validated pure functions,
+  record the server's own answer for every derived field and assert the
+  derivation against it offline. Fix the instance grid *after* measuring — gpaw's
+  ecut 350 eV stopped on the force criterion (fmax 0.0495 vs 0.05) and was
+  dropped — and set the zero-credit tolerance from
+  the measured distance between neighbouring instances (QE prints band edges to
+  1 meV, so two instances can differ by one digit and credit ends at half of it).
+  Give the measurement script a `--check` that re-measures and compares value for
+  value, and run it on every new run host; measure the whole grid before choosing
+  what to score (QE's path length turned out constant, its VBM path-independent).
 - A discrete ground truth must not sit near a decision boundary, and must not
   depend on anything that is not a function of the instance. gpaw's
   `structure_drift` compares raw Cartesian positions with no minimum-image
@@ -1069,10 +1084,24 @@ Lessons — smoke tests:
   FAIL on a loaded host (gpaw L1, 22cd6b1). Declare `Smoke.call_timeout`, print
   each step before it starts and record `seconds_by_step` in the report —
   otherwise a 30-minute smoke is indistinguishable from a hung one.
+- A reference for a DFT server can be the same binary run outside the server
+  from our own input (QE: only the documented physics, our own parser, compared
+  to the printed digit); prove it discriminates with one mutation (`degauss`
+  0.01 FAILed all twelve DFT checks). Read the parser, not the docstring:
+  `re.search` on a multi-step output returns the first step (QE D11). Size the
+  workload so the whole smoke fits in one sandbox command (QE: 62 s).
+- Re-run an order-dependent upstream scan in the host's own order and require an
+  exact match, and compare with the intended result separately: "the server is
+  consistent" (FAIL if not) stays apart from "the defect bit here" (QE D1: which
+  SG15 file an element gets follows `glob` order — 43 of 69 elements stale on the
+  VM, 33 on amd64, Si on the newest on both).
+- Pin `mcp` below 2 for any server importing `mcp.server.fastmcp` (2.x leaves a
+  stub that raises; rdkit and QE). A conda `qe` openmpi build exec'd directly with
+  one process needs no `OMPI_MCA_*`.
 - Reference values from the same library and conda lock agree to ~1e-10 eV
   across aarch64 and amd64 (GPAW plane-wave DFT), so cross-platform drift is not
   what a ground truth has to tolerate — upstream *releases* are (2-3 meV between
-  gpaw 25.7 and 26.7).
+  gpaw 25.7 and 26.7). QE 7.5 in two different conda builds was bit-identical.
 
 Lessons — process:
 
@@ -1240,78 +1269,3 @@ Lessons — process:
   `golden.json` 148 → 171, none changed.
 - AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4.
 - Commit: `e7a8ab3`.
-
-## 2026-10-03: quantum_espresso MCP E2E, stage L0
-
-- Shipped (`aaa6dd0`): manifest entry + `locks/quantum_espresso-linux-{64,aarch64}.txt`
-  (174 packages, `qe=7.5`), `e2e_smoke/servers/quantum_espresso.py` with the
-  environment checks and `qe_status`, `tests/mcp_e2e/test_smoke_quantum_espresso.py`,
-  and the committed-lock test generalised from psi4 to every conda-explicit
-  server × platform. 16 PASS / 0 WARN / 0 FAIL on amd64 and aarch64.
-- `mcp` must stay below 2 and the pin is load-bearing, not hygiene: conda-forge
-  now resolves `mcp` to 2.x, where `mcp.server.fastmcp` is a stub that raises
-  `ModuleNotFoundError` (renamed to `MCPServer`). Check this before pinning any
-  server that imports `mcp.server.fastmcp`; rdkit hit the same wall.
-- Do not assume a conda `qe` needs MPI coaxing: the openmpi build exec'd
-  directly with `QE_NPROCS=1` ran clean on both platforms, empty stderr, no
-  `OMPI_MCA_*`. And different conda-forge builds of the same `qe` version gave
-  bit-identical energies across amd64/aarch64 — platform is not the drift source,
-  the package version is.
-- Leaving a work-directory variable unset can beat pinning it: with `QE_WORKDIR`
-  unset the server writes under its cwd, which is the smoke's temporary directory
-  (self-cleaning) and the checkout under an agent run (gitignored upstream).
-- Upstream indexes pseudopotentials by raw `glob` order, so which file an element
-  gets is host-dependent. Measured on two hosts: Si got the newest on both, Ag
-  diverged. A ground truth that depends on the pick must be generated on the host
-  that runs the agent — verify the pick, do not assume the highest version.
-- `test_smoke_runner.py::test_smoke_covers_every_manifest_tool[quantum_espresso]`
-  FAILs by design at this stage: it greps the smoke module for every
-  `expected_tool`, and an L0 smoke only calls `qe_status`. Resolve it when L1
-  lands (or by declaring the stage on `Smoke`), not by weakening the grep.
-
-## 2026-10-07: quantum_espresso MCP E2E, stage L1
-
-- Shipped (`c71f663`): all 19 tools in the smoke, 44 PASS / 18 WARN / 0 FAIL
-  on the aarch64 VM (62 s) and on AWS amd64 (~2 min), every energy identical
-  across the two; `test_smoke_covers_every_manifest_tool[quantum_espresso]` is
-  green.
-- Fast DFT makes the VM a real test host: with a two-atom cell every pw.x call
-  is 2–8 s, so the whole smoke, references included, fits inside one sandbox
-  command. Size the L1 workload for that before reaching for AWS.
-- A reference for a DFT server can be the same binary, run outside the server
-  from our own input: write only the physics the server documents (mass,
-  prefix and outdir are ours), parse the text ourselves, compare to the printed
-  digit. Prove it discriminates with one mutation (`degauss` 0.01 FAILed all
-  twelve DFT checks) instead of trusting a green run.
-- Read the parser, not the docstring: `re.search` on a multi-step output
-  returns the first step (D11), and a "relax then SCF" workflow ran its SCF on
-  the input geometry (D12). Both look correct until a reference prints every
-  step.
-- Re-run upstream's file scan in the host's directory order and require an
-  exact match; compare with the newest version separately. Two checks keep
-  "the server is consistent" (FAIL if not) apart from "the defect bit here"
-  (WARN, naming the elements: 43 of 69 on the VM, 33 on amd64).
-- `check_rejected`'s `in_band` hook gets the raw tools/call result; decode it.
-  A tolerance comparison must recurse into dicts or every nested reply FAILs.
-
-## 2026-10-07: quantum_espresso MCP E2E, stage L2 (`qe_si_bandstructure`)
-
-- Shipped (commit id: see `git log -- examples/mcp-e2e-tasks/mcp_e2e/qe_si_bandstructure`):
-  five-tool chain `qe_list_pseudopotentials` + `qe_suggest_kpoints` →
-  `qe_workflow_bandstructure` → `qe_list_files` → `qe_read_bands`, every link a
-  result → argument dependency; `measure_qe_table.py` (27 chains, 180 s on the
-  VM, a repeat run identical via `--check`); extractors `kpoint_grid`,
-  `categorized_files`, `categorized_paths`; `output_dir` added to
-  `KEY_ARG_NAMES`. Real-server payloads through the verifier: Claude and Codex
-  6/6 PASS, score 100. `golden.json` 198 → 228, none changed.
-- A path link through a scrubbed log needs the argument in `KEY_ARG_NAMES`
-  before the first agent run; otherwise every run is a permanent WARN. Check
-  the argument name of every path-taking tool when designing the chain.
-- A tool that takes a grid as a string and one that returns it as a list need a
-  canonicalising extractor, not a looser shared `numbers()`.
-- Let the measured spread set the tolerances: band edges are printed to 1 meV,
-  so two instances can differ by exactly one digit; credit ends at half that.
-  Measure the whole grid before choosing what to score: the path length turned
-  out constant over the grid and the VBM independent of the path.
-- The density cutoff is not on the MCP surface (fixed at the hint table's
-  120 Ry), so instance cutoffs stop at 30 Ry to keep the dual ≥ 4.
