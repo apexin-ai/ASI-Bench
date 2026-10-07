@@ -107,6 +107,7 @@ re-implementing them.
 | `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, amd64 and aarch64, 2026-10-03 |
 | `gpaw` | `Crystalhihihi/matmcp` | conda-explicit | `micromamba` on `PATH` | 38 / 13 / 0, amd64, 2026-10-03 (24 min single-threaded) |
 | `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | 44 / 18 / 0, amd64 and aarch64, 2026-10-07 (~2 min / 62 s single-threaded) |
+| `atomictoolkit` | `XirtamEsrevni/mcp-atomictoolkit` (catalog `ase`; the catalog's `pymatgen` entry is the same server, and `tools/list` has no pymatgen-specific tool) | uv-pip-pinned, Py 3.12 | — | 44 / 31 / 0, amd64 and aarch64, 2026-10-07 (~5 s) |
 
 Install the prerequisites before running `setup.py`:
 
@@ -481,3 +482,52 @@ known defects is in each smoke script.
 - `qe_list_files` and `qe_read_bands` take host paths as `output_dir`; the
   trajectory keeps that argument (`KEY_ARG_NAMES`), so the verifier can follow
   the chain workflow → listing → band file through scrubbed logs.
+
+**atomictoolkit**
+
+- One server behind two catalog entries (`ase`, `pymatgen`): pymatgen only
+  supplies the spacegroup strings; all file I/O and numbers are ASE (EMT).
+  Upstream's `-e .` cannot be pinned, so the manifest pins the third-party
+  dependencies and launches with `PYTHONPATH={checkout}/src`.
+- Only 9 of the 18 tools are usable: `list_workspace_capabilities`, `build`,
+  `import`, `manipulate`, `analyze_structure`, `write`, `single_point`,
+  `estimate_elastic` (all `*_workflow`) and `create_download_artifact`. The four
+  deprecated wrappers always fail (`'FunctionTool' object is not callable`).
+  The five `taskSupport: required` tools (optimize, MD, relax+MD, trajectory,
+  autocorrelation) refuse a plain call; with `params.task` they run and write
+  their files, but `tasks/get`/`tasks/result` always answer `No active context
+  found.`. So there is no relaxation and no MD: a task must say "unrelaxed".
+- Always pass `calculator_name: "emt"` (Al, Cu, Ag, Au, Ni, Pd, Pt only).
+  `auto` tries kim, orb and nequix first (kim is listed as available but cannot
+  start) and returns three `calculator_fallbacks` messages. Even an explicit
+  `emt` falls back to the others on failure.
+- `analyze_structure_workflow` coordination numbers keep ASE's default
+  neighbour-list skin (fcc Cu: 18, not 12) and its g(r) tends to 2, not 1. They
+  are reproducible, so they can be fingerprints of the tool, but never
+  "physical" answers. Molecules (no cell) fail analysis in band.
+- `estimate_elastic_workflow`'s B is `2a/(9V0)` from a quadratic E(strain) fit
+  at the given cell, pressure term included.
+- Relative paths resolve against the server cwd — the MCP checkout in agent
+  runs — and every in-band error writes `tool_errors/<tool>_<UTC>.log` there. Tasks
+  must ask for absolute output paths; before an L2 batch, delete earlier
+  products from the checkout by name (not `git clean -fdx`, which removes
+  `.venv`).
+- Every result echoes absolute paths (`filepath`, `input_filepath`) and an
+  `artifacts` list with a fresh `art_<32 hex>` id per file and call: an id proves
+  that a call happened, not which earlier file it named. `download_url` is a
+  relative HTTP route that stdio cannot serve.
+- An error message longer than a path component (e.g. Si with EMT) crashes the
+  artifact scan: the structured report is lost and the call becomes a bare
+  `[Errno 36] File name too long` protocol error. Other failures are in band.
+- Numbers agree bit for bit with ASE called directly on the same file; extxyz
+  stores 8 decimals, so ground truth must start from the file content (or allow
+  ~1e-13 eV). EMT energies are bit-identical on amd64 and aarch64;
+  `estimate_elastic` (`np.polyfit`) differs in the last digit (~5e-16
+  relative): compare it with rtol 1e-9, never exactly.
+- `manipulate_structure_workflow`'s `operation_kwargs` keys are documented
+  nowhere and unknown keys are ignored silently: a supercell takes `size`
+  (`{"repeat": [3, 3, 3]}` quietly gives the default 2x2x2), a vacancy or a
+  substitution `index`. A task must name them at every prompt level.
+- `input_filepath` / `filepath` are not trajectory key arguments, so in agent
+  runs they exist only scrubbed (`<workspace>/<name>`); chain them with the
+  `output_file` extractor, which compares the written file's name.

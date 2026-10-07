@@ -189,6 +189,42 @@ def test_kpoint_grid_canonicalises_every_spelling():
     assert verify.values.read(call, verify.spec.Selector(extract="kpoint_grid")) == "5,5,5"
 
 
+def test_output_file_reads_the_written_file_by_name():
+    """mcp-atomictoolkit echoes the file it read as ``input_filepath`` and the file it wrote
+    as ``filepath`` (both also in ``artifacts``); only the written one is the output, and a
+    path argument scrubbed in the persisted log still compares by its file name."""
+    result = {"status": "success", "operation": "vacancy", "input_filepath": "/w/cu32.extxyz",
+              "filepath": "/w/cu31.extxyz", "num_atoms": 31,
+              "artifacts": [{"label": "input_filepath", "filepath": "/w/cu32.extxyz"},
+                            {"label": "filepath", "filepath": "/w/cu31.extxyz"}]}
+    call = verify.evidence.ToolCall(result_text=json.dumps(result))
+    assert verify.values.read(call, verify.spec.Selector(extract="output_file")) == "cu31.extxyz"
+    canon = verify.extractors.EXTRACTORS["output_file"].canon
+    assert canon("<workspace>/cu31.extxyz") == "cu31.extxyz"
+    assert canon("<abs_path>") == "<abs_path>"
+    for bad in ({"input_filepath": "/w/cu32.extxyz"}, {"filepath": ""}, {"filepath": 3}, ["/w/a.extxyz"],
+                "/w/a.extxyz"):
+        read = verify.values.read(verify.evidence.ToolCall(result_text=json.dumps(bad)),
+                                  verify.spec.Selector(extract="output_file"))
+        assert read is None, bad
+
+
+def test_a_scrubbed_link_input_is_lost_only_if_its_canonical_form_is():
+    """A file-name link survives ``<workspace>/`` scrubbing (its mismatch is real); a bare
+    ``<abs_path>``, or a scrubbed argument of a verbatim link, leaves nothing to compare."""
+    Binding, Selector = verify.spec.Binding, verify.spec.Selector
+    by_name = Binding(("input_filepath",), Selector(extract="output_file"), "member")
+    verbatim = Binding(("input_filepath",), Selector(key="filepath", raw=True))
+    ToolCall = verify.evidence.ToolCall
+    lost = verify.values.link_input_lost
+    assert not lost(ToolCall(input={"input_filepath": "<workspace>/cu31.extxyz"}), by_name)
+    assert not lost(ToolCall(input={"input_filepath": "/w/cu31.extxyz"}), by_name)
+    assert lost(ToolCall(input={"input_filepath": "<abs_path>"}), by_name)
+    assert lost(ToolCall(input={"input_filepath": "<workspace>/cu31.extxyz"}), verbatim)
+    assert not lost(ToolCall(input={"input_filepath": "/w/cu31.extxyz"}), verbatim)
+    assert lost(ToolCall(input=None), by_name)
+
+
 def test_superset_match_accepts_a_longer_listing():
     """A file listing carries entries a task does not pin (GPAW's per-calculation logs),
     so the required ones only have to be present."""

@@ -332,6 +332,55 @@
         "qe_validate_structure", "qe_workflow_bandstructure", "qe_workflow_dos",
         "qe_workflow_relax_and_scf"
       ]
+    },
+    {
+      "id": "atomictoolkit",
+      "catalog_id": "ase",
+      "repository": "https://github.com/XirtamEsrevni/mcp-atomictoolkit.git",
+      "revision": "13f4d606562fe308f8b187625999ad435ef1b0a3",
+      "python": "3.12",
+      "install": "uv-pip-pinned",
+      "requirements": [
+        "ase==3.29.0",
+        "fastmcp==2.14.7",
+        "matplotlib==3.11.2",
+        "mcp==1.30.0",
+        "pydocket==0.25.2",
+        "pymatgen==2026.9.24",
+        "starlette==1.7.0",
+        "uvicorn==0.54.0"
+      ],
+      "exclude_newer": "2026-10-01T00:00:00Z",
+      "launch": {
+        "command": ".venv/bin/python",
+        "args": ["-m", "mcp_atomictoolkit.mcp_server"],
+        "env": {
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "MPLBACKEND": "Agg",
+          "OMP_NUM_THREADS": "1",
+          "PYTHONPATH": "{checkout}/src"
+        }
+      },
+      "expected_tools": [
+        "analyze_structure_workflow",
+        "analyze_trajectory_workflow",
+        "autocorrelation_workflow",
+        "build_structure",
+        "build_structure_workflow",
+        "create_download_artifact",
+        "estimate_elastic_workflow",
+        "import_structure_workflow",
+        "list_workspace_capabilities_workflow",
+        "manipulate_structure_workflow",
+        "optimize_structure_workflow",
+        "optimize_with_mlip",
+        "read_structure_file",
+        "relax_and_md_workflow",
+        "run_md_workflow",
+        "single_point_workflow",
+        "write_structure_file",
+        "write_structure_workflow"
+      ]
     }
   ]
 }
