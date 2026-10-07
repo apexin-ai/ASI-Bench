@@ -1,0 +1,72 @@
+{
+  "schema_version": 2,
+  "server": "ncbi",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": ["NCBIGene_get_summary", "NCBIGene_search", "NCBIProtein_get_summary"],
+  "calls": [
+    {
+      "name": "search",
+      "tool": "NCBIGene_search",
+      "inputs_from_reference": {"term": "term"},
+      "result": {"format": "json", "key": "data.esearchresult.idlist", "reference_key": "gene_ids"}
+    },
+    {
+      "name": "gene",
+      "tool": "NCBIGene_get_summary",
+      "inputs_from_reference": {"id": "gene_id"},
+      "inputs_from_call": {"call": "search", "extract": "json_scalars", "args": ["id"], "match": "member"},
+      "result": {"format": "json", "key": "data.result.uids", "reference_key": "gene_ids"}
+    },
+    {
+      "name": "protein",
+      "tool": "NCBIProtein_get_summary",
+      "inputs_from_reference": {"id": "protein_gi"},
+      "result": {"format": "json", "key": "data.result.uids", "reference_key": "protein_gis"}
+    }
+  ],
+  "answers": [
+    {"prediction_key": "gene_id", "from_call": "search", "extract": "json_scalars",
+     "reference_key": "gene_id", "match": "member"},
+    {"prediction_key": "symbol", "from_call": "gene", "extract": "json_scalars",
+     "reference_key": "symbol", "match": "member"},
+    {"prediction_key": "maplocation", "from_call": "gene", "extract": "json_scalars",
+     "reference_key": "maplocation", "match": "member"},
+    {"prediction_key": "chr_accession", "from_call": "gene", "extract": "json_scalars",
+     "reference_key": "chr_accession", "match": "member"},
+    {"prediction_key": "taxid", "from_call": "gene", "extract": "json_scalars",
+     "reference_key": "taxid", "match": "member"},
+    {"prediction_key": "protein_accver", "from_call": "protein", "extract": "json_scalars",
+     "reference_key": "protein_accver", "match": "member"},
+    {"prediction_key": "protein_len", "from_call": "protein", "extract": "json_scalars",
+     "reference_key": "protein_len", "match": "member"}
+  ],
+  "bypass_tools": {
+    "WebFetch": "ncbi\\.nlm\\.nih\\.gov|eutils|genenames\\.org|uniprot\\.org|ensembl\\.org",
+    "web_fetch": "ncbi\\.nlm\\.nih\\.gov|eutils|genenames\\.org|uniprot\\.org|ensembl\\.org"
+  },
+  "suspicious_tools": {
+    "WebFetch": "",
+    "WebSearch": "",
+    "web_search": "",
+    "web_fetch": ""
+  },
+  "bypass_patterns": [
+    "\\b(curl|wget|aria2c|lynx|w3m|httpie|http|xh)\\b[^\\n]*(ncbi\\.nlm\\.nih\\.gov|eutils|genenames\\.org|uniprot\\.org)",
+    "\\b(requests|httpx|urllib|urlopen|aiohttp|http\\.client)\\b[\\s\\S]{0,600}?(ncbi\\.nlm\\.nih\\.gov|eutils|genenames\\.org|uniprot\\.org)",
+    "(import|from)\\s+(Bio|tooluniverse|pysradb|mygene|bioservices|biopython)\\b",
+    "\\bBio\\.Entrez\\b",
+    "\\b(esearch|esummary|efetch|elink|einfo)\\b\\s+-db\\b",
+    "\\bdatasets\\b\\s+(summary|download|rehydrate)\\b",
+    "\\b(pip|pip3|uv|uvx|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\b(biopython|entrez-direct|ncbi-datasets-cli|mygene|bioservices|tooluniverse)\\b"
+  ],
+  "suspicious_patterns": [
+    "ncbi\\.nlm\\.nih\\.gov",
+    "\\beutils\\b",
+    "\\b(curl|wget)\\b",
+    "\\b(requests|httpx|urllib|aiohttp)\\b",
+    "\\btooluniverse\\b",
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "schema_version": 2,
+  "server": "alphafold_db",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": [
+    "alphafold_get_annotations",
+    "alphafold_get_prediction",
+    "alphafold_get_summary"
+  ],
+  "calls": [
+    {
+      "name": "prediction",
+      "tool": "alphafold_get_prediction",
+      "inputs_from_reference": {
+        "qualifier": "accession"
+      },
+      "result": {
+        "format": "json",
+        "extract": "json_scalars",
+        "reference_key": "longest_entry_id",
+        "match": "member"
+      }
+    },
+    {
+      "name": "summary",
+      "tool": "alphafold_get_summary",
+      "inputs_from_reference": {
+        "qualifier": "accession"
+      },
+      "result": {
+        "format": "json",
+        "key": "data.uniprot_entry.sequence_length",
+        "reference_key": "canonical_length"
+      }
+    },
+    {
+      "name": "annotations",
+      "tool": "alphafold_get_annotations",
+      "inputs_from_reference": {
+        "qualifier": "accession"
+      },
+      "result": {
+        "format": "json",
+        "extract": "json_scalars",
+        "reference_key": "max_am_score",
+        "match": "member"
+      }
+    }
+  ],
+  "answers": [
+    {
+      "prediction_key": "longest_entry_id",
+      "from_call": "prediction",
+      "extract": "json_scalars",
+      "reference_key": "longest_entry_id",
+      "match": "member"
+    },
+    {
+      "prediction_key": "canonical_length",
+      "from_call": "summary",
+      "result_key": "data.uniprot_entry.sequence_length",
+      "reference_key": "canonical_length"
+    },
+    {
+      "prediction_key": "max_am_residue",
+      "from_call": "annotations",
+      "extract": "json_scalars",
+      "reference_key": "max_am_residue",
+      "match": "member"
+    },
+    {
+      "prediction_key": "max_am_score",
+      "from_call": "annotations",
+      "extract": "json_scalars",
+      "reference_key": "max_am_score",
+      "match": "member"
+    }
+  ],
+  "bypass_tools": {
+    "WebFetch": "alphafold\\.ebi\\.ac\\.uk|ebi\\.ac\\.uk|uniprot\\.org|alphamissense|googleapis\\.com|zenodo\\.org",
+    "web_fetch": "alphafold\\.ebi\\.ac\\.uk|ebi\\.ac\\.uk|uniprot\\.org|alphamissense|googleapis\\.com|zenodo\\.org"
+  },
+  "suspicious_tools": {
+    "WebFetch": "",
+    "WebSearch": "",
+    "web_search": "",
+    "web_fetch": ""
+  },
+  "bypass_patterns": [
+    "\\b(curl|wget|aria2c|lynx|w3m|httpie|http|xh)\\b[^\\n]*(alphafold\\.ebi\\.ac\\.uk|ebi\\.ac\\.uk|uniprot\\.org|alphamissense|googleapis\\.com|zenodo\\.org)",
+    "\\b(requests|httpx|urllib|urlopen|aiohttp|http\\.client)\\b[\\s\\S]{0,600}?(alphafold\\.ebi\\.ac\\.uk|ebi\\.ac\\.uk|uniprot\\.org|alphamissense|googleapis\\.com|zenodo\\.org)",
+    "(import|from)\\s+(tooluniverse|bioservices|unipressed|Bio)\\b",
+    "AlphaMissense_(aa_substitutions|hg19|hg38|isoforms_\\w+|gene_\\w+)",
+    "\\b(read_csv|read_table|read_json|urlretrieve)\\s*\\(\\s*[rbuf]?['\"]https?://[^'\"]*(alphafold\\.ebi\\.ac\\.uk|ebi\\.ac\\.uk|uniprot\\.org|alphamissense|googleapis\\.com|zenodo\\.org)",
+    "\\b(pip|pip3|uv|uvx|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\b(biopython|bioservices|unipressed|tooluniverse)\\b"
+  ],
+  "suspicious_patterns": [
+    "alphafold\\.ebi\\.ac\\.uk",
+    "uniprot\\.org",
+    "\\b(curl|wget)\\b",
+    "\\b(requests|httpx|urllib|aiohttp)\\b",
+    "\\btooluniverse\\b",
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b"
+  ]
+}

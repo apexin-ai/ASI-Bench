@@ -1,0 +1,52 @@
+id: mcp_e2e.ncbi_gene_protein_card
+name: "MCP E2E: NCBI gene and protein identifier card through the ToolUniverse ncbi MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. It exercises a three-call chain (gene search → gene record of
+# the id the search returned → protein record of the GI in the input file) on
+# live E-utilities data; see examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: research_data
+subdomain: "biomedical_records_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/mims-harvard/ToolUniverse"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 1-5
+  requires_gpu: false
+  # Generation queries eutils.ncbi.nlm.nih.gov and api.ncbi.nlm.nih.gov; the agent
+  # reaches NCBI only through the MCP server.
+  requires_network: true
+
+tags: [mcp_e2e, ncbi, entrez, gene, protein, tool_chain]
+
+# generate_gt.py only needs the standard library (urllib + json + re). Generate
+# instances with `asibench generate --sandbox task` (network required); run the
+# agent with --sandbox none and --mcp-config.
+runtime:
+  python: ">=3.11"
+  packages: []
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: card.json
+      type: data
+      description: "Gene symbol, organism, the verbatim Entrez Gene query (resolving to one gene id) and the GI number of one RefSeq protein of that gene."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with gene_id, symbol, maplocation, chr_accession, protein_accver, protein_len and taxid."

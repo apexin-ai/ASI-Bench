@@ -171,3 +171,51 @@ def test_superset_match_accepts_a_longer_listing():
     assert not verify.values.matches(listing, required, "subset")
     for empty in ([], None):
         assert not verify.values.matches(listing, empty, "superset")
+
+
+def test_json_scalars_reads_records_keyed_by_the_requested_identifier():
+    """E-utilities keys a record by the uid that was asked for, so no static dotted path
+    reaches ``slen``; the extractor collects the scalar leaves instead."""
+    esummary = _call({"status": "success", "url": "https://eutils.ncbi.nlm.nih.gov/x",
+                      "data": {"result": {"uids": ["4557819"],
+                                          "4557819": {"accessionversion": "NP_000268.1", "slen": 452,
+                                                      "taxid": 9606, "moltype": "aa",
+                                                      "subtype": None, "replaced": False}}}})
+    scalars = verify.spec.Selector(extract="json_scalars")
+    values = verify.values.read(esummary, scalars)
+    assert values == sorted({"4557819", "9606", "452", "NP_000268.1", "aa", "success",
+                             "https://eutils.ncbi.nlm.nih.gov/x"})
+    assert None not in values                          # null and False are not answerable values
+    canon = verify.extractors.canon_scalar
+    for answer, found in ((452, True), ("452", True), ("NP_000268.1", True), ("452.0", True),
+                          (9606, True), ("NP_000268.2", False), (453, False), (True, False)):
+        assert verify.values.matches(values, canon(answer), "member") is found, answer
+    # the whole record, not just the asked-for uid: a value nested in a list is reachable too
+    gene = _call({"status": "success",
+                  "data": {"result": {"uids": ["5053"],
+                                      "5053": {"nomenclaturesymbol": "PAH", "maplocation": "12q23.2",
+                                               "genomicinfo": [{"chraccver": "NC_000012.12",
+                                                                "chrstart": 102958440}],
+                                               "organism": {"taxid": 9606}}}}})
+    found = verify.values.read(gene, scalars)
+    assert all(canon(v) in found for v in ("PAH", "12q23.2", "NC_000012.12", 9606, 102958440))
+    assert verify.values.read(_call({"empty": {}, "nothing": [None, True]}), scalars) is None
+    assert verify.values.read(verify.evidence.ToolCall(result_text=None), scalars) is None
+
+
+def test_canon_scalar_pairs_numbers_with_their_string_spelling():
+    canon = verify.extractors.canon_scalar
+    assert canon(644) == canon("644") == canon(" 644 ") == canon(644.0) == canon("0644") == "644"
+    assert canon(0.457) == canon("0.4570") == canon("4.57e-1") == repr(0.457)
+    assert canon("NP_000268.1") == "NP_000268.1" and canon("12q23.2") == "12q23.2"
+    assert canon("PAH") != canon("pah")                                  # identifiers stay case-sensitive
+    assert canon(None) is None and canon(True) is None and canon("") is None and canon("  ") is None
+    assert canon(float("inf")) == "inf" and canon("nan") == "nan"         # kept as text, never equal numerically
+    assert canon([3, "1", 1.0, None, True]) == ["1", "3"]                 # sorted, unique, nulls dropped
+    assert canon([]) is None and canon([None]) is None
+    # A big integer must not round-trip through float, and float()'s literal tolerance must not
+    # make a grouped number equal to a plain one.
+    assert canon(9007199254740993) == "9007199254740993" and canon("1_000") == "1_000" != canon(1000)
+    # result.json and tool arguments are agent-controlled: a nested list or an object reads as
+    # "no value" instead of raising (a raise here would abort the whole verify_run report).
+    assert canon([[5053]]) is None and canon({"a": 1}) is None and canon([{"a": 1}, "ok"]) == ["ok"]

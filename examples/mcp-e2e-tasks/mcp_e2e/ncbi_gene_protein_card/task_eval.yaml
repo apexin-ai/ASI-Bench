@@ -1,0 +1,36 @@
+task_id: mcp_e2e.ncbi_gene_protein_card
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    # Schema only, like the other MCP E2E fake tasks: a wrong identifier costs its
+    # own weight, it does not zero the instance.
+    - scorer: ncbi_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  scoring:
+    # Equal credit per field, so one wrong identifier does not hide the others.
+    - scorer: ncbi_e2e_gene_card
+      weight: 60
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+    - scorer: ncbi_e2e_protein_card
+      weight: 40
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 300

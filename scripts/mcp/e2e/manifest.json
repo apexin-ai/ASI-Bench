@@ -49,6 +49,62 @@
       ]
     },
     {
+      "id": "alphafold_db",
+      "catalog_id": "alphafold_db",
+      "checkout": "tooluniverse",
+      "repository": "https://github.com/mims-harvard/ToolUniverse.git",
+      "revision": "9959ebee7638773314362f1746980a15f5b17e5b",
+      "python": "3.12",
+      "install": "uv-sync-frozen",
+      "uv_sync_args": ["--no-dev"],
+      "launch": {
+        "command": ".venv/bin/tooluniverse-smcp-stdio",
+        "args": ["--no-search", "--include-tools",
+                 "alphafold_get_prediction", "alphafold_get_summary", "alphafold_get_annotations"],
+        "env": {
+          "DO_NOT_TRACK": "1",
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "FASTMCP_SHOW_SERVER_BANNER": "false",
+          "HF_HUB_OFFLINE": "1",
+          "TOOLUNIVERSE_CACHE_ENABLED": "false",
+          "TOOLUNIVERSE_CACHE_PERSIST": "false"
+        }
+      },
+      "expected_tools": [
+        "alphafold_get_annotations",
+        "alphafold_get_prediction",
+        "alphafold_get_summary"
+      ]
+    },
+    {
+      "id": "ncbi",
+      "catalog_id": "ncbi",
+      "checkout": "tooluniverse",
+      "repository": "https://github.com/mims-harvard/ToolUniverse.git",
+      "revision": "9959ebee7638773314362f1746980a15f5b17e5b",
+      "python": "3.12",
+      "install": "uv-sync-frozen",
+      "uv_sync_args": ["--no-dev"],
+      "launch": {
+        "command": ".venv/bin/tooluniverse-smcp-stdio",
+        "args": ["--no-search", "--include-tools",
+                 "NCBIGene_search", "NCBIGene_get_summary", "NCBIProtein_get_summary"],
+        "env": {
+          "DO_NOT_TRACK": "1",
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "FASTMCP_SHOW_SERVER_BANNER": "false",
+          "HF_HUB_OFFLINE": "1",
+          "TOOLUNIVERSE_CACHE_ENABLED": "false",
+          "TOOLUNIVERSE_CACHE_PERSIST": "false"
+        }
+      },
+      "expected_tools": [
+        "NCBIGene_get_summary",
+        "NCBIGene_search",
+        "NCBIProtein_get_summary"
+      ]
+    },
+    {
       "id": "jsbsim",
       "catalog_id": "jsbsim",
       "repository": "https://github.com/flyintothesky/jsbsim-mcp.git",

@@ -1111,3 +1111,132 @@ Lessons — process:
   rebased with a throwaway identity and resolve append-only conflicts (PROGRESS,
   README) by keeping both sides; keep scratch directories under the session home,
   since `/tmp/...` can belong to another session's user.
+
+## 2026-10-03: One upstream checkout shared by several manifest ids
+
+- One repository exposing several tool faces (the ToolUniverse SMCP servers) was
+  installed once per manifest id: a 689 MB virtualenv and a 19 MB checkout per
+  tool face. `cbeb771` adds an optional `checkout` key, so a group installs into
+  `<root>/<checkout>` while each id keeps its own `<id>.mcp.json` whose MCP server
+  name is still the id — `mcp__<id>__<tool>` and the verifier golden snapshot are
+  untouched. arxiv moved to `~/mcp/tooluniverse` and its smoke still reports
+  16 / 8 / 0 (amd64, 2026-10-03), so the move changes nothing observable.
+- A group must declare the same repository, revision, python, install mode and
+  install fields, and its name must not be another manifest id;
+  `host_requirements` is deliberately not part of that check, since it gates the
+  id being installed rather than the directory's contents.
+- "Installing the second id of a group is idempotent" only holds for
+  `uv-sync-frozen`: `uv-pip-pinned` runs `uv venv --clear` and `conda-explicit`
+  removes the prefix, so there the second id rebuilds the venv. The docs say so.
+- Splitting this across two commits (manifest first, `setup.py` second) breaks
+  bisect: `load_manifest` rejects the unknown `checkout` key at collection time
+  and the whole `tests/mcp_e2e` suite errors out. Keep a new manifest key and its
+  validator in one commit.
+
+## 2026-10-03: alphafold_db and ncbi smokes (L1) on the shared ToolUniverse checkout
+
+- Two more tool faces of the ToolUniverse pin (`33ea0be`), so both manifest
+  entries only declare `checkout: "tooluniverse"`: no clone, no second venv.
+  Measured on AWS amd64: `alphafold_db` 16 / 7 / 0, `ncbi` 13 / 5 / 0.
+- A networked API with no date window to pin needs immutable identifiers plus
+  recomputation: compare the payload field by field with a raw query of the same
+  endpoint made by the smoke (internal consistency alone passes a stale payload),
+  recompute pLDDT from the model file's CA B-factors, recompute MUTAGEN values
+  from the AlphaMissense CSV the annotation links to, and address NCBI proteins
+  by GI number. Everything that moves with a model or annotation version is
+  reported, not asserted.
+- Rules this run added (all in CLAUDE.md or the module docstrings): `unwrap` must
+  treat the runner's `{"_isError": True}` sentinel as an error, otherwise a server
+  that *starts* validating input is reported FAIL; every "upstream should reject
+  this" probe needs `check_rejected(..., on_accept=…)` so an upstream improvement
+  lands as WARN; an empty E-utilities result set is a legitimate "no hits", not
+  "invalid input accepted"; a reference the smoke cannot parse is its own `
+  [reference]` FAIL with the dependent comparisons skipped, never a value compared
+  against `None`; and an in-band error may only be a WARN when its message
+  matches the documented empty state (an HTTP 500 is a FAIL).
+- Traps that cost a round each: the model file carries two decimals and truncates,
+  so a recomputed pLDDT mean needs a ~0.02 tolerance (P04637: 75.0501 vs a
+  reported 75.06) and a residue at a bin edge is a WARN; `esummary`
+  `chrstart/chrstop` are 0-based with `start > stop` for the minus strand while
+  `gene_table` is 1-based; an isoform model carries the isoform accession
+  (`P04637-2`), so asserting the base accession accuses the server; `esummary`
+  reports an unusable id in a *third* shape (top-level `error`, empty `uids`);
+  and `efetch db=gene retmode=xml` is 34 MB for TP53 — use `rettype=gene_table`.
+- A stub-server dry run cannot model the client: it predicted a WARN for
+  `auto_query_params` overwriting a caller's `type`, but FastMCP rejects
+  undeclared arguments, so over MCP that defect is unreachable and the real run
+  PASSed. Only a tri-state check survived the difference.
+
+## 2026-10-07: ncbi_gene_protein_card (L2) and the json_scalars extractor
+
+- Framework: `json_scalars` (+ `canon_scalar`) in `e2e_verify/extractors.py`.
+  A REST wrapper keys its record by the identifier that was requested
+  (`data.result.<uid>.slen`), so no static dotted path reaches it, and the
+  values are identifiers, which `Selector.key` cannot read at all (it goes
+  through `numbers()`). One generic extractor plus `match: "member"` covers
+  every such field; the call-level checks still use plain paths
+  (`data.esearchresult.idlist`, `data.result.uids` — digit strings that
+  `numbers()` accepts).
+- `canon` runs on agent-controlled values (an answer file, a tool argument), so
+  it must be total: a nested list or an object reads as "no value", never
+  raises. The first version did `{canon_scalar(i) for i in value}`, and a
+  `result.json` holding `[[5053]]` raised `TypeError` inside `verify_one` —
+  which has no per-check guard, so one malformed answer would have killed the
+  report for every result in the run.
+- A scorer must not be more forgiving than the verifier. Upper-casing
+  identifiers in the scorer made `np_000268.1` score 100/100 while
+  `answer_from_tool` reported "does not come from the tool", because the
+  verifier compares with the tool's own spelling. Both are case-sensitive now;
+  numbers stay lenient on both sides (`452` == `"452"`).
+- The hard gate stays structural (seven keys, usable types) like the other fake
+  tasks: an unversioned accession or an absurd length is a wrong field worth its
+  own weight, not a zeroed instance.
+- Fixtures must be measured, not written from memory: `PLUS_STRAND_TABLE` in
+  `test_smoke_ncbi.py` invented a `(plus strand)` marker, which hid that a live
+  plus-strand `gene_table` has **no marker at all** — so `GENE_TABLE_LOCUS`
+  silently failed to parse CFTR, SOD1 and HBA1. The orientation now comes from
+  the coordinates (`from > to` ⇔ minus, as for the esummary locus) and the
+  marker is only cross-checked: the smoke WARNs on a contradiction, the
+  generator raises.
+- Generation asserts every scored field against a second endpoint (`gene_table`
+  for the id/locus, protein FASTA and the gene_table's `annotated AA length`
+  for the length, Datasets `v2alpha` as a soft check) and raises instead of
+  writing an instance. All five curated cases verified live, ~6.5 s each.
+  Honest scope: the GI freezes the protein facts, but the band, the `NC_…`
+  version and the symbol query's uniqueness track the current NCBI build, so
+  generate right before a run.
+- Offline: `tests/mcp_e2e` + `test_ci_workflow` `683 passed / 3 skipped`;
+  `golden.json` 129 → 148 entries, none changed or removed.
+- AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4.
+- Commits: `e4ad4ff` (gene_table strand), `4e1586c` (task + extractor).
+
+## 2026-10-07: alphafold_isoform_profile (L2)
+
+- All three `alphafold_db` tools on one accession: isoform models → summary →
+  per-residue AlphaMissense annotation. The input file **lists the entry ids**
+  to rank, so an isoform model AlphaFold DB adds later cannot change the answer;
+  nothing model-version dependent (pLDDT, URLs, `latestVersion`, the growing
+  `structures` list) enters the reference. Ranking and the count above the
+  threshold are derived values the verifier cannot attribute to a call, so only
+  the scorer judges them.
+- Measured before curating: the canonical model is **not** always the longest
+  (BAX, BID, CDKN2A, RAC1 have a longer isoform); some proteins have a tied top
+  score (CDK2, GSK3B) or a value exactly at 0.9 (BCL2L1); a model carries four
+  length-like fields. Generation asserts all of it (distinct lengths, agreeing
+  length fields, unique top, nothing at the threshold, every value == the
+  AlphaMissense CSV mean, payload ≤ 40k characters) and raises otherwise.
+- A bypass pattern must never match the tool's own payload: the bare
+  `-aa-substitutions\.csv` matched `source_url`/`amAnnotationsUrl`, so an agent
+  pasting the annotation into a heredoc or script to count residues would have
+  been judged a bypass. Bulk AlphaMissense file names and URL literals handed to
+  `read_csv`/`urlretrieve` replace it; tests pin a pasted payload as not a FAIL.
+- The scorer compares the score to printing precision: the tool already serves
+  the rounded mean, so a tolerance would accept values the verifier rejects.
+- Size cap is 40k characters, not 60k: besides SMCP's 100k truncation, Claude
+  Code replaces an MCP result above ~25k tokens with a file pointer.
+- AlphaFold DB's front end rejects some User-Agents with HTTP 403 (`probe/1`);
+  the generator's `asibench-mcp-e2e-generate/1` passes.
+- Offline: `tests/mcp_e2e` + `test_ci_workflow` `752 passed / 3 skipped`;
+  `golden.json` 148 → 171, none changed.
+- AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4.
+- Commit: `e7a8ab3`.

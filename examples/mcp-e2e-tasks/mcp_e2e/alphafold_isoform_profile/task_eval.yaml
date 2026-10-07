@@ -1,0 +1,42 @@
+task_id: mcp_e2e.alphafold_isoform_profile
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    # Structural only, like the other MCP E2E fake tasks: a wrong value costs its
+    # own weight, it does not zero the instance.
+    - scorer: afdb_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  scoring:
+    # Equal credit for the full ranking (exact order) and for the longest entry.
+    - scorer: afdb_e2e_isoforms
+      weight: 40
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+    - scorer: afdb_e2e_canonical_length
+      weight: 15
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+    # Equal credit for the residue, its score and the count above the threshold.
+    - scorer: afdb_e2e_am_profile
+      weight: 45
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 300
