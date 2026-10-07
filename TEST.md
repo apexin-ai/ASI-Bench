@@ -8,6 +8,38 @@ agent CLI cannot trigger paid/external execution unexpectedly:
 uv run pytest -q
 ```
 
+Issue #8 Responses translation regressions run without paid model requests:
+
+```bash
+uv run pytest -q tests/test_api_proxy_responses.py \
+  tests/test_api_proxy_anthropic_responses.py tests/test_third_party_api.py \
+  tests/test_api_proxy_image_inputs.py tests/test_mimo_adapter.py
+```
+
+Coverage includes custom `input` vs function `arguments`, additional tool
+declarations, explicit rejection of unsupported `include`/tool limits and
+stateful history, request-local `drop_params=False`, original returned
+reasoning IDs/encrypted content, concurrent proxy requests, monotonic SSE
+sequence numbers, lifecycle ordering, and failed/incomplete terminal events.
+The real-LiteLLM regression mocks model completions and prohibits HTTP: on
+1.82.6 it verifies explicit rejection of unsupported custom-tool conversion;
+on 1.97.0 it verifies a two-turn custom-tool round trip and executes a fixed,
+asserted test script in a temporary directory to check `artifact.txt == "ok"`.
+The exact additional-tools/include/max-tool-calls request reported in issue #8
+must fail explicitly before upstream execution on both versions. No agent CLI
+or live model is run. JSON non-object bodies and invalid custom names must
+return client errors rather than crashing the handler.
+Malformed upstream output and tool calls missing call IDs return HTTP 502 in
+both JSON and SSE modes, before sending successful response headers.
+The Anthropic-to-Responses suite verifies two-turn encrypted reasoning replay,
+original reasoning IDs, visible and redacted thinking, signed replay-envelope
+integrity, conversation/execution isolation, concurrent requests, terminal
+states, and fail-closed malformed data. A loopback HTTP endpoint exercises the
+locked LiteLLM release and confirms `include: ["reasoning.encrypted_content"]`
+and `store: false` reach `/v1/responses`; it makes no external or paid request.
+Live upstream streaming is not claimed because both translation directions are
+deliberately buffered.
+
 The `CI` GitHub Actions workflow runs this suite automatically on every push
 and pull request with Python 3.11 and 3.13. It also runs the focused custom-task
 Docker integration suite once on Ubuntu, including pi and Claude Code overlays.

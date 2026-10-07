@@ -61,7 +61,10 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
          trailing ``/v1`` on ``api_base`` is stripped because the Claude
          CLI appends its own ``/v1/messages``.
        * ``api_protocol='openai'`` — starts a local litellm proxy that
-         translates Anthropic → OpenAI for the target service.
+         translates Anthropic → OpenAI for the target service. It uses Chat
+         Completions by default. Set ``anthropic_via_responses=true`` only for
+         endpoints with a native Responses API; that mode preserves encrypted
+         reasoning replay across tool turns.
 
        ``model`` is the bare model name as the target service understands
        it (e.g. ``z-ai/glm-5.2``, ``moonshotai/kimi-k2.7-code``).
@@ -83,6 +86,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         api_base_env: str | None = None,
         api_protocol: str | None = None,
         supports_image_input: bool = False,
+        anthropic_via_responses: bool = False,
         mcp_config: str | None = None,
     ):
         super().__init__(
@@ -105,6 +109,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         self.api_base_env = api_base_env
         self.api_protocol = api_protocol
         self.supports_image_input = supports_image_input
+        self.anthropic_via_responses = anthropic_via_responses
         self.mcp_config = str(Path(mcp_config).expanduser().resolve()) if mcp_config else None
         self.mcp_servers = load_mcp_config(self.mcp_config) if self.mcp_config else {}
         if self.mcp_servers and self.tool_mode != ToolMode.SEARCH:
@@ -118,6 +123,8 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             raise ValueError(
                 f"Invalid api_protocol '{api_protocol}'. Use 'openai' or 'anthropic'."
             )
+        if anthropic_via_responses and api_protocol != "openai":
+            raise ValueError("anthropic_via_responses requires api_protocol='openai'")
         # Anthropic-protocol targets usually speak Messages natively, so we
         # talk to them directly. TokenRouter needs small model-specific
         # compatibility rewrites for some native routes; those use a lightweight
@@ -193,7 +200,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         with self._proxy_lock:
             if self._proxy is not None:
                 return self._proxy.local_url  # type: ignore[union-attr]
-            if self._uses_tokenrouter_openai_chat_proxy:
+            if self._uses_tokenrouter_openai_chat_proxy and not self.anthropic_via_responses:
                 from ai4sci_bench.adapters.api_proxy import TokenRouterOpenAIChatProxy
                 self._proxy = TokenRouterOpenAIChatProxy(
                     model=self.model,
@@ -210,6 +217,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
                 api_base=self.api_base,
                 api_key=self.api_key,
                 supports_image_input=self.supports_image_input,
+                anthropic_via_responses=self.anthropic_via_responses,
             )
             return self._proxy.start()  # type: ignore[union-attr]
 

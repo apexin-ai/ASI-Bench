@@ -1168,6 +1168,33 @@ class TestClaudeCodeProxyCreation:
         assert url1 == url2
         adapter.teardown()
 
+    def test_anthropic_via_responses_is_explicit_and_forwarded(self):
+        from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
+
+        adapter = ClaudeCodeCLIAdapter(
+            api_key=OPENROUTER_API_KEY,
+            api_base=OPENROUTER_API_BASE,
+            api_protocol="openai",
+            anthropic_via_responses=True,
+        )
+        assert adapter.anthropic_via_responses is True
+        adapter._ensure_proxy()
+        try:
+            assert adapter._proxy._anthropic_via_responses is True
+        finally:
+            adapter.teardown()
+
+    def test_anthropic_via_responses_rejects_non_openai_protocol(self):
+        from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
+
+        with pytest.raises(ValueError, match="requires api_protocol='openai'"):
+            ClaudeCodeCLIAdapter(
+                api_key="test",
+                api_base="https://example.invalid",
+                api_protocol="anthropic",
+                anthropic_via_responses=True,
+            )
+
 
 class TestHermesProxyCreation:
     """Test Hermes proxy creation for non-OpenAI protocols."""
