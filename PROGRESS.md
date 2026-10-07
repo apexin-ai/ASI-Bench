@@ -961,7 +961,8 @@
   file chain through untracked path arguments, compared by file name) `803e92f`;
   openroad L1 `c396ccc` (first Node server: `npm-ci` installer and `executables`
   host probe; references from a closed-form LEF/DEF, the same `openroad` run
-  directly, and a fake ORFS tree).
+  directly, and a fake ORFS tree), `openroad_tiny_floorplan` (one interactive
+  session, answers that must be numbers the session printed) `54bf973` `5e4ef51`.
 - Framework and tooling work this produced: docs condensation `fe3651e`,
   verifier golden snapshot `b47c4f7`, verifier split into `e2e_verify/` with a
   strict spec parser `8ffc458`, `setup.py` installer registry `e24e8fc`, smoke
@@ -1345,3 +1346,28 @@ Lessons — process:
 - AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4;
   neither CLI made a task-augmented call, so D2 never stalled a run.
 - Commit: `803e92f`.
+
+## 2026-10-07: openroad_tiny_floorplan (L2) and the openroad_output extractor
+
+- One interactive session over our own LEF/DEF (4-7 INV/BUF, 1-2 rows, optional
+  fan-out net): read_lef/read_def, set_cmd_units, report_design_area (query or
+  exec), die box and HPWL printed by the agent's own Tcl over odb,
+  grep_session_output for the area line. Closed-form reference, stdlib only; with
+  the L1 constants the generator writes the smoke's host-validated TINY_LEF /
+  TINY_DEF byte for byte, and 21 seeds read by openroad directly match it with no
+  warning.
+- This server is an executor, so a correct number proves nothing (the DEF is
+  readable). Answers therefore have to be numbers a session command *printed*:
+  the new `openroad_output` extractor reads the PTY `output` field (echo line and
+  prompts dropped, ODB INFO / `Design area` lines as labelled facts, path tokens
+  ignored, `key=value` splits too). Tcl `exec` through `exec`/`query` is a
+  `no_bypass` FAIL — upstream lets it run shell commands.
+- The first AWS B3 run was a false FAIL: the agent printed `die_w=13000` /
+  `hpwl_total=35200`, and the extractor only split on whitespace. An agent's own
+  print format is not ours to fix, so it now splits on `=`, `:` and `,` (new
+  test_verify_values case and a replayed B3 scenario; golden +1, none changed).
+- Offline: `tests/mcp_e2e` + `test_ci_workflow` 1258 passed / 3 skipped; golden + 26 new.
+- AWS 2026-10-07: precheck 0 FAIL (21 direct seeds, the B1 sequence through the
+  real server, multi-line Tcl via exec, cwd clean); Claude Code and Codex B1-B4
+  each 4 × 100 (400/400), verifier 4/4.
+- Commits: L1 `c396ccc`, `24fa71c`; L2 `54bf973`, `key=value` fix `5e4ef51`.

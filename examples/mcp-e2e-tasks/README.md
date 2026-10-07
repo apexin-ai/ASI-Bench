@@ -69,6 +69,7 @@ works; it is not a pass rate.
 | `alphafold_isoform_profile` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `qe_si_bandstructure` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `atomictoolkit_vacancy` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
+| `openroad_tiny_floorplan` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 
 In every run at B3/B4 the agent found the tools without being told their names.
 
@@ -145,7 +146,7 @@ round (`structure.extxyz*`, `manipulated.extxyz*`, `analysis_outputs/`,
 `tool_errors/` in `~/mcp/atomictoolkit`) — never `git clean`, which deletes `.venv`.
 
 `openroad_tiny_floorplan` needs `--timeout 900` at most (each session command
-answers in well under a second). Answers count only if a session command
+answers in well under a second; all four levels finished quickly). Answers count only if a session command
 *printed* them (`openroad_output` extractor): the prompts ask for in-session Tcl
 arithmetic, so a value read from the DEF or converted by hand fails
 `answer_from_tool`. Tcl `exec` sent through `interactive_openroad_exec` or
