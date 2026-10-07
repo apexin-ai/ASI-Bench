@@ -80,12 +80,16 @@ def _point(ecut: int, kd: float) -> dict:
         # |gap - 1.66| is about 0.0154 eV: a clear fail at gap_tol 0.005, warn at
         # 0.012 and pass at 0.3, every branch far from its boundary.
         "band_gap_ev": 1.6754 + ecut / 1e7,
+        # Constant over the real grid too: a relaxed 2H-MoS2 monolayer has a direct
+        # K->K gap, which is why the bands scorer carries only 10 of 100 points.
         "gap_type": "direct",
         "vbm_label": "K",
         "cbm_label": "K",
         "kpts_scf": [9, 9, 1] if kd >= 25 else [6, 6, 1],
         "band_path": "GMKG",
-        "artifact_count": 10,
+        # The chain leaves more than REQUIRED_RUN_ARTIFACTS: GPAW writes a text log
+        # per calculation, and the fixed convergence sweep runs ten of them.
+        "artifact_count": 24,
         "measured_at_tol_mev_per_atom": 5.0,
         "measured_recommended_ecut_ev": 300,
         "measured_recommended_kpts_density": 15.0,
@@ -191,11 +195,13 @@ def test_cases_are_deterministic_and_varied():
     assert {c["gap_tol_ev"] for c in cases} == set(generate_gt.GAP_TOL_EV)
     # Only (ecut, density) costs a measurement; the other two are free, so the
     # instance space is much larger than the measured grid.
-    assert len({(c["ecut"], c["kpts_density"]) for c in cases}) == 8
+    assert len({(c["ecut"], c["kpts_density"]) for c in cases}) == 6
     assert len({tuple(c[k] for k in ("ecut", "kpts_density", "tol_mev_per_atom",
-                                     "gap_tol_ev")) for c in cases}) == 4 * 2 * 2 * 2
+                                     "gap_tol_ev")) for c in cases}) == 3 * 2 * 2 * 2
+    # 350 eV was measured and dropped: its relaxation stops on the force threshold.
+    assert 350 not in generate_gt.ECUTS
     assert all(c["use_builtin"] is True and c["query"] == "MoS2" for c in cases)
-    assert CASE["ecut"] == 450 and CASE["kpts_density"] == 25.0
+    assert CASE["ecut"] == 500 and CASE["kpts_density"] == 25.0
 
 
 # --------------------------------------------------------------------------
@@ -293,8 +299,8 @@ def test_a_gap_on_a_branch_boundary_is_refused(monkeypatch):
     for gap_tol in generate_gt.GAP_TOL_EV:
         assert generate_gt.gap_branch_margin(1.6754, 1.66, gap_tol) \
             > generate_gt.GAP_BRANCH_MARGIN_EV
-    on_edge = {point: {**data, "band_gap_ev": 1.66 + 0.3}       # |gap - ref| == gap_tol
-               for point, data in SAMPLE_MEASURED.items()}
+    on_edge = {point: {**data, "band_gap_ev": generate_gt.BAND_GAP_REF + CASE["gap_tol_ev"]}
+               for point, data in SAMPLE_MEASURED.items()}       # |gap - ref| == gap_tol
     monkeypatch.setattr(generate_gt, "MEASURED", on_edge)
     with pytest.raises(generate_gt.GenerationError, match="branch boundary"):
         generate_gt.reference(CASE)
@@ -311,12 +317,13 @@ def test_reference_is_derived_from_the_measured_table():
                 "cbm_label", "band_path", "artifact_count"):
         assert REFERENCE[key] == measured[key], key
     # derived, not measured
-    assert REFERENCE["recommended_kpts_density"] == 15.0      # tolerance 5.0 meV/atom
+    assert REFERENCE["recommended_kpts_density"] == 25.0      # tolerance 0.3 meV/atom
     assert REFERENCE["converged"] is True and REFERENCE["params_verified"] is True
-    assert REFERENCE["verdict"] == "pass"                     # gap tolerance 0.3 eV
+    assert REFERENCE["verdict"] == "fail"                     # gap tolerance 0.005 eV
     assert REFERENCE["verify_check_labels"][0] == "convergence_gate:pass"
-    assert REFERENCE["run_artifact_names"] == list(generate_gt.RUN_ARTIFACTS)
-    assert len(REFERENCE["run_artifact_names"]) == REFERENCE["artifact_count"]
+    assert REFERENCE["run_artifact_names"] == list(generate_gt.REQUIRED_RUN_ARTIFACTS)
+    # The listing is longer than the required set, so the verifier matches a superset.
+    assert len(REFERENCE["run_artifact_names"]) < REFERENCE["artifact_count"]
 
 
 def test_a_strict_tolerance_can_leave_the_parameters_unverified():
@@ -324,19 +331,20 @@ def test_a_strict_tolerance_can_leave_the_parameters_unverified():
     ref = _reference(case)
     assert ref["recommended_kpts_density"] == 25.0
     assert ref["params_verified"] is False and ref["converged"] is True
-    assert ref["verdict"] == "pass"            # params_verified is not a verify_run check
+    # params_verified is the run's own flag, not one of verify_run's checks.
+    assert ref["verdict"] == _reference({**case, "kpts_density": 25.0})["verdict"]
 
 
 def test_an_unmeasured_grid_point_fails_loudly(monkeypatch):
     monkeypatch.setattr(generate_gt, "MEASURED",
-                        {k: v for k, v in SAMPLE_MEASURED.items() if k != (450, 25.0)})
+                        {k: v for k, v in SAMPLE_MEASURED.items() if k != (500, 25.0)})
     with pytest.raises(generate_gt.GenerationError, match="no measured DFT"):
         generate_gt.reference(CASE)
 
 
 def test_a_table_disagreeing_with_the_k_grid_policy_fails_loudly(monkeypatch):
-    point = {**SAMPLE_MEASURED[(450, 25.0)], "relax_kpts": [7, 7, 1]}
-    monkeypatch.setattr(generate_gt, "MEASURED", {**SAMPLE_MEASURED, (450, 25.0): point})
+    point = {**SAMPLE_MEASURED[(500, 25.0)], "relax_kpts": [7, 7, 1]}
+    monkeypatch.setattr(generate_gt, "MEASURED", {**SAMPLE_MEASURED, (500, 25.0): point})
     with pytest.raises(generate_gt.GenerationError, match="auto_kpts"):
         generate_gt.reference(CASE)
 
@@ -348,14 +356,14 @@ def test_generate_writes_the_instance(tmp_path, monkeypatch):
     meta = generate_gt.generate(tmp_path, {"seed": support.SEED})
     assert meta["input_files"] == ["calculation.json"]
     data = json.loads((tmp_path / "data/calculation.json").read_text())
-    assert data["ecut"] == 450 and data["copied_files"] == ["bands.png", "dos.png"]
+    assert data["ecut"] == 500 and data["copied_files"] == ["bands.png", "dos.png"]
     ref = json.loads((tmp_path / "reference/reference.json").read_text())
     assert ref["band_gap_ev"] == REFERENCE["band_gap_ev"]
     for level in ("b1", "b2", "b3", "b4"):
         text = (tmp_path / f"prompt_{level}.md").read_text()
         assert "{{" not in text and "bands.png, dos.png" in text
         # B4 names no parameter: it points at the file instead.
-        assert ("450" in text) == (level != "b4"), level
+        assert ("500" in text) == (level != "b4"), level
 
 
 # --------------------------------------------------------------------------
@@ -384,7 +392,7 @@ def test_real_table_agrees_with_the_derivations_the_generator_makes():
         assert gate["converged"] is data["measured_converged"], point
         assert generate_gt.params_verified(gate, point[0], point[1]) \
             is data["measured_params_verified"], point
-        assert len(generate_gt.RUN_ARTIFACTS) == data["artifact_count"], point
+        assert len(generate_gt.REQUIRED_RUN_ARTIFACTS) <= data["artifact_count"], point
         assert data["measured_band_gap_ref"] == generate_gt.BAND_GAP_REF, point
         for gap_tol in generate_gt.GAP_TOL_EV:
             derived = generate_gt.verify_checks(
@@ -490,7 +498,7 @@ def test_tool_values_score_full(tmp_path):
 def test_a_neighbouring_cutoff_scores_zero_on_the_energies(tmp_path):
     """Reading another instance's run is the realistic way to be wrong: the gap barely
     moves, the total energies move by ~1e-2 relative, far outside the credit range."""
-    other = SAMPLE_MEASURED[(500, 25.0)]
+    other = SAMPLE_MEASURED[(400, 25.0)]
     wrong = _answer(relax_total_energy_ev=other["relax_total_energy_ev"],
                     scf_total_energy_ev=other["scf_total_energy_ev"],
                     fermi_ev=other["fermi_ev"])
@@ -501,7 +509,7 @@ def test_a_neighbouring_cutoff_scores_zero_on_the_energies(tmp_path):
 def test_rounding_the_energies_loses_credit(tmp_path):
     rounded = _answer(scf_total_energy_ev=round(REFERENCE["scf_total_energy_ev"], 4))
     detail = _scored(tmp_path, rounded, "gpaw_e2e_energies")
-    assert 0.0 < detail.score < 35.0
+    assert 0.0 < detail.score < 45.0
 
 
 def test_recalling_the_band_gap_is_worth_little(tmp_path):
@@ -513,11 +521,13 @@ def test_recalling_the_band_gap_is_worth_little(tmp_path):
                        fermi_ev=-1.5, band_gap_ev=1.67)
     assert _scored(tmp_path, recalled, "gpaw_e2e_energies").score == 0.0
     bands = _scored(tmp_path / "b", recalled, "gpaw_e2e_bands")
-    assert bands.score == pytest.approx(20.0 * 3 / 4)       # the three labels, not the number
+    assert bands.score == pytest.approx(10.0 * 3 / 4)       # the three labels, not the number
 
 
 def test_the_convergence_gate_is_all_or_nothing_per_field(tmp_path):
-    detail = _scored(tmp_path, _answer(verdict="fail", converged=False), "gpaw_e2e_convergence")
+    wrong_verdict = "pass" if REFERENCE["verdict"] != "pass" else "fail"
+    detail = _scored(tmp_path, _answer(verdict=wrong_verdict, converged=False),
+                     "gpaw_e2e_convergence")
     assert detail.score == pytest.approx(20.0 * 3 / 5)
     assert sorted(detail.details["wrong"]) == ["converged", "verdict"]
 
@@ -575,20 +585,25 @@ def test_submission_failures_are_valid_zero_scores(tmp_path, prediction, figures
     pred, ref = _dirs(tmp_path, prediction, figures=figures)
     gate = get_scorer("gpaw_e2e_schema").score(pred, ref, {"weight": 1.0})
     assert gate.score == 0.0 and not gate.details.get("scorer_internal_error")
-    for item in TASK.eval_config()["scoring"]:
+    for item in TASK.eval_config()["scoring"]:   # noqa: B007
         detail = get_scorer(item["scorer"]).score(pred, ref, {**item["config"],
                                                               "weight": item["weight"]})
         assert detail.score == 0.0, (item["scorer"], detail.message)
         assert not detail.details.get("scorer_internal_error"), item["scorer"]
 
 
-def test_missing_figures_do_not_touch_the_numeric_scorers(tmp_path):
+def test_missing_figures_cost_only_the_artefact_points(tmp_path):
+    """The gate is schema-only: an agent that drove the chain but never found the
+    server's run directory loses ten points, not the instance."""
     from ai4sci_bench.core.scorer import get_scorer
     pred, ref = _dirs(tmp_path, _answer(), figures={})
     gate = get_scorer("gpaw_e2e_schema").score(pred, ref, {"weight": 1.0})
-    assert gate.score == 0.0 and "not found" in gate.message
+    assert gate.score == 1.0 and gate.passed
     assert _scored(tmp_path / "b", _answer(), "gpaw_e2e_energies", figures={}).score \
-        == pytest.approx(35.0)
+        == pytest.approx(45.0)
+    artefacts = _scored(tmp_path / "c", _answer(), "gpaw_e2e_artifacts", figures={})
+    assert artefacts.score == pytest.approx(10.0 / 3)      # artifact_count only
+    assert _total(*_dirs(tmp_path / "d", _answer(), figures={})) == pytest.approx(100.0 - 2 * 10 / 3)
 
 
 def test_missing_reference_is_an_evaluator_failure(tmp_path):
@@ -632,8 +647,13 @@ def _payloads(run_id=RUN_ID, reference=None):
                   "bands_png": f"runs/{run_id}/bands.png", "dos_png": f"runs/{run_id}/dos.png"},
         "verify": {"ok": True, "verdict": ref["verdict"], "checks": ref["verify_checks"],
                    "blocking_failures": ref["blocking_failures"]},
-        "artifacts": {"ok": True, "artifacts": [{"path": f"runs/{run_id}/{name}", "bytes": 1024}
-                                                for name in ref["run_artifact_names"]]},
+        # The real listing carries GPAW's per-calculation text logs on top of the
+        # artefacts the chain is required to leave, which is why the spec matches a superset.
+        "artifacts": {"ok": True, "artifacts": [
+            {"path": f"runs/{run_id}/{name}", "bytes": 1024}
+            for name in [*ref["run_artifact_names"],
+                         *(f"scf_{n}.txt" for n in range(ref["artifact_count"]
+                                                        - len(ref["run_artifact_names"])))]]},
     }
 
 
@@ -722,7 +742,8 @@ def test_answers_must_be_copied_from_the_tool_results(tmp_path):
 
 
 def test_the_recommendation_must_come_from_the_convergence_sweep(tmp_path):
-    row = _run(tmp_path, _stream(_calls()), _answer(recommended_kpts_density=25.0))
+    other = 15.0 if REFERENCE["recommended_kpts_density"] != 15.0 else 25.0
+    row = _run(tmp_path, _stream(_calls()), _answer(recommended_kpts_density=other))
     assert _status(row)["answer_from_tool"] == "FAIL"
 
 
@@ -733,12 +754,22 @@ def test_the_realized_grid_must_come_from_the_relaxation(tmp_path):
     assert "relax_kpts" in row["checks"]["answer_from_tool"]["detail"]
 
 
-def test_a_listing_that_is_not_the_run_directory_fails_the_artefact_call(tmp_path):
+def test_a_listing_missing_a_chain_artefact_fails_the_artefact_call(tmp_path):
+    """A superset match still requires every artefact the chain must have produced."""
     payloads = _payloads()
     payloads["artifacts"] = {"ok": True, "artifacts": [{"path": "runs/x/bands.png", "bytes": 1}]}
     row = _run(tmp_path, _stream(_calls(payloads=payloads)), _answer())
     assert _status(row)["tool_correct"] == "FAIL"
     assert row["checks"]["tool_correct"]["per_call"]["artifacts"]["status"] == "FAIL"
+
+
+def test_extra_files_in_the_listing_are_fine(tmp_path):
+    """GPAW's text logs are not in REQUIRED_RUN_ARTIFACTS and must not fail the call."""
+    row = _run(tmp_path, _stream(_calls()), _answer())
+    assert row["checks"]["tool_correct"]["per_call"]["artifacts"]["status"] == "PASS"
+    listing = json.loads((TASK_DIR / "e2e_check.json").read_text())
+    assert next(c for c in listing["calls"]
+                if c["name"] == "artifacts")["result"]["match"] == "superset"
 
 
 def test_a_different_verification_report_fails_the_verify_call(tmp_path):

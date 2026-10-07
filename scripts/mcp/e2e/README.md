@@ -284,8 +284,13 @@ known defects is in each smoke script.
   only call that reaches out.
 - A task cannot recompute the DFT: GPAW exists only in this conda prefix and a
   task runtime may not build one. `mcp_e2e.gpaw_mos2_bandgap` therefore carries
-  a measured table, produced by `measure_gpaw_table.py` (nine chains, ~1 h), and
-  derives everything else — k-grid, convergence recommendation, `params_verified`
+  a measured table, produced by `measure_gpaw_table.py` (one chain per grid
+  point; eight chains took 63 min on amd64), and derives everything else — k-grid, convergence recommendation, `params_verified`
   and the `verify_run` verdict — with the same pure functions this smoke
   validates. Only `(ecut, kpts_density)` needs measuring; `tol_mev_per_atom` just
   picks a row of the fixed sweep and `gap_tol_ev` a branch of the verifier.
+- Relaxation below ecut 400 eV stops on the force threshold rather than at a
+  minimum: at 350 eV BFGS halts after 2 steps with fmax 0.0495 against the 0.05
+  criterion and reports an *indirect* Gamma->K gap, while 400-500 eV converge in
+  3 steps at ~0.0065 eV/A and give the direct K->K gap. A task must not build
+  instances on that corner.

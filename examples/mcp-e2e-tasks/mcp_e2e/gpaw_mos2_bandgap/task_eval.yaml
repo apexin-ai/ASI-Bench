@@ -11,47 +11,54 @@ output:
 
 evaluation:
   gates:
+    # Schema-only: the two figures are worth ten points in gpaw_e2e_artifacts but
+    # are not a gate, because producing them means locating the server's own run
+    # directory on the host (see custom_scorer.py).
     - scorer: gpaw_e2e_schema
       severity: hard
       config:
         pred_file: result.json
-        png_files: [bands.png, dos.png]
 
   # Tolerances. The reference is the pinned server's own answer on the same
   # conda lock, and GPAW is deterministic at OMP_NUM_THREADS=1: aarch64 and
-  # amd64 agree to ~1e-10 eV on the total energy and the gap, ~9e-9 eV on the
-  # Fermi level. Full credit therefore ends at 1e-6 relative, five orders above
-  # the platform noise and five below the ~1e-3 relative gap between two
-  # neighbouring cutoffs — so copying another instance's run, or another run
-  # directory's summary.json, scores zero rather than nearly full marks. Credit
-  # runs out at 1e-4 relative for the same reason.
+  # amd64 agree to ~1e-10 eV on energies and the gap, ~9e-9 eV on the Fermi
+  # level, and the agent runs on the host the table was measured on. Full credit
+  # therefore ends at 1e-6 relative, four orders above that noise.
   #
-  # The band gap carries the least weight on purpose: ~1.67 eV for a PBE MoS2
-  # monolayer is a textbook number that a model can produce without ever
-  # calling a tool. The cutoff-dependent total energies cannot be, so they
-  # carry the most.
+  # Credit runs out at 1e-5, which is set by the measured distance between
+  # neighbouring instances: copying the run of a different cutoff is 4.9e-4
+  # relative on the energies but only 3.4e-5 on the Fermi level and 4.6e-5 on
+  # the gap, and copying the other k-point density at the same cutoff is 5.0e-5
+  # on the energies. At 1e-4 those three would still earn a sixth of the credit;
+  # at 1e-5 every wrong-run answer is a zero and a value rounded to six decimals
+  # is still full marks.
+  #
+  # The band gap carries little weight on purpose: ~1.67 eV for a PBE MoS2
+  # monolayer is a textbook number, and over this grid the gap character is
+  # always direct K->K, so three of that scorer's four parts are constants. The
+  # cutoff-dependent total energies cannot be recalled, so they carry the most.
   scoring:
     - scorer: gpaw_e2e_energies
-      weight: 35
+      weight: 45
       config:
         pred_file: result.json
         ref_file: reference.json
         full_score_tol: 1.0e-6
-        zero_score_tol: 1.0e-4
+        zero_score_tol: 1.0e-5
     - scorer: gpaw_e2e_relaxation
       weight: 15
       config:
         pred_file: result.json
         ref_file: reference.json
         full_score_tol: 1.0e-6
-        zero_score_tol: 1.0e-4
+        zero_score_tol: 1.0e-5
     - scorer: gpaw_e2e_bands
-      weight: 20
+      weight: 10
       config:
         pred_file: result.json
         ref_file: reference.json
         full_score_tol: 1.0e-6
-        zero_score_tol: 1.0e-4
+        zero_score_tol: 1.0e-5
     - scorer: gpaw_e2e_convergence
       weight: 20
       config:

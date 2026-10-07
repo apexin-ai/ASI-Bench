@@ -155,3 +155,19 @@ def test_named_statuses_extractor_reads_a_report_of_named_checks():
     for bad in ({"checks": []}, {"checks": [{"check": "a"}]}, {"checks": [{"status": "pass"}]},
                 {"checks": "pass"}, {"verdict": "pass"}, ["a:pass"]):
         assert read(bad) is None, bad
+
+
+def test_superset_match_accepts_a_longer_listing():
+    """A file listing carries entries a task does not pin (GPAW's per-calculation logs),
+    so the required ones only have to be present."""
+    required = ["bands.png", "summary.json"]
+    listing = ["bands.png", "scf_300.txt", "summary.json"]
+    assert verify.values.matches(listing, required, "superset")
+    assert not verify.values.matches(listing, [*required, "missing.json"], "superset")
+    assert not verify.values.matches(required, listing, "superset")      # direction matters
+    # equal still means equal, and the dict-only subset mode is untouched
+    assert not verify.values.matches(listing, required, "equal")
+    assert verify.values.matches({"a": 1}, {"a": 1, "b": 2}, "subset")
+    assert not verify.values.matches(listing, required, "subset")
+    for empty in ([], None):
+        assert not verify.values.matches(listing, empty, "superset")

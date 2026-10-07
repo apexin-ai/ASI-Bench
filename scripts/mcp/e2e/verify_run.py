@@ -60,7 +60,9 @@ applies a named extractor (``arxiv_ids``, ``term_counts``, ``file_name``,
 
 ``result.format`` is ``number`` (the whole text result), ``json`` (``key`` or
 ``extract``) or ``image`` (+ ``media_type``); numbers match within ``abs_tol``,
-extracted values with ``match`` = equal / subset / member. Answers are numeric
+extracted values with ``match`` = equal / subset / superset / member
+(``superset``: every element of the reference list is among the extracted ones,
+for a listing that also carries entries the task does not pin). Answers are numeric
 (within ``abs_tol`` of the reference and equal to a returned value to printing
 precision) unless they name an ``extract``; then ``match`` member means the
 prediction is one of the returned values, and ``"merge_calls": true`` merges

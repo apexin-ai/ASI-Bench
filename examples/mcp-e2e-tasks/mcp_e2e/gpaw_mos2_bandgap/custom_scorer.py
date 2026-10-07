@@ -222,23 +222,25 @@ def _numeric_detail(name: str, weight: float, keys, pred: dict, ref: dict,
 
 @register_scorer("gpaw_e2e_schema")
 class Schema(Scorer):
-    """Gate: result.json is complete and well typed, and both figures the server
-    wrote were handed back as real PNGs."""
+    """Gate: result.json is complete and well typed.
+
+    Deliberately schema-only. The figures are scored by ``gpaw_e2e_artifacts``
+    and not gated: the tools report artefact paths relative to the server's own
+    working directory, so handing the figures back means finding that directory
+    on the host, and an agent that drove the whole chain correctly but did not
+    find it should lose those ten points rather than the instance.
+    """
 
     def score(self, pred_dir: Path, ref_dir: Path, config: dict) -> ScoreDetail:
         name = "gpaw_e2e_schema"
         weight = float(config.get("weight", 1.0))
         try:
             load_result(pred_dir / config.get("pred_file", "result.json"))
-            problems = [problem for filename in figure_files(config)
-                        for problem in png_problems(pred_dir / filename)]
-            if problems:
-                raise _PredictionError("; ".join(problems))
         except _PredictionError as exc:
             return _zero(name, weight, str(exc))
         return ScoreDetail(scorer_name=name, score=weight, max_score=weight, passed=True,
-                           details={"files": list(figure_files(config))},
-                           message="result.json complete; both figures present and readable")
+                           details={"pred_file": config.get("pred_file", "result.json")},
+                           message="result.json complete and well typed")
 
 
 @register_scorer("gpaw_e2e_energies")

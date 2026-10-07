@@ -125,7 +125,7 @@
         "format": "json",
         "extract": "listed_files",
         "reference_key": "run_artifact_names",
-        "match": "equal"
+        "match": "superset"
       }
     }
   ],

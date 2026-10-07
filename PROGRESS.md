@@ -1103,8 +1103,39 @@ Lessons — task design:
   exist nowhere but the run directory, so handing them back is what proves the
   artefact listing was resolved to a real path.
 
+Lessons — what the measurement itself decided (AWS amd64, 8 chains, 3799 s,
+2026-10-07):
+
+- Measure before fixing the instance grid. ecut 350 eV looked like a free fourth
+  cutoff and was the worst corner: BFGS stops on the force criterion (2 steps,
+  fmax 0.0495 against 0.05 — 1.6% of margin) and the unrelaxed geometry reports
+  an *indirect* Gamma->K gap of 1.658/1.669 eV where 400-500 eV all converge in
+  3 steps to the direct K->K 1.674 eV. Dropping it removed both a force-threshold
+  coin flip and a verify_run branch violation; the cost is that `gap_type` and
+  the band-edge labels become constants, which is why the bands scorer went from
+  20 to 10 points and the energies from 35 to 45.
+- The zero-credit tolerance is a measured quantity, not a guess. Neighbouring
+  instances are 4.9e-4 relative apart on the energies but only 3.4e-5 on the
+  Fermi level and 4.6e-5 on the gap, and the two k-point densities at one cutoff
+  are 5.0e-5 apart on the energies. At the 1e-4 originally written, three of
+  those wrong-run answers would still have earned a sixth of the credit; 1e-5
+  makes every one of them a zero while six-decimal rounding still scores full.
+- Count what the chain actually leaves on disk. GPAW writes a text log per
+  calculation and the fixed convergence sweep runs ten of them, so a run
+  directory holds 24 files, not the 10 the chain is *required* to produce. The
+  guard that compared the two exactly would have failed every seed.
+- `match: "subset"` is dict-only and runs value-into-reference; a file listing
+  needs reference-into-value. Added a `superset` mode rather than bending the
+  shared comparator (`tests/mcp_e2e/test_verify_values.py` pins both directions).
+
 Lessons — process:
 
+- Never `tail` the output of a `git checkout`. In the Cowork VM git cannot unlink
+  files until `allow_cowork_file_delete` is granted, so the checkout half-failed
+  and left main's content under the feature branch's HEAD while the only visible
+  line was "Your branch is up to date". `git checkout --force` after granting the
+  permission is the repair; comparing each modified file with
+  `git show main:<path>` is how to prove nothing of value was overwritten.
 - Drive a new remote-only script against a stub MCP server locally before
   spending an hour of AWS time on it. `StdioMCP.call_tool` returns the raw
   JSON-RPC envelope, not the result (`Caller.__call__` unwraps it in the smoke);

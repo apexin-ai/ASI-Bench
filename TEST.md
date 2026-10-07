@@ -743,14 +743,17 @@ with the recorded reference.
 
 `test_task_gpaw_mos2_bandgap.py` is the one task whose DFT reference cannot be
 recomputed in a test, so it runs on a synthetic `SAMPLE_MEASURED` table
-engineered to reach every branch (both convergence tolerances, all three
+engineered to reach every branch (both convergence tolerances, both
 `verify_run` verdicts, `params_verified` true and false) and checks the derived
-policy against it. Two further tests read the committed `MEASURED` table
-instead — that it covers the whole `(ecut, kpts_density)` grid, that the pure
-functions reproduce the gate the server itself answered, and that no instance's
-gap sits within 3 meV of a `verify_run` branch boundary — and skip while that
-table is still empty. Only `test_mx2_structure_matches_the_hardcoded_cell` and
-the generator test need ASE (`uv run --with ase==3.29.0 ...`).
+policy against it; the recorded unit cell stands in for `ase.build.mx2`, so the
+module imports without GPAW or ASE. Three further tests read the committed
+`MEASURED` table instead: that it covers the whole `(ecut, kpts_density)` grid,
+that the pure functions reproduce the gate *and the verification verdict the
+server itself answered* at every grid point and gap tolerance, and that no
+instance's gap sits within 3 meV of a `verify_run` branch boundary (they skip if
+the table is ever emptied for a re-measurement). Only
+`test_mx2_structure_matches_the_hardcoded_cell` and the generator test need ASE
+(`uv run --with ase==3.29.0 ...`); the latter puts the real builder back.
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
@@ -828,12 +831,17 @@ values by meV.
 
 Ground truth for `mcp_e2e.gpaw_mos2_bandgap` comes from the same installation:
 `~/mcp/gpaw/.venv/bin/python scripts/mcp/e2e/measure_gpaw_table.py --config
-~/mcp/gpaw.mcp.json --output ~/mcp/gpaw-table.json` drives nine full chains
-(the eight `(ecut, kpts_density)` grid points plus one that re-gates at the
-second tolerance to confirm the generator may derive the recommendation rather
-than measure it) in about an hour, and writes the `MEASURED` literal to paste
-into `generate_gt.py`. Re-run it after bumping the server revision or the conda
-lock; `--only 400:25` is an eight-minute dry run.
+~/mcp/gpaw.mcp.json --output ~/mcp/gpaw-table.json` drives one full chain per
+`(ecut, kpts_density)` grid point, one of which also re-gates at the second
+tolerance to confirm the generator may derive the recommendation rather than
+measure it, and writes the `MEASURED` literal to paste into `generate_gt.py`.
+Measured 2026-10-07 on AWS amd64: eight chains in 3799 s. Re-run it after
+bumping the server revision or the conda lock; `--only 400:25` is an
+eight-minute dry run. The run that produced the committed table also decided the
+instance grid: ecut 350 eV was dropped because its relaxation stops on the force
+criterion (2 BFGS steps, fmax 0.0495 against 0.05) and reports an indirect
+Gamma->K gap, so ground truth there would be one GPAW release away from
+changing.
 
 The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`.

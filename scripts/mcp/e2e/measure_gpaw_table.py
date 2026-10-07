@@ -28,14 +28,15 @@ is measured. The task's other two instance parameters are free:
 * ``gap_tol_ev`` only selects a branch of ``verify_run``'s state machine, which
   is likewise recomputed from the measured artefacts.
 
-Both derivations are checked against the server here, not just asserted: one
-extra chain re-runs ``check_convergence`` and ``calc_band_dos`` at the second
-tolerance, and every chain calls ``verify_run`` at both gap tolerances.
+Both derivations are checked against the server here, not just asserted: the
+``CROSS_CHECK`` chain re-runs ``check_convergence`` and ``calc_band_dos`` at the
+second tolerance, and every chain calls ``verify_run`` at both gap tolerances.
 
-Cost: nine chains of fetch -> relax -> convergence -> bands -> verify ->
-artifacts. On a single-threaded amd64 host that is roughly an hour; the
-convergence sweep alone is about 60% of every chain. Each step prints before
-it starts and the report records its wall-clock time.
+Cost: one chain of fetch -> relax -> convergence -> bands -> verify -> artifacts
+per grid point, plus two extra calls in the cross-check chain. Measured on a
+single-threaded amd64 host (2026-10-07): eight chains in 3799 s, the convergence
+sweep being about 60% of each. Each step prints before it starts and the report
+records its wall-clock time.
 """
 from __future__ import annotations
 
