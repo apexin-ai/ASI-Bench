@@ -1154,3 +1154,34 @@ Lessons — process:
   generate right before a run.
 - Offline: `tests/mcp_e2e` + `test_ci_workflow` `683 passed / 3 skipped`;
   `golden.json` 129 → 148 entries, none changed or removed.
+- AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4.
+- Commits: `e4ad4ff` (gene_table strand), `4e1586c` (task + extractor).
+
+## 2026-10-07: alphafold_isoform_profile (L2)
+
+- All three `alphafold_db` tools on one accession: isoform models → summary →
+  per-residue AlphaMissense annotation. The input file **lists the entry ids**
+  to rank, so an isoform model AlphaFold DB adds later cannot change the answer;
+  nothing model-version dependent (pLDDT, URLs, `latestVersion`, the growing
+  `structures` list) enters the reference. Ranking and the count above the
+  threshold are derived values the verifier cannot attribute to a call, so only
+  the scorer judges them.
+- Measured before curating: the canonical model is **not** always the longest
+  (BAX, BID, CDKN2A, RAC1 have a longer isoform); some proteins have a tied top
+  score (CDK2, GSK3B) or a value exactly at 0.9 (BCL2L1); a model carries four
+  length-like fields. Generation asserts all of it (distinct lengths, agreeing
+  length fields, unique top, nothing at the threshold, every value == the
+  AlphaMissense CSV mean, payload ≤ 40k characters) and raises otherwise.
+- A bypass pattern must never match the tool's own payload: the bare
+  `-aa-substitutions\.csv` matched `source_url`/`amAnnotationsUrl`, so an agent
+  pasting the annotation into a heredoc or script to count residues would have
+  been judged a bypass. Bulk AlphaMissense file names and URL literals handed to
+  `read_csv`/`urlretrieve` replace it; tests pin a pasted payload as not a FAIL.
+- The scorer compares the score to printing precision: the tool already serves
+  the rounded mean, so a tolerance would accept values the verifier rejects.
+- Size cap is 40k characters, not 60k: besides SMCP's 100k truncation, Claude
+  Code replaces an MCP result above ~25k tokens with a file pointer.
+- AlphaFold DB's front end rejects some User-Agents with HTTP 403 (`probe/1`);
+  the generator's `asibench-mcp-e2e-generate/1` passes.
+- Offline: `tests/mcp_e2e` + `test_ci_workflow` `752 passed / 3 skipped`;
+  `golden.json` 148 → 171, none changed.

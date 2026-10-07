@@ -36,6 +36,7 @@ An E2E pass needs both. The verifier reads the run artefacts and the task's
 | `mcp_e2e.rdkit_conformer` | `rdkit` | `smiles_to_mol` → `EmbedMolecule` → `mol_to_sdf` (writes the file), `Max`/`MinPartialCharge` | RDKit ETKDGv3 at the instance's seed + Gasteiger charges |
 | `mcp_e2e.build123d_plate_measure` | `build123d` | `execute` → `validate` → `measure` → `find_holes`/`find_hole_patterns` → `export` (STEP+STL) → `import_cad_file` (one session) | closed form: box − bore − corner slivers − bolt circle, extruded (stdlib only) |
 | `mcp_e2e.ncbi_gene_protein_card` | `ncbi` | `NCBIGene_search` → `NCBIGene_get_summary` (id from the search) + `NCBIProtein_get_summary` (GI from the input file) | raw E-utilities, cross-checked against `gene_table`, protein FASTA and the Datasets API (needs network; the GI freezes the protein facts, the gene's band and assembly accession track the current build, so generate just before the run) |
+| `mcp_e2e.alphafold_isoform_profile` | `alphafold_db` | `alphafold_get_prediction` + `alphafold_get_summary` + `alphafold_get_annotations` (one accession) | raw AlphaFold DB API; every per-residue score checked against the AlphaMissense CSV mean (needs network; the input file lists the entry ids to rank, so a newly added isoform model does not change the answer) |
 
 How each task picks its instances, scores answers and keeps the tool the only
 practical source of the numbers is described in its `generate_gt.py` and
@@ -59,6 +60,7 @@ works; it is not a pass rate.
 | `psi4_opt_freq` | 2026-10-02 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `rdkit_conformer` | 2026-10-03 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `build123d_plate_measure` | 2026-10-03 | 4 × 100, 4/4 | 396/400 (b1 96), 4/4 |
+| `ncbi_gene_protein_card` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 
 In every run at B3/B4 the agent found the tools without being told their names.
 
@@ -138,6 +140,7 @@ that is what `no_bypass` is for. `--mcp-config` also turns on web search
    | opaque strings a tool chain passes on | `rdkit_conformer` |
    | path arguments, binary artefacts, closed-form reference | `build123d_plate_measure` |
    | records a REST wrapper keys by the requested uid, in-band failures | `ncbi_gene_protein_card` |
+   | answers that need a ranking or a count over a returned list (scorer-only) | `alphafold_isoform_profile` |
 
 4. Prompts name the server and the tool (e.g. "`pyscf_rhf_energy` of the
    `pyscf` server"). Never use a harness-specific name such as

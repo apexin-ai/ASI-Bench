@@ -753,7 +753,12 @@ not carry fails `answer_from_tool` while the per-call check still passes (the
 call result only pins the record's identity), all three in-band E-utilities
 failure shapes plus an empty `uids` list count as failed calls, and
 Biopython/entrez-direct/`datasets`/`curl` are bypasses while a plain WebSearch
-is a WARN). With PySCF and geomeTRIC
+is a WARN; alphafold_isoform_profile: every one of the three tools is required, the
+`accession` alias of `qualifier` is a WARN, a score the annotation never carried
+fails, the documented empty annotation state is a failed call, and fetching the
+AlphaMissense CSV or UniProt is a bypass; its generator refuses equal isoform
+lengths, disagreeing length fields, a tied top score, a score exactly at the
+threshold, CSV disagreement and payloads near the 100 000-character truncation). With PySCF and geomeTRIC
 installed (`uv run --with pyscf==2.14.0 --with geometric==1.1.1 ...`) the psi4
 file also regenerates seed 31415 and compares with the recorded reference.
 

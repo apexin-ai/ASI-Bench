@@ -1,0 +1,52 @@
+id: mcp_e2e.alphafold_isoform_profile
+name: "MCP E2E: AlphaFold DB isoform lengths and AlphaMissense profile through the ToolUniverse alphafold_db MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. It exercises all three tools of the server on one accession
+# (isoform models → summary → per-residue AlphaMissense annotation) on live
+# AlphaFold DB data; see examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: research_data
+subdomain: "protein_structure_records_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/mims-harvard/ToolUniverse"
+
+difficulty:
+  estimated_lines: 0-30
+  estimated_time_minutes: 1-5
+  requires_gpu: false
+  # Generation queries alphafold.ebi.ac.uk (API and the AlphaMissense CSV); the
+  # agent reaches AlphaFold DB only through the MCP server.
+  requires_network: true
+
+tags: [mcp_e2e, alphafold_db, alphamissense, isoforms, protein_structure]
+
+# generate_gt.py only needs the standard library. Generate instances with
+# `asibench generate --sandbox task` (network required); run the agent with
+# --sandbox none and --mcp-config.
+runtime:
+  python: ">=3.11"
+  packages: []
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: profile.json
+      type: data
+      description: "UniProt accession, the AlphaFold DB entry ids of its isoform models to rank, and the AlphaMissense score threshold."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with entry_ids_by_length_desc, longest_entry_id, canonical_length, max_am_residue, max_am_score and n_am_above_threshold."
