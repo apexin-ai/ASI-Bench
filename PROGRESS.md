@@ -12,7 +12,7 @@
   timeouts are 30 s safety nets that cost nothing on the happy path.
 - Prevention: never bound a cross-process test barrier by a timeout shorter
   than a worker cold start; wait on markers that are not deleted.
-- Implementation commit: TBD
+- Implementation commit: `5109452`
 
 ## Task-scoped evaluator runtimes
 
