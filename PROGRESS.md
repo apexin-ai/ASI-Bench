@@ -1238,3 +1238,5 @@ Lessons — process:
   the generator's `asibench-mcp-e2e-generate/1` passes.
 - Offline: `tests/mcp_e2e` + `test_ci_workflow` `752 passed / 3 skipped`;
   `golden.json` 148 → 171, none changed.
+- AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4.
+- Commit: `e7a8ab3`.

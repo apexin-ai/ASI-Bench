@@ -63,6 +63,7 @@ works; it is not a pass rate.
 | `build123d_plate_measure` | 2026-10-03 | 4 × 100, 4/4 | 396/400 (b1 96), 4/4 |
 | `gpaw_mos2_bandgap` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `ncbi_gene_protein_card` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
+| `alphafold_isoform_profile` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 
 In every run at B3/B4 the agent found the tools without being told their names.
 
