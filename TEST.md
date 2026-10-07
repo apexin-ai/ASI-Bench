@@ -699,7 +699,19 @@ version really appears, conda-forge `<platform>`/`noarch` URLs with
 `setup.py --lock` from
 `micromamba --dry-run --json`. The quantum_espresso config pins the local
 runner (no Docker, no `mpirun`), resolves `pw.x` from the conda prefix via
-`QE_PREFIX`, leaves `QE_WORKDIR` unset and keeps `mcp` below 2. Shared
+`QE_PREFIX`, leaves `QE_WORKDIR` unset and keeps `mcp` below 2. `npm-ci`
+(openroad): `npm ci --no-audit --no-fund` then the listed npm scripts in
+`npm.workdir`, both with `PATH=/usr/bin:/bin` and without `npm_config_*` /
+`NODE_OPTIONS`, the built launch script chmodded `+x`, then an empty `uv venv`
+of the manifest Python; a missing lockfile, a launch script that was not built
+or has no `#!` line, a tracked non-executable launch script and `npm` outside
+`/usr/bin:/bin` are refused; `npm` fields that are not exactly
+`workdir`/`scripts`, an escaping `workdir`, non-name scripts and a
+`launch.command` outside `workdir` are rejected. The openroad config runs
+`typescript/dist/main.js --transport stdio` with `LOG_LEVEL=WARN` and no
+`ORFS_FLOW_PATH`. `host_requirements.executables` are bare names looked up in
+`setup.HOST_PATH` only (never the caller's PATH; every missing one listed),
+which is also the tail of the smoke server's PATH. Shared
 checkouts: ids with the same `checkout`
 install into one `<root>/<checkout>` (default is still `<root>/<id>`) while
 keeping one `*.mcp.json` and one MCP server name per id, and a group that
@@ -787,7 +799,22 @@ refusal of the task-required tools and their `tools/list` `taskSupport`, the
 task-augmented call shape and `No active context found.`, BFGS lines on the task
 path's stdout, ENAMETOOLONG for Si + EMT, the `auto` fallbacks, skin-0.3
 coordination numbers, g(r) doubled, the cell-less molecule, `kim` listed as
-available, and `create_download_artifact` accepting missing files.
+available, and `create_download_artifact` accepting missing files; openroad —
+the
+closed form of the tiny LEF/DEF (counts, die/core, placements, per-net HPWL
+9400, 6 u² / 30 %) and that the committed LEF/DEF text encodes exactly those
+constants, `report_design_area` / ODB INFO parsing, PTY output parsing (echo
+behind a stale `% ` prompt, bare prompts, leftover output before the echo, a
+missing echo), the sentinel-echo race classifier (an echo piece glued to a
+line, a lost line or a left-behind nonce tail is damage; a wrong number, an
+extra or reordered line is not), the direct-run Tcl script run under `tclsh`
+(result/error printed as the interactive shell prints them, return codes) and
+its marker parser, the fake ORFS tree (images, escaping symlink, repeated
+metric key, tagged log lines, stub Makefile), gate expectations, WebP
+VP8/VP8L/VP8X sizes, the `make` argv, and stubbed servers: in-band vs
+`isError` refusals and their count, command numbering, direct comparison
+PASS/WARN(race)/FAIL, error expectations, a blocked probe refused under
+another verb, and `prepare` without `openroad` still building the flow tree.
 
 `test_verify_spec.py` / `test_verify_values.py`: strict parsing (unknown,
 inapplicable and invalid keys, dangling and optional-from-required
@@ -889,6 +916,29 @@ installs and the server's interpreter are bypasses, listing the checkout is a
 WARN, arithmetic in `python3 -c` is not. `test_verify_values.py` pins the
 `output_file` extractor and `link_input_lost` (a scrubbed argument whose file
 name survives is compared; a bare `<abs_path>` is not).
+
+`test_task_openroad_tiny_floorplan.py` (stdlib; the B1 Tcl test needs `tclsh`):
+cases are deterministic and varied (4–7 INV/BUF cells, one or two rows, an
+optional fan-out net); with the L1 constants the renderers reproduce the smoke's
+`TINY_LEF` / `TINY_DEF` byte for byte and the reference equals its closed form;
+for eight seeds the reference equals an independent regex reading of the written
+LEF/DEF (counts, die, row box, legal placements, HPWL, no rounding tie); the B1
+one-line Tcl (die box, HPWL procedure) prints the reference against a fake odb
+under `tclsh`; every field scores its exact share, malformed submissions are
+valid zeros, a broken reference is an evaluator failure. Verifier scenarios with
+server-shaped payloads: genuine Claude and Codex runs pass (also with workspace
+paths scrubbed, and Codex without a trajectory); the area report through exec
+satisfies the group; no `set_cmd_units` (area 0) fails; an own session id only
+warns, commands on another session break the chain; an HPWL or a die width not
+printed in the session fails `answer_from_tool`; Tcl `exec` through either
+session tool, the `openroad` binary, `import odb`, installs, the server's
+`main.js` and KLayout are bypasses, Tcl `open`/`file`, grepping the DEF, listing
+the checkout and web lookups are WARN; skipping grep is an uncalled requirement; Claude's
+AWS B3 (both files in one command, die and HPWL printed as `key=value` by its own
+Tcl, a failed first attempt) passes for Claude and Codex.
+`test_verify_values.py` pins the `openroad_output` extractor on AWS-recorded
+outputs (facts, printed numbers also as `key=value` / `key: value`, message
+ids/`u^2`/path digits/echo excluded, flagged commands give nothing).
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`

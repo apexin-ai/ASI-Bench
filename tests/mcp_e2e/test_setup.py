@@ -7,7 +7,7 @@ import pytest
 
 from ai4sci_bench.mcp_config import load_mcp_config, load_science_mcp_catalog
 
-from .support import BUNDLE, setup, smoke_module
+from .support import BUNDLE, runner, setup, smoke_module
 
 
 def _jsbsim_manifest(tmp_path, **changes):
@@ -553,9 +553,9 @@ def test_manifest_document_keys_are_exact(tmp_path):
 def test_installer_fields_are_disjoint_and_cover_the_manifest():
     owners = [key for installer in setup.INSTALLERS.values() for key in installer.fields]
     assert len(owners) == len(set(owners)) and not set(owners) & set(setup.COMMON_KEYS)
-    assert setup.INSTALL_MODES == ("uv-sync-frozen", "uv-pip-pinned", "conda-explicit")
+    assert setup.INSTALL_MODES == ("uv-sync-frozen", "uv-pip-pinned", "conda-explicit", "npm-ci")
     assert {e["install"] for e in setup.load_manifest().values()} == set(setup.INSTALL_MODES)
-    assert setup.HOST_REQUIREMENT_KEYS == ("machine", "cpu_flags", "shared_libraries")
+    assert setup.HOST_REQUIREMENT_KEYS == ("machine", "cpu_flags", "shared_libraries", "executables")
 
 
 def test_a_new_install_mode_is_one_registered_installer(tmp_path, monkeypatch):
@@ -580,3 +580,159 @@ def test_a_new_install_mode_is_one_registered_installer(tmp_path, monkeypatch):
     with pytest.raises(setup.SetupError, match=r"\['demo_pins'\] only apply to install demo"):
         setup.load_manifest(_manifest_with(tmp_path, "pyscf", lambda e: e.update(demo_pins=["x==1"])))
     assert setup.main(["pyscf", "--lock", "--root", str(tmp_path)]) == 1   # no lock() for uv-sync-frozen
+
+
+# --------------------------------------------------------------------------
+# npm-ci (openroad) and the executables host probe
+# --------------------------------------------------------------------------
+
+def _npm_checkout(tmp_path, lock=True):
+    dest = tmp_path / "openroad"
+    package = dest / "typescript"
+    package.mkdir(parents=True)
+    (package / "package.json").write_text('{"name": "openroad-mcp"}')
+    if lock:
+        (package / "package-lock.json").write_text('{"lockfileVersion": 3}')
+    return dest
+
+
+def _fake_npm(monkeypatch, entry, *, launcher=b"#!/usr/bin/env node\n", tracked=""):
+    """setup.run stand-in: `npm run build` writes the launcher (mode 0644, like tsc)."""
+    commands = []
+
+    def fake_run(cmd, cwd=None, env=None):
+        commands.append((cmd, cwd, env))
+        if cmd[1:3] == ["run", "build"] and launcher is not None:
+            out = cwd / "dist" / "main.js"
+            out.parent.mkdir(exist_ok=True)
+            out.write_bytes(launcher)
+            out.chmod(0o644)
+        if cmd[0] == "git":
+            return tracked
+        return entry["python"] if cmd[-1].startswith("import sys") else ""
+
+    def fake_which(name, path=None):
+        assert path == setup.HOST_PATH or name == "uv", (name, path)
+        return f"/usr/bin/{name}" if path else "/usr/local/bin/uv"
+
+    monkeypatch.setattr(setup, "run", fake_run)
+    monkeypatch.setattr(setup.shutil, "which", fake_which)
+    return commands
+
+
+def test_openroad_config_runs_the_built_script_with_the_default_orfs_path(tmp_path):
+    entry = setup.load_manifest()["openroad"]
+    dest = tmp_path / "openroad"
+    path = tmp_path / "openroad.mcp.json"
+    path.write_text(json.dumps(setup.render_config(entry, dest)))
+    server = load_mcp_config(path)["openroad"]
+    # the tsc output, executed through its `#!/usr/bin/env node` line (setup.py adds +x)
+    assert server["command"] == str(dest / "typescript/dist/main.js")
+    assert server["args"] == ["--transport", "stdio"]
+    # pino level names only ("WARNING" crashes the server at start-up); no ORFS_FLOW_PATH, so
+    # the smoke's temporary HOME decides where the ORFS tree is
+    assert server["env"] == {"LOG_LEVEL": "WARN", "OPENROAD_COMMAND_TIMEOUT": "120"}
+    assert entry["install"] == "npm-ci" and entry["npm"] == {"workdir": "typescript", "scripts": ["build"]}
+    assert entry["revision"] == "7d2e540f86694beaf7f6dbe975a4e5f308161939"     # tag v1.1.0
+    assert {"node", "npm", "openroad", "make", "g++", "python3"} == set(entry["host_requirements"]["executables"])
+    assert len(entry["expected_tools"]) == 15
+
+
+def test_npm_install_runs_ci_and_scripts_with_the_host_path_then_an_empty_venv(tmp_path, monkeypatch):
+    entry = setup.load_manifest()["openroad"]
+    dest = _npm_checkout(tmp_path)
+    monkeypatch.setenv("npm_config_registry", "https://elsewhere.invalid/")
+    monkeypatch.setenv("NPM_CONFIG_PREFIX", "/elsewhere")
+    monkeypatch.setenv("NODE_OPTIONS", "--require /evil.js")
+    monkeypatch.setenv("PATH", "/home/u/.nvm/versions/node/v18/bin:/usr/bin:/bin")
+    commands = _fake_npm(monkeypatch, entry)
+    python = setup.build_env(entry, dest)
+    assert python == dest / ".venv/bin/python"
+    package = dest / "typescript"
+    npm_calls = [(cmd, cwd, env) for cmd, cwd, env in commands if cmd[0] == "/usr/bin/npm"]
+    assert [(cmd, cwd) for cmd, cwd, _ in npm_calls] == [
+        (["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], package),
+        (["/usr/bin/npm", "run", "build"], package),
+    ]
+    for _, _, env in npm_calls:
+        # the node that compiles node-pty is the node that later runs the server
+        assert env["PATH"] == setup.HOST_PATH
+        assert not any(k.lower().startswith("npm_config_") for k in env) and "NODE_OPTIONS" not in env
+    venv = [cmd for cmd, _, _ in commands if cmd[:2] == ["uv", "venv"]]
+    assert venv == [["uv", "venv", "--clear", "--python", "3.12", str(dest / ".venv")]]
+    assert (package / "dist/main.js").stat().st_mode & 0o777 == 0o755
+
+
+@pytest.mark.parametrize("case,match", [
+    ("no_lock", "package-lock.json not found"),
+    ("no_launcher", "did not produce launch.command"),
+    ("no_shebang", "no #! line"),
+    ("tracked", "tracked but not executable"),
+])
+def test_npm_install_refuses_what_it_cannot_run(tmp_path, monkeypatch, case, match):
+    entry = setup.load_manifest()["openroad"]
+    dest = _npm_checkout(tmp_path, lock=case != "no_lock")
+    _fake_npm(monkeypatch, entry,
+              launcher=None if case == "no_launcher" else b"console.log(1)\n" if case == "no_shebang"
+              else b"#!/usr/bin/env node\n",
+              tracked="typescript/dist/main.js" if case == "tracked" else "")
+    with pytest.raises(setup.SetupError, match=match):
+        setup.build_env(entry, dest)
+    if case == "tracked":       # never turned into a mode change of a tracked file
+        assert (dest / "typescript/dist/main.js").stat().st_mode & 0o111 == 0
+
+
+def test_npm_install_needs_npm_in_the_host_path(tmp_path, monkeypatch):
+    entry = setup.load_manifest()["openroad"]
+    dest = _npm_checkout(tmp_path)
+    monkeypatch.setattr(setup, "run", lambda *a, **k: pytest.fail("ran without npm"))
+    monkeypatch.setattr(setup.shutil, "which",
+                        lambda name, path=None: "/usr/local/bin/uv" if name == "uv" else None)
+    with pytest.raises(setup.SetupError, match=r"npm not found in /usr/bin:/bin"):
+        setup.build_env(entry, dest)
+
+
+@pytest.mark.parametrize("mutate,match", [
+    (lambda e: e.pop("npm"), "exactly workdir, scripts"),
+    (lambda e: e["npm"].update(lockfile="x"), "exactly workdir, scripts"),
+    (lambda e: e["npm"].update(workdir="/abs/typescript"), "relative path"),
+    (lambda e: e["npm"].update(workdir="../typescript"), "relative path"),
+    (lambda e: e["npm"].update(workdir=""), "relative path"),
+    (lambda e: e["npm"].update(scripts="build"), "npm script names"),
+    (lambda e: e["npm"].update(scripts=["build && curl x"]), "npm script names"),
+    (lambda e: e["launch"].update(command="dist/main.js"), "inside npm.workdir"),
+    (lambda e: e.update(requirements=["x==1"]), r"\['requirements'\] only apply to install uv-pip-pinned"),
+    (lambda e: e.update(install="uv-sync-frozen"), r"\['npm'\] only apply to install npm-ci"),
+    (lambda e: e["host_requirements"].update(executables=["/usr/bin/node"]), "bare command names"),
+    (lambda e: e["host_requirements"].update(executables=[]), "non-empty"),
+])
+def test_manifest_rejects_bad_npm_fields(tmp_path, mutate, match):
+    with pytest.raises(setup.SetupError, match=match):
+        setup.load_manifest(_manifest_with(tmp_path, "openroad", mutate))
+
+
+def test_npm_workdir_may_be_the_checkout_root(tmp_path):
+    def root_package(entry):
+        entry["npm"]["workdir"] = "."
+        entry["launch"]["command"] = "dist/main.js"
+    assert setup.load_manifest(_manifest_with(tmp_path, "openroad", root_package))["openroad"]["npm"]["workdir"] == "."
+
+
+def test_check_host_finds_executables_in_the_server_path_only(tmp_path, monkeypatch):
+    entry = setup.load_manifest()["openroad"]
+    on_host = {"node", "npm", "make", "python3"}
+    with pytest.raises(setup.SetupError) as exc:
+        setup.check_host(entry, which=lambda name: f"/usr/bin/{name}" if name in on_host else None)
+    message = str(exc.value)
+    assert "['g++', 'openroad'] not found in /usr/bin:/bin" in message and "node-pty" in message
+    setup.check_host(entry, which=lambda name: f"/usr/bin/{name}")
+    # by default the lookup ignores the caller's PATH (e.g. ~/.nvm, /usr/local/bin)
+    seen = []
+    monkeypatch.setattr(setup.shutil, "which", lambda name, path=None: seen.append(path) or "/usr/bin/x")
+    setup.check_host(entry)
+    assert seen and set(seen) == {setup.HOST_PATH}
+
+
+def test_smoke_server_path_ends_with_the_host_path(tmp_path):
+    env = runner.server_env({"command": "/m/openroad/typescript/dist/main.js"}, tmp_path, tmp_path)
+    assert env["PATH"] == f"/m/openroad/typescript/dist:{setup.HOST_PATH}"

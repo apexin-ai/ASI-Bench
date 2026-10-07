@@ -381,6 +381,37 @@
         "write_structure_file",
         "write_structure_workflow"
       ]
+    },
+    {
+      "id": "openroad",
+      "catalog_id": "openroad",
+      "repository": "https://github.com/The-OpenROAD-Project/OpenROAD-MCP.git",
+      "revision": "7d2e540f86694beaf7f6dbe975a4e5f308161939",
+      "python": "3.12",
+      "install": "npm-ci",
+      "npm": {
+        "workdir": "typescript",
+        "scripts": ["build"]
+      },
+      "host_requirements": {
+        "executables": ["g++", "make", "node", "npm", "openroad", "python3"],
+        "reason": "the server is TypeScript run by Node.js 22+ (npm installs it) and drives the openroad binary over a PTY; node-pty has no Linux prebuilds, so npm ci compiles it with make, g++ and python3; all must be in /usr/bin or /bin (an administrator installs them; openroad from the Precision Innovations .deb or a wrapper script at /usr/bin/openroad)"
+      },
+      "launch": {
+        "command": "typescript/dist/main.js",
+        "args": ["--transport", "stdio"],
+        "env": {
+          "LOG_LEVEL": "WARN",
+          "OPENROAD_COMMAND_TIMEOUT": "120"
+        }
+      },
+      "expected_tools": [
+        "cancel_orfs_job", "create_interactive_session", "get_orfs_job",
+        "get_session_history", "get_session_metrics", "grep_session_output",
+        "inspect_interactive_session", "interactive_openroad_exec", "interactive_openroad_query",
+        "list_interactive_sessions", "list_report_images", "read_orfs_metrics",
+        "read_report_image", "run_orfs_stage", "terminate_interactive_session"
+      ]
     }
   ]
 }
