@@ -157,6 +157,38 @@ def test_named_statuses_extractor_reads_a_report_of_named_checks():
         assert read(bad) is None, bad
 
 
+def test_categorized_files_reads_every_category_of_a_listing():
+    """qe-mcp's qe_list_files groups paths under ``*_files`` keys; names compare by file
+    name (categorized_files), a chained argument by exact path (categorized_paths)."""
+    listing = {"success": True, "directory": "/r/bands_1",
+               "band_files": ["/r/bands_1/bands.dat.gnu"], "dos_files": [],
+               "input_files": ["/r/bands_1/scf.in", "/r/bands_1/bands.in"],
+               "output_files": ["/r/bands_1/scf.out"], "other_files": ["/r/bands_1/bands.dat"]}
+    call = verify.evidence.ToolCall(result_text=json.dumps(listing))
+    names = verify.values.read(call, verify.spec.Selector(extract="categorized_files"))
+    assert names == ["bands.dat", "bands.dat.gnu", "bands.in", "scf.in", "scf.out"]
+    paths = verify.values.read(call, verify.spec.Selector(extract="categorized_paths"))
+    assert "/r/bands_1/bands.dat.gnu" in paths and "/r/bands_1" not in paths
+    canon = verify.extractors.EXTRACTORS["categorized_paths"].canon
+    assert canon(" /r/bands_1/bands.dat.gnu ") == "/r/bands_1/bands.dat.gnu"
+    for bad in ({"directory": "/r"}, {"band_files": [1]}, {"band_files": [""]}, ["a"], "a"):
+        read = verify.values.read(verify.evidence.ToolCall(result_text=json.dumps(bad)),
+                                  verify.spec.Selector(extract="categorized_files"))
+        assert read is None, bad
+
+
+def test_kpoint_grid_canonicalises_every_spelling():
+    canon = verify.extractors.EXTRACTORS["kpoint_grid"].canon
+    for spelling in ([7, 7, 7], [7.0, 7, "7"], "7,7,7", "7 7 7", " 7, 7, 7 ", "7x7x7", "7"):
+        assert canon(spelling) == "7,7,7", spelling
+    assert canon([4, 4, 1]) == "4,4,1"
+    for bad in ("auto", "gamma", "4 4 4 0 0 0", [7, 7], [0, 1, 1], [1.5, 1, 1], [True, 1, 1],
+                None, {"kpoints": [7, 7, 7]}, "", float("nan")):
+        assert canon(bad) is None, bad
+    call = verify.evidence.ToolCall(result_text=json.dumps({"kpoints": [5, 5, 5], "method": "x"}))
+    assert verify.values.read(call, verify.spec.Selector(extract="kpoint_grid")) == "5,5,5"
+
+
 def test_superset_match_accepts_a_longer_listing():
     """A file listing carries entries a task does not pin (GPAW's per-calculation logs),
     so the required ones only have to be present."""

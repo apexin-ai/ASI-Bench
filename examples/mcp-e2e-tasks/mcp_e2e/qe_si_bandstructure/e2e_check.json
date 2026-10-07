@@ -1,0 +1,148 @@
+{
+  "schema_version": 2,
+  "server": "quantum_espresso",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": [
+    "qe_get_job_status",
+    "qe_get_kpath",
+    "qe_get_mp_structure",
+    "qe_list_files",
+    "qe_list_pseudopotentials",
+    "qe_load_structure",
+    "qe_read_bands",
+    "qe_read_dos",
+    "qe_read_pdos",
+    "qe_run_relax",
+    "qe_run_scf",
+    "qe_run_vc_relax",
+    "qe_search_materials_project",
+    "qe_status",
+    "qe_suggest_kpoints",
+    "qe_validate_structure",
+    "qe_workflow_bandstructure",
+    "qe_workflow_dos",
+    "qe_workflow_relax_and_scf"
+  ],
+  "calls": [
+    {
+      "name": "pseudos",
+      "tool": "qe_list_pseudopotentials",
+      "result": {
+        "format": "json",
+        "extract": "json_scalars",
+        "reference_key": "si_pseudopotential",
+        "match": "member"
+      }
+    },
+    {
+      "name": "grid",
+      "tool": "qe_suggest_kpoints",
+      "inputs_from_reference": {
+        "structure": "structure",
+        "kspacing": "kspacing"
+      },
+      "result": {
+        "format": "json",
+        "key": "kpoints",
+        "reference_key": "scf_kpoints",
+        "abs_tol": 0
+      }
+    },
+    {
+      "name": "bands",
+      "tool": "qe_workflow_bandstructure",
+      "inputs_from_reference": {
+        "structure": "structure",
+        "ecutwfc": "ecutwfc",
+        "npoints_band": "npoints_band"
+      },
+      "inputs_from_call": {
+        "call": "grid",
+        "extract": "kpoint_grid",
+        "args": ["kpoints"],
+        "match": "member"
+      },
+      "result": {
+        "format": "json",
+        "key": "total_energy_eV",
+        "reference_key": "total_energy_eV",
+        "abs_tol": 1e-06
+      }
+    },
+    {
+      "name": "files",
+      "tool": "qe_list_files",
+      "inputs_from_call": {
+        "call": "bands",
+        "map": {
+          "output_dir": "output_dir"
+        }
+      },
+      "result": {
+        "format": "json",
+        "extract": "categorized_files",
+        "reference_key": "file_names",
+        "match": "superset"
+      }
+    },
+    {
+      "name": "read",
+      "tool": "qe_read_bands",
+      "inputs_from_call": {
+        "call": "files",
+        "extract": "categorized_paths",
+        "args": ["output_dir"],
+        "match": "member"
+      },
+      "result": {
+        "format": "json",
+        "key": "n_kpoints",
+        "reference_key": "n_kpoints",
+        "abs_tol": 0
+      }
+    }
+  ],
+  "answers": [
+    {"prediction_key": "si_pseudopotential", "from_call": "pseudos", "extract": "json_scalars",
+     "reference_key": "si_pseudopotential", "match": "member"},
+    {"prediction_key": "scf_kpoints", "from_call": "grid", "result_key": "kpoints",
+     "reference_key": "scf_kpoints", "abs_tol": 0},
+    {"prediction_key": "total_energy_eV", "from_call": "bands", "result_key": "total_energy_eV",
+     "reference_key": "total_energy_eV", "abs_tol": 1e-06},
+    {"prediction_key": "fermi_energy_eV", "from_call": "bands", "result_key": "fermi_energy_eV",
+     "reference_key": "fermi_energy_eV", "abs_tol": 1e-06},
+    {"prediction_key": "band_gap_eV", "from_call": "bands", "result_key": "band_gap_eV",
+     "reference_key": "band_gap_eV", "abs_tol": 1e-06},
+    {"prediction_key": "vbm_eV", "from_call": "bands", "result_key": "vbm_eV",
+     "reference_key": "vbm_eV", "abs_tol": 1e-06},
+    {"prediction_key": "cbm_eV", "from_call": "bands", "result_key": "cbm_eV",
+     "reference_key": "cbm_eV", "abs_tol": 1e-06},
+    {"prediction_key": "n_bands", "from_call": "bands", "result_key": "n_bands",
+     "reference_key": "n_bands", "abs_tol": 0},
+    {"prediction_key": "n_kpoints", "from_call": "read", "result_key": "n_kpoints",
+     "reference_key": "n_kpoints", "abs_tol": 0},
+    {"prediction_key": "path_length",
+     "from_calls": [{"call": "read", "result_key": "k_distances", "select": {"reduce": "max"}}],
+     "reference_key": "path_length", "abs_tol": 1e-06}
+  ],
+  "bypass_patterns": [
+    "(import|from)\\s+(ase|qe_mcp|pymatgen|gpaw|pyscf|qeschema|aiida)\\b",
+    "\\b(pip|pip3|uv|conda|mamba|micromamba|apt|apt-get|brew)\\b[^\\n]*(\\binstall\\b|\\badd\\b|\\bcreate\\b|--with\\b)[^\\n]*\\b(qe|quantum-espresso|quantum_espresso|ase|pymatgen|gpaw|pyscf)\\b",
+    "\\buvx\\b[^\\n]*\\b(ase|qe-mcp|pymatgen)\\b",
+    "\\bpython3?\\s+-m\\s+qe_mcp\\b|\\bqe_mcp\\.(server|tools|core)\\b",
+    "quantum_espresso[^\\s'\"]*/\\.venv/bin/",
+    "\\b(pw|bands|dos|projwfc|ph|pp)\\.x\\b"
+  ],
+  "suspicious_patterns": [
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b",
+    "\\b(cat|head|tail|less|more|awk|sed|grep|cut|sort)\\b[^\\n]*\\bbands\\.dat"
+  ],
+  "suspicious_tools": {
+    "WebFetch": "(?i)\\b(silicon|band\\s*gap|quantum\\s*espresso|sg15|oncv)\\b",
+    "WebSearch": "(?i)\\b(silicon|band\\s*gap|quantum\\s*espresso|sg15|oncv)\\b",
+    "web_fetch": "(?i)\\b(silicon|band\\s*gap|quantum\\s*espresso|sg15|oncv)\\b",
+    "web_search": "(?i)\\b(silicon|band\\s*gap|quantum\\s*espresso|sg15|oncv)\\b"
+  }
+}

@@ -339,17 +339,46 @@ def test_psi4_config_runs_module_from_checkout(tmp_path):
     assert entry["install"] == "conda-explicit" and "requirements" not in entry
 
 
-@pytest.mark.parametrize("plat", sorted(setup.load_manifest()["psi4"]["conda"]["locks"]))
-def test_committed_conda_locks_match_manifest(plat):
-    entry = setup.load_manifest()["psi4"]
+@pytest.mark.parametrize("sid,plat", sorted(
+    (sid, plat) for sid, entry in setup.load_manifest().items()
+    if entry["install"] == "conda-explicit" for plat in entry["conda"]["locks"]))
+def test_committed_conda_locks_match_manifest(sid, plat):
+    """Every committed lock pins exactly the versions its manifest specs ask for."""
+    entry = setup.load_manifest()[sid]
     lock = setup.read_conda_lock(entry, plat)
     urls = [line for line in lock.read_text().splitlines() if line.startswith("https://")]
-    names = {u.rsplit("/", 1)[1].rsplit("-", 2)[0] for u in urls}
-    assert {"python", "psi4", "dftd3-python", "mcp", "pint", "scipy"} <= names
     for spec in entry["conda"]["specs"]:
         name, version = spec.split("=")
-        assert any(f"/{name}-{version}-" in u for u in urls), spec
+        assert any(f"/{name}-{version}-" in u for u in urls), f"{sid} {plat}: {spec}"
     assert len(urls) == len(set(urls))
+
+
+def test_quantum_espresso_config_pins_the_local_runner_and_vendored_pseudos(tmp_path):
+    entry = setup.load_manifest()["quantum_espresso"]
+    dest = tmp_path / "quantum_espresso"
+    path = tmp_path / "quantum_espresso.mcp.json"
+    path.write_text(json.dumps(setup.render_config(entry, dest)))
+    server = load_mcp_config(path)["quantum_espresso"]
+    assert server["command"] == str(dest / ".venv/bin/python")
+    assert server["args"] == ["-m", "qe_mcp.server"]
+    # No Docker, no Globus, no mpirun, and pw.x resolved from the conda prefix rather
+    # than from whatever PATH the caller happens to have.
+    assert server["env"] == {
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": str(dest / "src"),
+        "QE_NPROCS": "1",
+        "QE_PREFIX": str(dest / ".venv/bin"),
+        "QE_PSEUDO_DIR": str(dest / "pseudopotentials/sg15_oncv"),
+        "QE_RUNNER": "local",
+        "QE_USE_DOCKER": "false",
+    }
+    # QE_WORKDIR stays unset so the work directory follows the server's cwd
+    # (upstream's .gitignore covers <checkout>/qe_calculations).
+    assert "QE_WORKDIR" not in server["env"]
+    # mcp 2.x removed mcp.server.fastmcp, which this revision imports: the pin is load-bearing.
+    assert "mcp=1.28.1" in entry["conda"]["specs"]
+    assert len(entry["expected_tools"]) == 19
+    assert all(tool.startswith("qe_") for tool in entry["expected_tools"])
 
 
 def test_conda_platform_mapping():

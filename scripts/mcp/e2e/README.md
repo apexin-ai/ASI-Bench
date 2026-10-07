@@ -20,7 +20,8 @@ involved. Upstream code is cloned, never vendored; upstream licenses apply.
 | `e2e_smoke/` | `runner.py` (the shared run and generic checks), `client.py` (stdio client recording non-JSON stdout), `helpers.py`, and `servers/<id>.py` per server (references + server-specific checks, declared as `SMOKE`) |
 | `verify_run.py` | L2 verifier CLI for agent runs; implementation in `e2e_verify/` (spec, extractors, values, evidence, checks) |
 | `measure_gpaw_table.py` | gpaw only: measures the `MEASURED` ground-truth table of `mcp_e2e.gpaw_mos2_bandgap` against the pinned server (~1 h; re-run after a revision or lock bump) |
-| `locks/` | committed conda `@EXPLICIT` locks (psi4, gpaw) |
+| `measure_qe_table.py` | quantum_espresso only: measures the `MEASURED` table of `mcp_e2e.qe_si_bandstructure` (27 chains, ~3 min aarch64; `--ecut` per part + `--merge`; `--check` compares a fresh measurement with the committed table) |
+| `locks/` | committed conda `@EXPLICIT` locks (psi4, gpaw, quantum_espresso) |
 
 Install modes:
 
@@ -105,13 +106,14 @@ re-implementing them.
 | `rdkit` | `tandemai-inc/rdkit-mcp-server` (catalog `rdkit_tandem`) | uv-pip-pinned, Py 3.12 | — | 125 / 28 / 0, amd64, 2026-10-03 (aarch64 identical 2026-10-02) |
 | `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, amd64 and aarch64, 2026-10-03 |
 | `gpaw` | `Crystalhihihi/matmcp` | conda-explicit | `micromamba` on `PATH` | 38 / 13 / 0, amd64, 2026-10-03 (24 min single-threaded) |
+| `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | 44 / 18 / 0, amd64 and aarch64, 2026-10-07 (~2 min / 62 s single-threaded) |
 
 Install the prerequisites before running `setup.py`:
 
 ```sh
 sudo apt-get install libblas3 liblapack3            # s4, admin, once
 mkdir -p ~/.local/bin && curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
-  | tar -xj -C ~/.local bin/micromamba               # psi4, gpaw
+  | tar -xj -C ~/.local bin/micromamba               # psi4, gpaw, quantum_espresso
 ```
 
 ## Notes for task authors
@@ -376,3 +378,106 @@ known defects is in each smoke script.
   criterion and reports an *indirect* Gamma->K gap, while 400-500 eV converge in
   3 steps at ~0.0065 eV/A and give the direct K->K gap. A task must not build
   instances on that corner.
+
+**quantum_espresso**
+
+- Real DFT with real binaries: the conda environment provides `pw.x`,
+  `bands.x`, `dos.x` and `projwfc.x` (`qe=7.5`, openmpi build). The launch env
+  pins `QE_RUNNER=local`, `QE_USE_DOCKER=false` and `QE_NPROCS=1`, so
+  executables are run directly, never through `mpirun`, Docker or Globus. A
+  singleton `pw.x` needs no `OMPI_MCA_*` settings and writes nothing to stderr
+  (measured on amd64 and aarch64).
+- The two platform locks pin `qe` 7.5 in different conda-forge builds
+  (`h19104ac_2` on linux-64, `hc91ee90_1` on linux-aarch64), yet a Si SCF
+  (2 atoms, 30/120 Ry, 4×4×4, cold smearing) agreed **bit for bit** across
+  them: `-15.75077338 Ry`, Fermi `6.5233 eV`, 3 s single-threaded. Tolerances
+  can be tight; the drift to watch is the QE version, not the platform.
+- `mcp` must stay below 2: this revision imports `mcp.server.fastmcp`, which
+  mcp 2.x replaced with `mcp.server.mcpserver.MCPServer`. The manifest pins
+  `mcp=1.28.1`. `spglib` is declared by upstream but never imported.
+- The 219 SG15 ONCV `.upf` files (69 elements) are vendored in the pinned
+  revision, so `scripts/download_pseudos.py` is never run and no calculation
+  needs the network. The two Materials Project tools are the only ones that go
+  online, and they need `MP_API_KEY`; do not describe the server as fully
+  offline. Without the key both answer in band before any request
+  (`MP_API_KEY not set` / `Materials Project API key not found. ...`).
+- Which pseudopotential file an element gets is **not** reproducible across
+  hosts: `SG15Library._scan_library` iterates `glob("*.upf")` and lets a later
+  non-`_FR` file overwrite an earlier one without sorting or comparing
+  versions, so for Si (1.0, 1.1, 1.2 are all shipped) the pick follows the
+  host's directory order. The *element set* is stable. A task must read the
+  actual pick from `qe_list_pseudopotentials` → `details.<El>.filename` (a bare
+  file name, so path scrubbing leaves it intact) and generate its ground truth
+  on the host that runs the agent, or score only quantities that do not depend
+  on the pseudopotential version. Measured on two hosts whose directory orders
+  differ completely: Si got `1.2` (the newest) on both, O and Fe got `1.0` (not
+  the newest) on both, and Ag diverged — `1.2` on amd64, `1.0` on aarch64. So
+  a Si task happens to be reproducible; that is luck, not a guarantee. A full
+  scan gave 43 of the 69 elements an older file on the aarch64 VM and 33 on
+  AWS amd64 (2026-10-07; Si got `1.2` on both).
+  The smoke re-runs the scan in directory order (it must match the server),
+  reports the stale elements as the D1 WARN and runs its DFT references with
+  the file the server picked.
+- `qe_read_bands(output_dir)` and `qe_read_dos(output_dir)` want a **file**
+  path (`bands.dat.gnu`, the dos `.dat`), not a directory, despite the
+  parameter name; a directory gives `[Errno 21] Is a directory: ...` (D2).
+- `bands.x` and `dos.x` can only be reached through the workflow tools:
+  `server.py` imports `postprocessing.run_bands/run_dos/run_pdos` but never
+  registers them, so no tool can produce a PDOS and `qe_read_pdos` can only
+  read a file from elsewhere.
+- Semiconductors are forced to `occupations='smearing'` with cold smearing and
+  `degauss=0.02`, so a band gap is derived from the `bands.dat` eigenvalues and
+  the smeared SCF Fermi energy. Physically crude, but deterministic — and a
+  good fingerprint, since another code will not reproduce it.
+- Defaults worth knowing: cutoffs come from an SG15 hint table (Si 30/120 Ry),
+  the automatic k grid is `round(40/|a_i|)` snapped to odd numbers (Si diamond
+  → 11×11×11), `nbnd = 8·natoms`, the band path has `npoints_band` = 100
+  points, and `workflow_dos` runs its NSCF step (tetrahedra) on **twice an
+  explicit** SCF grid (`4,4,4` → 8×8×8); with `kpoints="auto"` both steps use
+  the automatic grid (11×11×11 for Si).
+- `qe_get_kpath` fails for **every** structure (D10): it sorts the special
+  points by their coordinate arrays and gets `The truth value of an array with
+  more than one element is ambiguous`. `qe_workflow_bandstructure` builds its
+  path without that sort and works; a task must not depend on `qe_get_kpath`.
+- `qe_run_relax` and `qe_run_vc_relax` report the energy, Fermi level, forces
+  and stress of the **first** SCF step (D11: the parser takes the first `!`
+  line), not of the relaxed structure — for the displaced Si cell
+  `-15.74891110 Ry` instead of `Final energy = -15.7507748647 Ry`, and a
+  vc-relax reports the input cell's `-15.75077338 Ry` while the cell relaxes to
+  a = 5.4887 Å. Only the `.out` file in `output_dir` holds the result;
+  `qe_workflow_relax_and_scf`'s `relaxation.energy_eV` has the same defect.
+- `qe_workflow_relax_and_scf` runs its final SCF (`conv_thr` 1e-8) on the
+  **input** geometry (D12; upstream says so in a comment), so its
+  `total_energy` is the unrelaxed one — the relaxation is wasted.
+- `forces_eV_per_angstrom` has 7×nat rows (D13): `verbosity='high'` prints six
+  contribution blocks after the total forces and the parser keeps them all.
+  Only the first nat rows are forces.
+- Budget: every DFT tool on this Si workload (2 atoms, 30/120 Ry, 4×4×4, 40 band
+  points) takes 2–8 s single-threaded on the aarch64 VM (scf 2.0, relax 2.6,
+  vc-relax 3.5, band structure 7.2, DOS 8.0, relax+SCF 4.6) and about twice
+  that on AWS amd64 (3.2, 6.1, 6.1, 14.3, 14.6, 9.9); the whole smoke,
+  references included, is one to two minutes. Every energy the smoke prints —
+  each relaxation step, the final vc-relax SCF `-15.75176482 Ry`, the tight
+  SCFs — was identical on both platforms. `seconds_by_step` in the report has
+  the numbers of the host it ran on.
+- `QE_WORKDIR` is deliberately left unset, so work directories are
+  `<cwd>/qe_calculations`: a temporary directory under the smoke, the checkout
+  (gitignored upstream) under an agent run. Each SCF copies its `.upf` files
+  there, so clean `<checkout>/qe_calculations` between runs — and nothing else,
+  the checkout must stay clean for `setup.py`.
+- `qe_get_job_status` only means something for the Globus runner; with
+  `QE_RUNNER=local` it always answers `not found in registry`.
+- The density cutoff is not on the MCP surface: `ecutrho` stays at the hint
+  table's value (Si 120 Ry) whatever `ecutwfc` a tool is given, so above 30 Ry
+  the dual drops below 4. `mcp_e2e.qe_si_bandstructure` keeps `ecutwfc` ≤ 30.
+- A task cannot recompute the DFT (pw.x exists only in this conda prefix), so
+  `mcp_e2e.qe_si_bandstructure` carries a table measured by
+  `measure_qe_table.py`: 27 band-structure chains over (ecutwfc, grid,
+  npoints_band), 180 s on the aarch64 VM, re-measured identical. The grid comes
+  from the instance's k-spacing by the documented rule and is reconciled with
+  `qe_suggest_kpoints`. Run `measure_qe_table.py --check` on the host that runs
+  the agent before an L2 round: it proves the committed table (and the Si pick)
+  is that host's own answer.
+- `qe_list_files` and `qe_read_bands` take host paths as `output_dir`; the
+  trajectory keeps that argument (`KEY_ARG_NAMES`), so the verifier can follow
+  the chain workflow → listing → band file through scrubbed logs.
