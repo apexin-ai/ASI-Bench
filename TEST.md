@@ -382,7 +382,10 @@ Coverage must preserve source ordering and serial score parity, prove isolation
 from worker `cwd`/environment/import mutations, propagate credential-safe Judge
 metadata, redact secrets, classify worker failures as invalid evaluations, and
 preserve an existing report if atomic replacement fails. Docker image cache
-creation remains protected by a tag-keyed cross-process lock.
+creation remains protected by a tag-keyed cross-process lock. Concurrency tests
+must synchronize workers through persistent handshake files and use generous
+timeouts only as a safety net: a fresh scoring worker's cold start (including
+the litellm import) can exceed 3 s on CI.
 
 ```bash
 uv run pytest -q \

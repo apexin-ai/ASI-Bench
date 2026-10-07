@@ -222,6 +222,12 @@ import time
 from ai4sci_bench.core.scorer import Scorer, register_scorer
 from ai4sci_bench.core.types import ScoreDetail
 
+# Every wait below exits as soon as its condition holds; the timeout is only a
+# safety net. It must exceed a cold spawn of a scoring worker (interpreter
+# start plus the litellm import pulled in by ai4sci_bench.scorers), which is
+# routinely more than 3 s on CI runners.
+BARRIER_TIMEOUT = 30.0
+
 
 @register_scorer("parallel_test_scorer")
 class ParallelTestScorer(Scorer):
@@ -232,21 +238,26 @@ class ParallelTestScorer(Scorer):
         marker = state_dir / f"{{level}}.started"
         marker.write_text(str(os.getpid()))
         active_count = 1
-        deadline = time.monotonic() + 3.0
+        deadline = time.monotonic() + BARRIER_TIMEOUT
         while time.monotonic() < deadline:
             active_count = max(active_count, len(list(state_dir.glob("*.started"))))
             if active_count >= 2:
                 break
             time.sleep(0.01)
         (state_dir / f"{{level}}.ready").write_text(str(os.getpid()))
-        deadline = time.monotonic() + 3.0
+        deadline = time.monotonic() + BARRIER_TIMEOUT
         while len(list(state_dir.glob("*.ready"))) < 2 and time.monotonic() < deadline:
             time.sleep(0.01)
         if level == {crash_level!r}:
             os._exit(23)
         if level == "b1":
-            deadline = time.monotonic() + 3.0
-            while not (state_dir / "b3.started").exists() and time.monotonic() < deadline:
+            # Keep b1.started alive until the worker spawned into b2's freed
+            # slot has observed it. Wait on b3.ready rather than b3.started:
+            # b3 writes .ready only after counting two active workers and never
+            # deletes it, whereas b3.started is unlinked microseconds later and
+            # a 10 ms poll would usually miss it.
+            deadline = time.monotonic() + BARRIER_TIMEOUT
+            while not (state_dir / "b3.ready").exists() and time.monotonic() < deadline:
                 time.sleep(0.01)
 
         leak_path = str(state_dir / "sys-path-leak")

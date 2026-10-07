@@ -1,5 +1,19 @@
 # Progress
 
+## Flaky parallel local-scoring test
+
+- Problem: `test_parallel_local_scoring_is_bounded_isolated_and_ordered` failed
+  intermittently on CI with `[100.0, 100.0, 0.0]`. The test scorer kept b1
+  alive for at most 3 s waiting for b3, but b3 is a fresh spawn whose cold start
+  (interpreter + litellm import via `ai4sci_bench.scorers`) often takes longer,
+  so b3 ran alone and scored 0. b1 also polled the short-lived `b3.started`
+  marker and usually missed it, so it always waited out the full timeout.
+- Resolution: b1 now waits on the persistent `b3.ready` handshake; all barrier
+  timeouts are 30 s safety nets that cost nothing on the happy path.
+- Prevention: never bound a cross-process test barrier by a timeout shorter
+  than a worker cold start; wait on markers that are not deleted.
+- Implementation commit: `5109452`
+
 ## Task-scoped evaluator runtimes
 
 - Problem: MPSC duplicated its dependency specification inside the scorer and
