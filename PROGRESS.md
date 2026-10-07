@@ -1240,3 +1240,26 @@ Lessons — process:
   `golden.json` 148 → 171, none changed.
 - AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4.
 - Commit: `e7a8ab3`.
+
+## 2026-10-07: atomictoolkit smoke (L1)
+
+- One manifest id (`atomictoolkit`, catalog `ase`) for the catalog's `ase` and
+  `pymatgen` entries: same command, same 18 tools. Upstream's `-e .` fails
+  `PIN_RE`, so the manifest pins the third-party packages and launches with
+  `PYTHONPATH={checkout}/src`.
+- All 18 tools covered; 9 are unusable and checked three-state as recognised
+  defects (D1 deprecated wrappers, D2 task-required tools) instead of being
+  dropped from `expected_tools`. The task-augmented path runs in a second,
+  short-lived server (`after` + `session.spawn`) so its BFGS stdout does not
+  muddy the main stdout check.
+- A created task is `result._meta["modelcontextprotocol.io/task"]`, not
+  `result.task`; reading the wrong key sends `taskId: null` and gets `-32602`,
+  which looks like a different defect than the real `No active context found.`
+- References start from the file the tool wrote (extxyz keeps 8 decimals);
+  starting from the ideal builder differs by ~1e-14 eV. The elastic reference is
+  a closed-form quadratic fit, not `np.polyfit`.
+- ASE's CIF writer needs a binary stream (`BytesIO`); in tests write
+  `float(x)!r`, since `repr(np.float64)` is `np.float64(…)`.
+- VM aarch64: 44 / 31 / 0 in ~5 s; a mutated server copy (energy × (1+1e-7),
+  translation × 1.001) FAILs, and fixing skin / g(r) turns D4 / D9 into PASS.
+- Commit: pending.

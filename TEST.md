@@ -755,7 +755,16 @@ index 0, FASTA residue counting, the three in-band failure shapes plus zero hits
 with no error field (a WARN, not a FAIL — only records for an impossible id
 FAIL), a `retmax` dropped as falsy, an unusable `gene_table` reference blamed on
 the smoke rather than on the tool, Datasets `v2alpha` disagreements kept to
-WARN, and the identification check read from a fake checkout.
+WARN, and the identification check read from a fake checkout; atomictoolkit —
+payload / in-band split, artifact lists (fresh ids, previews for structures
+only, URL shape), the closed-form elastic fit against `np.polyfit`, the
+textbook g(r) normalisation on an ideal gas, and three-state checks on stubbed
+servers and references: the deprecated `FunctionTool` error, the plain-call
+refusal of the task-required tools and their `tools/list` `taskSupport`, the
+task-augmented call shape and `No active context found.`, BFGS lines on the task
+path's stdout, ENAMETOOLONG for Si + EMT, the `auto` fallbacks, skin-0.3
+coordination numbers, g(r) doubled, the cell-less molecule, `kim` listed as
+available, and `create_download_artifact` accepting missing files.
 
 `test_verify_spec.py` / `test_verify_values.py`: strict parsing (unknown,
 inapplicable and invalid keys, dangling and optional-from-required
@@ -895,6 +904,18 @@ energies and the gap and ~1e-8 eV on the Fermi level (MoS2 monolayer: gap
 E = -22.0734417 eV, recommended ecut 300 eV / density 15), so an L2 tolerance
 of 1e-6 eV is safe across platforms; it is GPAW *releases* that shift the
 values by meV.
+For atomictoolkit: `python3 scripts/mcp/e2e/setup.py atomictoolkit`, then
+`~/mcp/atomictoolkit/.venv/bin/python scripts/mcp/e2e/smoke.py atomictoolkit
+--config ~/mcp/atomictoolkit.mcp.json` (no network, ~5 s, all 18 tools; a second
+short-lived server probes the task-augmented path). Expected outcome on the
+pinned revision: `PASS` with 44 PASS, 0 FAIL and 31 WARN (four deprecated
+wrappers, five task-required tools refused plainly and five unfetchable task
+results, BFGS stdout on the task path, `kim` listed as available, `auto`
+fallbacks, coordination skin, doubled g(r), cell-less molecule, ENAMETOOLONG
+for Si, `create_download_artifact` relative URL and two silent accepts, six
+in-band errors and the `tool_errors/` logs in the cwd). Mutating the server's
+energy by 1e-7 relative, a translation by 0.1 %, or fixing the skin / g(r)
+normalisation turns the matching checks into FAIL or PASS respectively.
 
 `mcp_e2e.gpaw_mos2_bandgap` additionally pins that its answers survive upstream's
 non-reproducible `structure_drift` check:
