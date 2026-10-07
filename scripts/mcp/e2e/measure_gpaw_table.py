@@ -34,7 +34,7 @@ second tolerance, and every chain calls ``verify_run`` at both gap tolerances.
 
 Cost: one chain of fetch -> relax -> convergence -> bands -> verify -> artifacts
 per grid point, plus two extra calls in the cross-check chain. Measured on a
-single-threaded amd64 host (2026-10-07): eight chains in 3799 s, the convergence
+single-threaded amd64 host (2026-10-03): eight chains in 3799 s, the convergence
 sweep being about 60% of each. Each step prints before it starts and the report
 records its wall-clock time.
 """

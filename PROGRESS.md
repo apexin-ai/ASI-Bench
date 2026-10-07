@@ -903,7 +903,7 @@
   producing one result per attempt.
 - Implementation commit: `0e43cdd`.
 
-## 2026-09-29 – 2026-10-03: MCP end-to-end testing (L0–L2), seven servers and eight fake tasks
+## 2026-09-29 – 2026-10-07: MCP end-to-end testing (L0–L2), eight servers and nine fake tasks
 
 - Problem: the MCP catalog survey only proved L0 (`initialize` + `tools/list`).
   Nothing showed that an agent inside `asibench run` really calls a tool and
@@ -937,21 +937,24 @@
   `rdkit_conformer` (opaque-pickle chain, tool writes a file) `86905ae`;
   build123d L1 `6c8e727` (42 tools, closed-form CAD references),
   `build123d_plate_measure` (stateful CAD session, path arguments, binary
-  artefacts) `73ea607`.
+  artefacts) `73ea607`; gpaw L1 `22cd6b1` `929fa2f` `07899d6`,
+  `gpaw_mos2_bandgap` (six-tool `run_id` chain, measured DFT reference)
+  `fa97782` `2c85892` `ecde93d` `2ea3e7c`.
 - Framework and tooling work this produced: docs condensation `fe3651e`,
   verifier golden snapshot `b47c4f7`, verifier split into `e2e_verify/` with a
   strict spec parser `8ffc458`, `setup.py` installer registry `e24e8fc`, smoke
   scripts into `e2e_smoke/` with a shared runner `cbf026f`, tests regrouped into
   `tests/mcp_e2e/` `9fe5843`, persistence path-scrubbing fixed for shell
   commands `879dfc0`, for tool results `86905ae` and for tool arguments
-  `913d94e`, `$HOME` pinned in the MCP E2E tests `81d31e2`.
+  `913d94e`, `$HOME` pinned in the MCP E2E tests `81d31e2`, `listed_files` /
+  `named_statuses` extractors and a `superset` result match `2c85892` `ecde93d`.
 - Verification: every task passed B1–B4 on AWS Linux amd64 with both Claude Code
   (`claude-opus-5-5`) and Codex CLI (`gpt-5.6-sol`, effort medium) with every
   verifier check PASS, and at full local score except `build123d_plate_measure`
   on Codex b1 (396/400: it reported the bolt circle's diameter where the bolt
   hole's was asked for, which the prompt now spells out); per-task dates in
   `examples/mcp-e2e-tasks/README.md`, per-server smoke counts in
-  `scripts/mcp/e2e/README.md`. Offline coverage is `tests/mcp_e2e/` (469 tests)
+  `scripts/mcp/e2e/README.md`. Offline coverage is `tests/mcp_e2e/` (661 tests)
   with the golden snapshot pinning every `verify_one` outcome.
 
 Lessons — evidence and observability:
@@ -985,6 +988,9 @@ Lessons — evidence and observability:
   suite runs as that very user — four tests passed in CI and failed on the AWS
   E2E box. Pin `$HOME` in the tests (`81d31e2`) instead of choosing "unlikely"
   literals.
+- Compare a tool's report as a superset of its derivable part (`superset`), and
+  count what the run really leaves on disk: gpaw writes a text log per SCF, 24
+  files where the chain requires 10.
 - Build test streams from what the client really shows. A FastMCP tool with a
   return annotation declares an `outputSchema`, so Claude Code passes
   `structuredContent = {"result": …}` instead of the text block; streams built
@@ -1024,6 +1030,27 @@ Lessons — task design:
   it, and "the whole instance is zero" belongs to the hard gate. Never tighten a
   comparator shared by every task to make one test fail — choose a difference
   above its detection floor instead.
+- When the solver cannot enter a task runtime, carry a measured table (gpaw,
+  `fa97782` `ecde93d`): measure only the dimensions the solver depends on, derive
+  the rest with the L1-validated pure functions, record the server's own answer
+  for every derived field and assert the derivation against it offline. Fix the
+  instance grid *after* measuring — ecut 350 eV stopped on the force criterion
+  (fmax 0.0495 vs 0.05) and was dropped — and set the zero-credit tolerance from
+  the measured distance between neighbouring instances.
+- A discrete ground truth must not sit near a decision boundary, and must not
+  depend on anything that is not a function of the instance. gpaw's
+  `structure_drift` compares raw Cartesian positions with no minimum-image
+  convention, so a denormal Mo y (1e-19) wraps to `+a` and the check flips per
+  run (`2ea3e7c`); because verdicts are fail > warn > pass it also moved the
+  verdict. Keep such a check out of the reference, choose parameters where it
+  cannot reach the answer, and let the generator assert that.
+- An L1 reference that reimplements an upstream formula reproduces its bugs: the
+  smoke's own drift used the same naive formula, agreed with the server in all
+  14 runs and could never flag it. L1 green does not mean a quantity is
+  derivable.
+- Ask for artefacts the tool replies do not already contain (gpaw's figures exist
+  only on disk), and gate only the schema, so an agent that drove the chain but
+  could not find the server's directory loses those points, not the instance.
 
 Lessons — smoke tests:
 
@@ -1063,117 +1090,12 @@ Lessons — process:
   in `sys.modules` before `exec_module` or dataclasses break on Python 3.14;
   `AGENTS.md` must stay byte-identical to `CLAUDE.md`
   (`tests/test_ci_workflow.py`).
+- Diagnose with reads before re-runs: four rounds on the gpaw drift (run
+  directories, the two CIFs, upstream source, a fresh-process `verify_run` on two
+  run ids) cost no compute, and the first plausible story (an inherited user-site
+  ASE) was wrong. In the VM, never `tail` a `git checkout`: without the delete
+  permission it half-fails and leaves the old branch's files under the new HEAD.
 - When the VM cannot commit and the base branch moves, develop in a scratch clone
   rebased with a throwaway identity and resolve append-only conflicts (PROGRESS,
   README) by keeping both sides; keep scratch directories under the session home,
   since `/tmp/...` can belong to another session's user.
-
-## gpaw L2 (`mcp_e2e.gpaw_mos2_bandgap`)
-
-Lessons — task design:
-
-- When the solver cannot enter a task runtime, a measured ground-truth table is
-  the only option — but measure the *smallest* dimension. Here only
-  `(ecut, kpts_density)` moves the SCF: `tol_mev_per_atom` picks a row of
-  check_convergence's hard-coded sweep and `gap_tol_ev` picks a branch of
-  verify_run, so both are derived at generation time by the pure functions the
-  L1 smoke already validates. 32 instance combinations cost 8 measurements.
-- Record the server's own answer for everything that is derived
-  (`measured_recommended_*`, `measured_params_verified`,
-  `measured_verdict_by_gap_tol`) and assert the derivation against it offline,
-  or the claim "derived, not guessed" is unverified. Caught in review: the
-  first version derived the verify_run verdict but measured only the gate.
-- A discrete ground truth must not sit near a decision boundary. verify_run's
-  warn branch spans `(tol, 1.5*tol]`, so centring it on this gap needs
-  `gap_tol_ev ~ 0.0123` and leaves a ~6 meV band — less than the 2-3 meV a GPAW
-  release moves the gap by, from both sides. The warn branch was dropped and
-  `generate_gt` now refuses any instance within 3 meV of a boundary
-  (`GAP_BRANCH_MARGIN_EV`). Review caught this: a third of all seeds would have
-  raised at generation time.
-- Keep the measurement script's parameters identical to the task's. Measuring
-  verify_run at tolerances no instance uses confirms nothing about any instance.
-- Bypass patterns must not fire on the correct solution. The tools report
-  artefact paths relative to the server's own directory, so locating and copying
-  the two figures necessarily puts `.../gpaw/runs/...` into a shell command: a
-  bare `\bgpaw\b` (and even `gpaw ... python`) would WARN on every passing run.
-  Match importing, installing and executing the solver instead. The test asserts
-  that no pattern matches the three legitimate commands.
-- Ask for artefacts the tool replies do not already contain. Copying the
-  server's JSON records only repeats what the agent was handed; the two PNGs
-  exist nowhere but the run directory, so handing them back is what proves the
-  artefact listing was resolved to a real path.
-
-Lessons — what the measurement itself decided (AWS amd64, 8 chains, 3799 s,
-2026-10-07):
-
-- Measure before fixing the instance grid. ecut 350 eV looked like a free fourth
-  cutoff and was the worst corner: BFGS stops on the force criterion (2 steps,
-  fmax 0.0495 against 0.05 — 1.6% of margin) and the unrelaxed geometry reports
-  an *indirect* Gamma->K gap of 1.658/1.669 eV where 400-500 eV all converge in
-  3 steps to the direct K->K 1.674 eV. Dropping it removed both a force-threshold
-  coin flip and a verify_run branch violation; the cost is that `gap_type` and
-  the band-edge labels become constants, which is why the bands scorer went from
-  20 to 10 points and the energies from 35 to 45.
-- The zero-credit tolerance is a measured quantity, not a guess. Neighbouring
-  instances are 4.9e-4 relative apart on the energies but only 3.4e-5 on the
-  Fermi level and 4.6e-5 on the gap, and the two k-point densities at one cutoff
-  are 5.0e-5 apart on the energies. At the 1e-4 originally written, three of
-  those wrong-run answers would still have earned a sixth of the credit; 1e-5
-  makes every one of them a zero while six-decimal rounding still scores full.
-- Count what the chain actually leaves on disk. GPAW writes a text log per
-  calculation and the fixed convergence sweep runs ten of them, so a run
-  directory holds 24 files, not the 10 the chain is *required* to produce. The
-  guard that compared the two exactly would have failed every seed.
-- `match: "subset"` is dict-only and runs value-into-reference; a file listing
-  needs reference-into-value. Added a `superset` mode rather than bending the
-  shared comparator (`tests/mcp_e2e/test_verify_values.py` pins both directions).
-
-Lessons — what the first agent run found (b1, Claude, 2026-10-07):
-
-- A faithful L1 reimplementation of an upstream formula hides the bug it
-  reproduces. `verify_run`'s `structure_drift` is `norm(a1.positions -
-  a0.positions).max()` with no minimum-image convention; ASE wraps on read, and
-  this hexagonal cell has `a2_x < 0`, so a denormal *positive* fractional y
-  (1.17e-19, left by floating-point force summation where symmetry says zero)
-  becomes a tiny *negative* Cartesian x and wraps to `+a`. 1e-19 of input, 3.18 A
-  of output, flipping pass/warn per run on identical parameters. The L1 smoke
-  computes its drift the same naive way, so it agreed with the server in all 14
-  earlier runs and could never have flagged it. L1 green does not mean the
-  quantity is *derivable*; that only shows up when an L2 ground truth has to be a
-  function of the instance parameters.
-- A non-derivable check poisons everything downstream of it. The verdict is
-  fail > warn > pass, so the drift flake moved `verdict` for every gap tolerance
-  that does not already have a failing check — the table had recorded `pass` at
-  `gap_tol_ev=0.3` purely by luck. The fix is not to patch the expected label but
-  to pick parameters where the flake cannot reach the answer (`GAP_TOL_EV` is now
-  the single value that makes `band_gap_vs_mp` fail) and to let the generator
-  *assert* that immunity: `reference()` now recomputes the verdict with the drift
-  check forced both ways and refuses the instance if they differ.
-- Compare a tool's report as a superset of the derivable part, not as the whole
-  thing. `named_statuses` + `match: superset` lets the server keep reporting
-  checks whose status a task cannot predict.
-
-Lessons — process:
-
-- Diagnose before patching, and make the cheap decisive measurement. Four rounds
-  of "is it the environment / the files / the code" cost nothing because each
-  round was a read, not a re-run: the run directories, the two CIFs, the upstream
-  source and a fresh-process `verify_run` on two run ids. The first plausible
-  story (a stale environment inheriting a user-site ASE) was wrong, and guessing
-  it into a patch would have hidden a real non-determinism behind a wrong fix.
-- Never `tail` the output of a `git checkout`. In the Cowork VM git cannot unlink
-  files until `allow_cowork_file_delete` is granted, so the checkout half-failed
-  and left main's content under the feature branch's HEAD while the only visible
-  line was "Your branch is up to date". `git checkout --force` after granting the
-  permission is the repair; comparing each modified file with
-  `git show main:<path>` is how to prove nothing of value was overwritten.
-- Drive a new remote-only script against a stub MCP server locally before
-  spending an hour of AWS time on it. `StdioMCP.call_tool` returns the raw
-  JSON-RPC envelope, not the result (`Caller.__call__` unwraps it in the smoke);
-  the stub caught that in seconds.
-- Emit pasteable tables with `repr`, not `json.dumps`: the latter writes `true`,
-  which is not Python.
-- A pre-commit review sub-agent earns its keep on a task with four files that
-  must agree. It found the boundary bug above, the measure/task tolerance
-  mismatch, five missing `inputs_from_reference` arguments and an unbound
-  `relax_kpts` answer, all of which the green test suite had accepted.

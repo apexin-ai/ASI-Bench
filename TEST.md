@@ -843,7 +843,7 @@ Ground truth for `mcp_e2e.gpaw_mos2_bandgap` comes from the same installation:
 `(ecut, kpts_density)` grid point, one of which also re-gates at the second
 tolerance to confirm the generator may derive the recommendation rather than
 measure it, and writes the `MEASURED` literal to paste into `generate_gt.py`.
-Measured 2026-10-07 on AWS amd64: eight chains in 3799 s. Re-run it after
+Measured 2026-10-03 on AWS amd64: eight chains in 3799 s. Re-run it after
 bumping the server revision or the conda lock; `--only 400:25` is an
 eight-minute dry run. The run that produced the committed table also decided the
 instance grid: ecut 350 eV was dropped because its relaxation stops on the force
