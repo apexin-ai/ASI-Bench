@@ -164,9 +164,10 @@ def package_versions(packages: tuple[str, ...]) -> dict:
 def server_env(server: dict, home: Path, tmpdir: Path, *, extra: dict | None = None,
                pass_proxies: bool = False) -> dict:
     """Minimal server environment: no operator secrets or caller Python settings; the
-    config's launch env is applied last."""
+    config's launch env is applied last. PATH is the launch command's directory, then
+    ``setup.HOST_PATH``, where ``host_requirements.executables`` are checked."""
     venv_bin = str(Path(server["command"]).parent)
-    env = {"HOME": str(home), "TMPDIR": str(tmpdir), "PATH": f"{venv_bin}:/usr/bin:/bin",
+    env = {"HOME": str(home), "TMPDIR": str(tmpdir), "PATH": f"{venv_bin}:{load_setup().HOST_PATH}",
            "PYTHONNOUSERSITE": "1", "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8", **(extra or {})}
     if pass_proxies:
         env.update({key: os.environ[key] for key in PROXY_ENV if os.environ.get(key)})

@@ -4,8 +4,8 @@
 Stdlib only. For the server ``<id>`` listed in ``manifest.json`` this:
 
 1. checks the host against the server's ``host_requirements`` (machine, CPU
-   flags, loadable system libraries) before anything is cloned; nothing is
-   ever installed on the host;
+   flags, loadable system libraries, executables in ``/usr/bin:/bin``) before
+   anything is cloned; nothing is ever installed on the host;
 2. clones the upstream repository into ``<root>/<id>`` (or reuses an existing
    clean checkout) and detaches at the pinned revision; ids that declare the
    optional ``checkout`` key share one ``<root>/<checkout>`` instead, for a
@@ -22,6 +22,11 @@ Stdlib only. For the server ``<id>`` listed in ``manifest.json`` this:
                        committed per-platform ``@EXPLICIT`` lock (exact URLs +
                        SHA-256, no solver at install time) for the ``conda``
                        specs; ``--lock`` re-solves and rewrites the locks;
+   ``npm-ci``          Node servers (openroad): ``npm ci`` against the upstream
+                       ``package-lock.json`` (integrity hashes, no solver) and the
+                       listed npm scripts, run with the host's ``/usr/bin`` node;
+                       the launch script is made executable and ``.venv`` is an
+                       empty venv that only runs ``smoke.py``;
 
 4. writes a portable ``<root>/<id>.mcp.json`` for ``asibench run --mcp-config``
    (``{checkout}`` in launch args / env values becomes the absolute checkout).
@@ -38,7 +43,7 @@ afterwards.
 
 Usage::
 
-    python3 scripts/mcp/e2e/setup.py <id> [--root ~/mcp]      # pyscf, arxiv, jsbsim, s4, psi4, rdkit
+    python3 scripts/mcp/e2e/setup.py <id> [--root ~/mcp]      # any manifest id, e.g. pyscf, openroad
 
 Conda locks are regenerated (maintainers only, needs network) with::
 
@@ -79,7 +84,15 @@ CONDA_URL_RE = re.compile(r"https://conda\.anaconda\.org/(?P<channel>[a-z0-9-]+)
 LOCK_GLIBC = "2.28"
 # Environment variables that would redirect or reconfigure the installers.
 _INSTALLER_ENV_DROP = ("UV_PYTHON", "VIRTUAL_ENV", "PYTHONPATH", "CONDA_PREFIX", "CONDA_DEFAULT_ENV",
-                       "CONDA_PKGS_DIRS", "CONDA_ENVS_PATH", "CONDARC", "MAMBARC", "MAMBA_ROOT_PREFIX")
+                       "CONDA_PKGS_DIRS", "CONDA_ENVS_PATH", "CONDARC", "MAMBARC", "MAMBA_ROOT_PREFIX",
+                       "NODE_OPTIONS", "NODE_PATH")
+# The fixed PATH tail a smoke-test server runs with (``e2e_smoke.runner.server_env``: the launch
+# command's directory, then this). Executables a server needs from the host are looked up here, and
+# ``npm-ci`` builds with it, so native addons are compiled for the same node that later runs them.
+HOST_PATH = "/usr/bin:/bin"
+NPM_KEYS = ("workdir", "scripts")
+NPM_SCRIPT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9:._-]*")
+EXECUTABLE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9+._-]*")
 
 
 class SetupError(RuntimeError):
@@ -307,7 +320,92 @@ class CondaExplicit(Installer):
         return written
 
 
-INSTALLERS: dict[str, Installer] = {i.mode: i for i in (UvSyncFrozen(), UvPipPinned(), CondaExplicit())}
+def _relative_parts(value) -> tuple[str, ...] | None:
+    """Parts of a relative path inside the checkout, or None if it is not one."""
+    if not isinstance(value, str) or not value or value.strip() != value:
+        return None
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    return path.parts
+
+
+def _check_npm(sid: str, npm, entry: dict) -> None:
+    if not isinstance(npm, dict) or set(npm) != set(NPM_KEYS):
+        raise SetupError(f"{sid}: npm-ci needs npm with exactly {', '.join(NPM_KEYS)}")
+    workdir = _relative_parts(npm["workdir"])
+    if workdir is None:
+        raise SetupError(f"{sid}: npm.workdir must be a relative path inside the checkout "
+                         "(the directory holding package.json and package-lock.json)")
+    scripts = npm["scripts"]
+    if not _string_list(scripts) or not all(NPM_SCRIPT_RE.fullmatch(s) for s in scripts):
+        raise SetupError(f"{sid}: npm.scripts must be a list of npm script names run after npm ci")
+    if Path(entry["launch"]["command"]).parts[:len(workdir)] != workdir:
+        raise SetupError(f"{sid}: launch.command must be a script inside npm.workdir {npm['workdir']!r}")
+
+
+def _host_tool(name: str) -> str:
+    path = shutil.which(name, path=HOST_PATH)
+    if path is None:
+        raise SetupError(f"{name} not found in {HOST_PATH}, the PATH the server runs with; "
+                         "install it there first (setup.py never installs system packages)")
+    return path
+
+
+def _npm_env() -> dict:
+    env = {k: v for k, v in _installer_env().items() if not k.lower().startswith("npm_config_")}
+    env["PATH"] = HOST_PATH     # npm's `#!/usr/bin/env node`, node-gyp's make/g++/python3
+    return env
+
+
+class NpmCi(Installer):
+    """Node server with an upstream ``package-lock.json`` -> ``npm ci`` (integrity-checked, no
+    solver) plus the listed npm scripts (e.g. the TypeScript build), with ``/usr/bin:/bin`` as PATH.
+
+    The launch command is the built entry script (``#!/usr/bin/env node``), made executable here;
+    ``.venv`` is an empty uv venv of the manifest Python, used only to run ``smoke.py``."""
+    mode = "npm-ci"
+    fields = {"npm": _check_npm}
+
+    def install(self, entry: dict, dest: Path) -> Path:
+        _uv()
+        npm = _host_tool("npm")
+        _host_tool("node")
+        package = dest / entry["npm"]["workdir"]
+        for name in ("package.json", "package-lock.json"):
+            if not (package / name).is_file():
+                raise SetupError(f"{entry['id']}: {package / name} not found; npm ci needs the upstream lockfile")
+        env = _npm_env()
+        run([npm, "ci", "--no-audit", "--no-fund"], cwd=package, env=env)
+        for script in entry["npm"]["scripts"]:
+            run([npm, "run", script], cwd=package, env=env)
+        self._make_launcher_executable(entry, dest)
+        python = dest / ".venv" / "bin" / "python"
+        run(["uv", "venv", "--clear", "--python", entry["python"], str(dest / ".venv")], cwd=dest,
+            env=_installer_env())
+        return python
+
+    @staticmethod
+    def _make_launcher_executable(entry: dict, dest: Path) -> None:
+        rel = entry["launch"]["command"]
+        launcher = dest / rel
+        if not launcher.is_file():
+            raise SetupError(f"{entry['id']}: npm ci and scripts {entry['npm']['scripts']} "
+                             f"did not produce launch.command {launcher}")
+        with launcher.open("rb") as handle:
+            if handle.read(2) != b"#!":
+                raise SetupError(f"{entry['id']}: {launcher} has no #! line, so it cannot be the launch command")
+        mode = launcher.stat().st_mode
+        if mode & 0o111 == 0o111:
+            return
+        # A tracked file would show up as a mode change and block the next ensure_checkout.
+        if git(dest, "ls-files", "--", rel):
+            raise SetupError(f"{entry['id']}: {rel} is tracked but not executable; refusing to chmod it")
+        print(f"+ chmod +x {launcher}", flush=True)
+        launcher.chmod(mode | 0o111)
+
+
+INSTALLERS: dict[str, Installer] = {i.mode: i for i in (UvSyncFrozen(), UvPipPinned(), CondaExplicit(), NpmCi())}
 INSTALL_MODES = tuple(INSTALLERS)
 
 
@@ -352,11 +450,17 @@ def _probe_shared_libraries(wanted: list[str], host: dict) -> list[str]:
     return problems
 
 
+def _probe_executables(wanted: list[str], host: dict) -> list[str]:
+    missing = [name for name in wanted if host["which"](name) is None]
+    return [f"{missing} not found in {HOST_PATH} (the PATH the server runs with)"] if missing else []
+
+
 # host_requirements key -> probe(required values, host facts) -> problems
 HOST_PROBES: dict[str, Callable[[list[str], dict], list[str]]] = {
     "machine": _probe_machine,
     "cpu_flags": _probe_cpu_flags,
     "shared_libraries": _probe_shared_libraries,
+    "executables": _probe_executables,
 }
 HOST_REQUIREMENT_KEYS = tuple(HOST_PROBES)
 
@@ -369,20 +473,25 @@ def _check_host_requirements(sid: str, req, entry: dict) -> None:
     for key in HOST_PROBES:
         if key in req and not _string_list(req[key], nonempty=True):
             raise SetupError(f"{sid}: host_requirements.{key} must be a list of non-empty strings")
+    if not all(EXECUTABLE_RE.fullmatch(name) for name in req.get("executables", [])):
+        raise SetupError(f"{sid}: host_requirements.executables must be bare command names "
+                         f"(looked up in {HOST_PATH}), not paths")
     if not isinstance(req.get("reason", ""), str):
         raise SetupError(f"{sid}: host_requirements.reason must be a string")
 
 
 def check_host(entry: dict, *, machine: str | None = None, cpuinfo: Path = Path("/proc/cpuinfo"),
-               loader=ctypes.CDLL) -> None:
-    """Fail fast when the host cannot run a server's prebuilt native code.
+               loader=ctypes.CDLL, which: Callable[[str], str | None] | None = None) -> None:
+    """Fail fast when the host cannot run a server's prebuilt native code or lacks a
+    command the server (or its install) needs.
 
     Only checks; never installs system packages (that needs an administrator).
     """
     req = entry.get("host_requirements")
     if not req:
         return
-    host = {"machine": machine or platform.machine(), "cpuinfo": cpuinfo, "loader": loader}
+    host = {"machine": machine or platform.machine(), "cpuinfo": cpuinfo, "loader": loader,
+            "which": which or (lambda name: shutil.which(name, path=HOST_PATH))}
     problems = [p for key, probe in HOST_PROBES.items() if req.get(key) for p in probe(req[key], host)]
     if problems:
         reason = f" ({req['reason']})" if req.get("reason") else ""

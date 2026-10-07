@@ -123,12 +123,15 @@
 - MCP E2E 脚本在 `scripts/mcp/e2e/`（布局与各 server 情况见该目录 README）：只 clone
   不 vendor 上游，`manifest.json` 绑定 40 位 revision 与 server 自己的 Python，依赖必须
   精确钉死（只允许 `==` 加 `exclude_newer`，或按平台提交带 SHA-256 的 `@EXPLICIT` lock
-  无求解安装），不安装系统包（`host_requirements` 只在 clone 前检查）。新增安装方式或
+  无求解安装，或 Node server 用上游带 integrity 的 `package-lock.json` 做 `npm ci`），不安装
+  系统包（`host_requirements` 只在 clone 前检查；`executables` 与 `npm ci` 都只用
+  `setup.HOST_PATH`=`/usr/bin:/bin`，即 smoke server PATH 的尾部）。新增安装方式或
   主机检查只加一个 `INSTALLERS` / `HOST_PROBES` 注册项，manifest 条目只允许公共键加本
   方式字段。同一上游 repo 的多个 id 可用可选 `checkout` 键共用一份 checkout/.venv：组内
   repository/revision/python/install 及该安装方式的字段必须逐字相同，组名不得撞其他 id；
   `<id>.mcp.json` 与 MCP server 名仍按 id 一份（`mcp__<id>__<tool>` 不变）。
-- smoke（`smoke.py <id>`）必须用 server 自身 venv 在进程外独立计算参考值，并覆盖
+- smoke（`smoke.py <id>`）必须用 server 自身 venv 在进程外独立计算参考值（非 Python server
+  的 venv 为空，参考值用闭式解或由 smoke 直接 subprocess 调宿主后端二进制产生，不经 server），并覆盖
   manifest 列出的全部工具：数值错误 FAIL、上游缺陷 WARN、已探测的已知数值缺陷用三态
   （正确 PASS、精确符合缺陷 WARN、其他 FAIL），联网 server 只用封闭历史窗口或不可变
   标识（如 NCBI protein GI、UniProt accession、固定发布的数据集文件）并关闭上游

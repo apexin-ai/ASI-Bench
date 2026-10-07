@@ -696,7 +696,19 @@ version really appears, conda-forge `<platform>`/`noarch` URLs with
 `setup.py --lock` from
 `micromamba --dry-run --json`. The quantum_espresso config pins the local
 runner (no Docker, no `mpirun`), resolves `pw.x` from the conda prefix via
-`QE_PREFIX`, leaves `QE_WORKDIR` unset and keeps `mcp` below 2. Shared
+`QE_PREFIX`, leaves `QE_WORKDIR` unset and keeps `mcp` below 2. `npm-ci`
+(openroad): `npm ci --no-audit --no-fund` then the listed npm scripts in
+`npm.workdir`, both with `PATH=/usr/bin:/bin` and without `npm_config_*` /
+`NODE_OPTIONS`, the built launch script chmodded `+x`, then an empty `uv venv`
+of the manifest Python; a missing lockfile, a launch script that was not built
+or has no `#!` line, a tracked non-executable launch script and `npm` outside
+`/usr/bin:/bin` are refused; `npm` fields that are not exactly
+`workdir`/`scripts`, an escaping `workdir`, non-name scripts and a
+`launch.command` outside `workdir` are rejected. The openroad config runs
+`typescript/dist/main.js --transport stdio` with `LOG_LEVEL=WARN` and no
+`ORFS_FLOW_PATH`. `host_requirements.executables` are bare names looked up in
+`setup.HOST_PATH` only (never the caller's PATH; every missing one listed),
+which is also the tail of the smoke server's PATH. Shared
 checkouts: ids with the same `checkout`
 install into one `<root>/<checkout>` (default is still `<root>/<id>`) while
 keeping one `*.mcp.json` and one MCP server name per id, and a group that
@@ -775,7 +787,21 @@ index 0, FASTA residue counting, the three in-band failure shapes plus zero hits
 with no error field (a WARN, not a FAIL — only records for an impossible id
 FAIL), a `retmax` dropped as falsy, an unusable `gene_table` reference blamed on
 the smoke rather than on the tool, Datasets `v2alpha` disagreements kept to
-WARN, and the identification check read from a fake checkout.
+WARN, and the identification check read from a fake checkout; openroad — the
+closed form of the tiny LEF/DEF (counts, die/core, placements, per-net HPWL
+9400, 6 u² / 30 %) and that the committed LEF/DEF text encodes exactly those
+constants, `report_design_area` / ODB INFO parsing, PTY output parsing (echo
+behind a stale `% ` prompt, bare prompts, leftover output before the echo, a
+missing echo), the sentinel-echo race classifier (an echo piece glued to a
+line, a lost line or a left-behind nonce tail is damage; a wrong number, an
+extra or reordered line is not), the direct-run Tcl script run under `tclsh`
+(result/error printed as the interactive shell prints them, return codes) and
+its marker parser, the fake ORFS tree (images, escaping symlink, repeated
+metric key, tagged log lines, stub Makefile), gate expectations, WebP
+VP8/VP8L/VP8X sizes, the `make` argv, and stubbed servers: in-band vs
+`isError` refusals and their count, command numbering, direct comparison
+PASS/WARN(race)/FAIL, error expectations, a blocked probe refused under
+another verb, and `prepare` without `openroad` still building the flow tree.
 
 `test_verify_spec.py` / `test_verify_values.py`: strict parsing (unknown,
 inapplicable and invalid keys, dangling and optional-from-required

@@ -30,9 +30,16 @@ Install modes:
 | `uv-sync-frozen` | upstream has a `uv.lock` | optional `uv_sync_args` |
 | `uv-pip-pinned` | no lockfile | `requirements` (exact `==` pins), `exclude_newer` |
 | `conda-explicit` | conda-only packages | `conda` (channel, exact specs); lock per platform in `locks/`, regenerate with `setup.py <id> --lock` |
+| `npm-ci` | Node server with an upstream `package-lock.json` | `npm` (`workdir` holding the lockfile, `scripts` run after `npm ci`, e.g. the TypeScript build); `launch.command` is the built `#!` script inside `workdir`, made executable by `setup.py`; `.venv` is an empty venv of `python` that only runs `smoke.py` |
 
-Servers with prebuilt native code also declare `host_requirements`; `setup.py`
-checks them before cloning and never installs system packages.
+Servers with prebuilt native code or host binaries also declare
+`host_requirements` (`machine`, `cpu_flags`, `shared_libraries`,
+`executables`); `setup.py` checks them before cloning and never installs system
+packages. `executables` are looked up in `/usr/bin:/bin` only — the PATH tail a
+smoke-test server gets after its launch directory — so a tool found only in
+`~/.nvm` or `/usr/local/bin` is reported missing instead of failing later.
+`npm-ci` runs `npm` with that same PATH (and without `npm_config_*` /
+`NODE_OPTIONS`), so native addons are compiled for the node that runs them.
 
 Ids backed by the same upstream repository — one repository exposing several
 tool faces, such as the ToolUniverse SMCP servers — share one checkout and one
@@ -75,7 +82,10 @@ python3 scripts/mcp/e2e/setup.py alphafold_db --root ~/mcp
 ```
 
 Run the smoke with the server's own venv: the reference needs the same
-scientific library. The server is started from a temporary cwd/HOME/TMPDIR
+scientific library. For a non-Python server (`npm-ci`) that venv is empty and
+the reference comes from closed-form values or from running the host backend
+binary (e.g. `/usr/bin/openroad`) directly in a separate process, not through
+the server. The server is started from a temporary cwd/HOME/TMPDIR
 with a minimal environment and no credentials. FAIL means a wrong result and
 exits non-zero; WARN means an upstream defect that does not make correct use
 wrong. Every server gets the shared checks of `e2e_smoke/runner.py` (pinned
@@ -107,6 +117,7 @@ re-implementing them.
 | `build123d` | `pzfreo/build123d-mcp` | uv-sync-frozen, Py 3.12 | — | 89 / 15 / 0, amd64 and aarch64, 2026-10-03 |
 | `gpaw` | `Crystalhihihi/matmcp` | conda-explicit | `micromamba` on `PATH` | 38 / 13 / 0, amd64, 2026-10-03 (24 min single-threaded) |
 | `quantum_espresso` | `frimpsjoek/qe-mcp` | conda-explicit (`qe=7.5`) | `micromamba` on `PATH` | 44 / 18 / 0, amd64 and aarch64, 2026-10-07 (~2 min / 62 s single-threaded) |
+| `openroad` | `The-OpenROAD-Project/OpenROAD-MCP` (TypeScript, tag v1.1.0) | npm-ci, `typescript/`, Py 3.12 venv for the smoke only | `node` 22+, `npm`, `openroad`, `make`, `g++`, `python3` in `/usr/bin` or `/bin` | not run on a real `openroad` yet (VM aarch64 with a Tcl stand-in for `openroad`: 103 / 5 / 1, the FAIL being the unpinned dev checkout, 2026-10-07) |
 
 Install the prerequisites before running `setup.py`:
 
@@ -481,3 +492,42 @@ known defects is in each smoke script.
 - `qe_list_files` and `qe_read_bands` take host paths as `output_dir`; the
   trajectory keeps that argument (`KEY_ARG_NAMES`), so the verifier can follow
   the chain workflow → listing → band file through scrubbed logs.
+
+**openroad**
+
+- The first Node server: `setup.py` runs `npm ci` on upstream's
+  `typescript/package-lock.json` and `npm run build`; node-pty has no Linux
+  prebuilds and compiles there (hence `make`, `g++`, `python3`). Pin the tag,
+  not `main` (daily dependabot merges; #203 changed result fields).
+- The Precision Innovations `.deb` does not install on Ubuntu 26.04 (`libpython3.10`
+  has no candidate). The AWS host runs the 2024-12-14 build
+  (`v2.0-17598-ga008522d8`) unpacked under `/opt` behind a `/usr/bin/openroad`
+  wrapper that sets `LD_LIBRARY_PATH` (uv's CPython 3.10 `libpython`, a
+  `libtclreadline-2.3.8.so` link to 2.4.0). tclreadline fails to start, so
+  the REPL is plain Tcl and the prompt is `%`.
+- Without a Liberty file STA's distance unit is 1 m and `report_design_area`
+  says `0 u^2`; `set_cmd_units -distance um` (exec: `set_*`) fixes it.
+- Session results are the PTY text: the echoed command (sometimes behind a
+  stale `% `), the output, a bare `%`. `error` is a regex guess over that text
+  (`invalid command name`, `[ERROR XXX-nnnn]`, `Error:` ...), never `isError`.
+  Blocked commands never reach openroad and take no command number.
+- Completion is a sentinel `puts "[join {ORMCP DONE <nonce>} -]"` written right
+  after the command; lines holding the marker are dropped. When the command is
+  still printing, the sentinel's PTY echo interleaves with the output: lines
+  are lost or carry echo pieces (`...4000put`). The smoke compares every
+  session command with a direct `openroad -exit` run and reports exactly that
+  signature as WARN, any other difference as FAIL. Frequent with the fast Tcl
+  stand-in; a task must not depend on one exact output line.
+- The allowlist checks statement verbs and `[bracketed]` verbs only: the
+  read-only query tool runs `exec` inside a `dict for` body, and the exec tool
+  allows `exec` itself, so neither is a sandbox. The launch allowlist compares
+  the executable's basename (`/any/path/openroad` runs). A call without
+  `session_id` starts a new session and leaves it running.
+- History is sorted by a millisecond timestamp, so commands in the same
+  millisecond come back oldest-first; `total_commands` is the number returned.
+- `ORFS_FLOW_PATH` is deliberately unset (default `$HOME/OpenROAD-flow-scripts/flow`):
+  the smoke builds a fake flow tree under its temporary HOME (platform
+  `l1pdk`, design `l1design`, images, metrics with a repeated key, tagged logs,
+  `rules-base.json`, a stub `Makefile`), so the five ORFS tools are exercised
+  without ORFS or yosys. A run's metrics count only if written after it
+  started; cancel and timeout kill the run's whole process group.
