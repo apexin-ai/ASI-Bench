@@ -1,0 +1,73 @@
+task_id: mcp_e2e.atomictoolkit_vacancy
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    - scorer: atomictoolkit_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  # Tolerances are absolute and set by the reference, which is ASE called
+  # directly on the same extxyz files: over 41 seeds every energy, coordination
+  # average and bulk modulus equalled the pinned server's bit for bit (VM
+  # aarch64; the L1 smoke found EMT energies bit-identical on amd64 too, and the
+  # np.polyfit bulk modulus off by ~5e-16 relative). Full credit therefore ends
+  # well below printing precision, and credit runs out where a wrong procedure
+  # starts: a supercell of the other size moves the formation energy by ~7e-6 eV
+  # (part of its credit; its energies are off by tenths of an eV), the next
+  # lattice constant (+0.001 A) by ~2e-3 eV, a different strain range moves the
+  # bulk modulus by 0.1-0.4 GPa, and one neighbour more or less moves the
+  # coordination average by 1/N >= 0.009.
+  #
+  # Weights: the two energies need this instance's structures, and the formation
+  # energy needs both of them (and the formula); the bulk modulus needs the unit
+  # cell and the strain range. The coordination average is lighter (it only
+  # depends on the element's shells and the supercell size), the atom count
+  # lightest.
+  scoring:
+    - scorer: atomictoolkit_e2e_energies
+      weight: 30
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-3
+    - scorer: atomictoolkit_e2e_vacancy_formation
+      weight: 25
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 1.0e-3
+    - scorer: atomictoolkit_e2e_bulk_modulus
+      weight: 20
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 0.1
+    - scorer: atomictoolkit_e2e_coordination
+      weight: 15
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-9
+        zero_score_tol: 1.0e-3
+    - scorer: atomictoolkit_e2e_supercell
+      weight: 10
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 300

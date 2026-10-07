@@ -1,0 +1,59 @@
+id: mcp_e2e.atomictoolkit_vacancy
+name: "MCP E2E: unrelaxed vacancy formation energy, coordination and bulk modulus of an fcc metal through the atomictoolkit MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. Seven calls of five tools, each reading the file the previous
+# one wrote: unit cell -> supercell -> vacancy -> two single points, an analysis
+# and a bulk-modulus fit; see examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: materials_science
+subdomain: "atomistic_modelling_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/XirtamEsrevni/mcp-atomictoolkit"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 5-15
+  requires_gpu: false
+  requires_network: false
+
+tags: [mcp_e2e, atomictoolkit, ase, emt, vacancy, tool_chain]
+
+# The reference is ASE's EMT called directly (the server's own potential),
+# on structures that go through the same extxyz files the server writes.
+#
+# Generate instances with `asibench generate --sandbox task`; run the agent with
+# --sandbox none and --mcp-config so the structure tools are reachable only
+# through the server. Budget --timeout 900: every tool answers in well under a
+# second, so all of it is the agent's own time.
+runtime:
+  python: ">=3.11"
+  packages: ["ase==3.29.0"]
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: calculation.json
+      type: data
+      description: "The fcc element, its lattice constant (Å), the cubic supercell size, the
+        index of the atom to remove, the strain range of the bulk-modulus fit, the
+        calculator and the names of the structure files and analysis directory to write."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with the perfect supercell's atom count, the EMT energies of
+        the perfect and defective supercells, the unrelaxed vacancy formation energy, the
+        defective supercell's average coordination number and the unit cell's bulk modulus,
+        exactly as the MCP tools returned them (the formation energy computed from them)."

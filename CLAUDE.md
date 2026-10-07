@@ -161,7 +161,8 @@
   `core.trajectory.KEY_ARG_NAMES` 列出的入参，新增这类检查前先确认该键在列表里。
   判定必须先比较、只有「比不过且该值只有脱敏副本」才记 WARN coverage gap，不得判
   FAIL，也不得直接把脱敏值当不可观测（否则 scrub-tolerant 的比较会被降级）：证据缺口
-  不是 agent 的错。测试的 `persist_like_run` 必须调用真实
+  不是 agent 的错。链式入参的规范形（如 `output_file` 的文件名）在脱敏后仍完整时照常比较，
+  不匹配即 FAIL。测试的 `persist_like_run` 必须调用真实
   `_sanitize_raw_artifact_text`，不得手写近似；测试不得依赖运行者的 `$HOME`
   （`tests/mcp_e2e/conftest.py` 已把它钉到 sentinel）。
 - 客户端差异：Claude 对带 outputSchema 的 FastMCP 工具展示 `structuredContent`

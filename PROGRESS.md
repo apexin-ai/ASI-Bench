@@ -1,5 +1,19 @@
 # Progress
 
+## Flaky parallel local-scoring test
+
+- Problem: `test_parallel_local_scoring_is_bounded_isolated_and_ordered` failed
+  intermittently on CI with `[100.0, 100.0, 0.0]`. The test scorer kept b1
+  alive for at most 3 s waiting for b3, but b3 is a fresh spawn whose cold start
+  (interpreter + litellm import via `ai4sci_bench.scorers`) often takes longer,
+  so b3 ran alone and scored 0. b1 also polled the short-lived `b3.started`
+  marker and usually missed it, so it always waited out the full timeout.
+- Resolution: b1 now waits on the persistent `b3.ready` handshake; all barrier
+  timeouts are 30 s safety nets that cost nothing on the happy path.
+- Prevention: never bound a cross-process test barrier by a timeout shorter
+  than a worker cold start; wait on markers that are not deleted.
+- Implementation commit: `5109452`
+
 ## Task-scoped evaluator runtimes
 
 - Problem: MPSC duplicated its dependency specification inside the scorer and
@@ -903,7 +917,7 @@
   producing one result per attempt.
 - Implementation commit: `0e43cdd`.
 
-## 2026-09-29 – 2026-10-07: MCP end-to-end testing (L0–L2), nine servers and ten fake tasks
+## 2026-09-29 – 2026-10-07: MCP end-to-end testing (L0–L2), ten servers and eleven fake tasks
 
 - Problem: the MCP catalog survey only proved L0 (`initialize` + `tools/list`).
   Nothing showed that an agent inside `asibench run` really calls a tool and
@@ -942,9 +956,12 @@
   `fa97782` `2c85892` `ecde93d` `2ea3e7c`; quantum_espresso L0 `aba718b`
   `f9cf5e0`, L1 `c71f663` `b990157` (all 19 tools against our own `pw.x` runs),
   `qe_si_bandstructure` (five-tool result → argument chain through host paths,
-  measured DFT reference with `--check`) `826c00b`; openroad L1 `c396ccc` (first
-  Node server: `npm-ci` installer and `executables` host probe; references from
-  a closed-form LEF/DEF, the same `openroad` run directly, and a fake ORFS tree).
+  measured DFT reference with `--check`) `826c00b`; atomictoolkit L1 `1cf155c`
+  (18 tools, 9 unusable as tri-state defects), `atomictoolkit_vacancy` (seven-call
+  file chain through untracked path arguments, compared by file name) `803e92f`;
+  openroad L1 `c396ccc` (first Node server: `npm-ci` installer and `executables`
+  host probe; references from a closed-form LEF/DEF, the same `openroad` run
+  directly, and a fake ORFS tree).
 - Framework and tooling work this produced: docs condensation `fe3651e`,
   verifier golden snapshot `b47c4f7`, verifier split into `e2e_verify/` with a
   strict spec parser `8ffc458`, `setup.py` installer registry `e24e8fc`, smoke
@@ -1277,3 +1294,54 @@ Lessons — process:
   `golden.json` 148 → 171, none changed.
 - AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4.
 - Commit: `e7a8ab3`.
+
+## 2026-10-07: atomictoolkit smoke (L1)
+
+- One manifest id (`atomictoolkit`, catalog `ase`) for the catalog's `ase` and
+  `pymatgen` entries: same command, same 18 tools. Upstream's `-e .` fails
+  `PIN_RE`, so the manifest pins the third-party packages and launches with
+  `PYTHONPATH={checkout}/src`.
+- All 18 tools covered; 9 are unusable and checked three-state as recognised
+  defects (D1 deprecated wrappers, D2 task-required tools) instead of being
+  dropped from `expected_tools`. The task-augmented path runs in a second,
+  short-lived server (`after` + `session.spawn`) so its BFGS stdout does not
+  muddy the main stdout check.
+- A created task is `result._meta["modelcontextprotocol.io/task"]`, not
+  `result.task`; reading the wrong key sends `taskId: null` and gets `-32602`,
+  which looks like a different defect than the real `No active context found.`
+- References start from the file the tool wrote (extxyz keeps 8 decimals);
+  starting from the ideal builder differs by ~1e-14 eV. The elastic reference is
+  a closed-form quadratic fit, not `np.polyfit`.
+- ASE's CIF writer needs a binary stream (`BytesIO`); in tests write
+  `float(x)!r`, since `repr(np.float64)` is `np.float64(…)`.
+- 44 / 31 / 0 in ~5 s on VM aarch64 and AWS amd64. EMT energies bit-identical
+  across the two; bulk moduli differ in the last digit (126.9972641411883 vs
+  …8824, ~5e-16 relative) → rtol, never exact. A mutated server copy (energy × (1+1e-7),
+  translation × 1.001) FAILs, and fixing skin / g(r) turns D4 / D9 into PASS.
+- Commit: `1cf155c`.
+
+## 2026-10-07: atomictoolkit_vacancy (L2) and the output_file extractor
+
+- Seven calls of five tools on one fcc metal (Cu Ni Pd Ag Au Pt; Al excluded, its
+  first shell leaves the 1.2 x covalent cutoff at +2 %): unit cell → supercell →
+  vacancy → two single points, analysis, bulk-modulus fit. The unrelaxed formation
+  energy is derived, so only the scorer grades it.
+- The survey's "result ↔ result" chain cannot be written: `inputs_from_call`
+  always compares a consumer *argument*, and `input_filepath` / `filepath` are not
+  `KEY_ARG_NAMES`, so they exist only as `<workspace>/<name>`. Chain them with the
+  new `output_file` extractor (the written file's name). An `art_<hex>` id cannot
+  be an answer either: `judge_answer` requires `pred == reference`.
+- `_judge_link` treated any scrubbed argument as unobservable, so a file-name link
+  could only PASS or WARN. `values.link_input_lost` now counts a scrubbed
+  argument as lost only if its canonical form still carries a placeholder (bare
+  `<abs_path>`); a wrong file name is a FAIL. No existing golden entry changed.
+- D10: `operation_kwargs` keys are undocumented and unknown keys are ignored
+  (`repeat` silently gives the default 2x2x2): every prompt level names `size` /
+  `index`.
+- The reference (ASE EMT through extxyz round trips) equals the server bit for bit
+  over 41 seeds; `generate --sandbox task` reproduces it. Real-server payloads
+  through the verifier: Claude and Codex 6/6 PASS, score 100.
+- Offline: `tests/mcp_e2e` + `test_ci_workflow` 1154 passed / 3 skipped; golden + 23 new, none changed.
+- AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4;
+  neither CLI made a task-augmented call, so D2 never stalled a run.
+- Commit: `803e92f`.
