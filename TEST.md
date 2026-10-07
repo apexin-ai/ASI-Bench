@@ -689,10 +689,15 @@ absolute launch paths and foreign checkout remotes rejected; `uv-pip-pinned`
 `host_requirements` (machine, CPU flags, loadable libraries, every problem
 listed, checked before cloning); `conda-explicit` (fresh `micromamba create
 --file <lock>`, package cache under `<root>/.micromamba`, conda variables
-dropped, non-conda `.venv` refused) and the committed locks (header matches
-the manifest, conda-forge `<platform>`/`noarch` URLs with `#sha256:`; stale,
-foreign, md5-only or wrong-channel locks rejected), `setup.py --lock` from
-`micromamba --dry-run --json`. Shared checkouts: ids with the same `checkout`
+dropped, non-conda `.venv` refused) and the committed locks (every
+conda-explicit server and platform: header matches the manifest, each spec's
+version really appears, conda-forge `<platform>`/`noarch` URLs with
+`#sha256:`; stale, foreign, md5-only or wrong-channel locks rejected),
+`setup.py --lock` from
+`micromamba --dry-run --json`. The quantum_espresso config pins the local
+runner (no Docker, no `mpirun`), resolves `pw.x` from the conda prefix via
+`QE_PREFIX`, leaves `QE_WORKDIR` unset and keeps `mcp` below 2. Shared
+checkouts: ids with the same `checkout`
 install into one `<root>/<checkout>` (default is still `<root>/<id>`) while
 keeping one `*.mcp.json` and one MCP server name per id, and a group that
 differs on repository, revision, python or an install field, collides with
@@ -736,6 +741,21 @@ metastability, skipped reference), in-band errors and text/structuredContent
 disagreement, and stubbed servers: the convergence gate FAILs when the
 rejected run leaks a `summary.json`, a figure or a gap, the ignored `query`
 and shared `gs.gpw` probes WARN, stdout pollution is attributed per tool;
+quantum_espresso — banner parsing, the SG15 element index, the directory-order
+pick re-run as `SG15Library` does it (D1) against the newest-version pick, the
+k-grid rule with its odd snapping (ties go up), geometry helpers, our `pw.x` /
+`bands.x` / `dos.x` inputs (documented settings, relax/vc-relax namelists,
+`%.10f` band-path k-points, tetrahedra without smearing), the parsers on
+pw.x 7.5's own layouts (every SCF step, total vs contribution force rows,
+stress in kbar, final energy/cell/positions, ten-per-line `bands.dat`, `.gnu`,
+`dos.dat`), the band-edge rule (direct/indirect/metal), nested comparisons,
+and stubbed servers for every three-state check: a stale pick that follows the
+scan WARNs and one that does not FAILs, `qe_get_kpath` (D10), a directory for
+`output_dir` (D2), force rows (D13), a relaxation reply at the first step
+(D11) vs the final one vs neither, a server output file from a different run,
+a run outside `<cwd>/qe_calculations` or with another pseudopotential, the
+`relax_and_scf` final SCF on the input geometry (D12), and the exact
+`qe_get_job_status` / Materials Project errors;
 alphafold_db — the `{status, data, metadata}` wrapper split,
 the field-by-field comparison with an independently fetched entry (and that a
 new model version alone never differs), pLDDT read from a four-residue PDB
@@ -830,6 +850,24 @@ instance's gap sits within 3 meV of a `verify_run` branch boundary (they skip if
 the table is ever emptied for a re-measurement). Only
 `test_mx2_structure_matches_the_hardcoded_cell` and the generator test need ASE
 (`uv run --with ase==3.29.0 ...`); the latter puts the real builder back.
+
+`test_task_qe_si_bandstructure.py` reads the committed `MEASURED` table directly
+(stdlib only): it covers exactly the 27-point (ecutwfc, grid, npoints_band) grid,
+the k-spacing rule reproduces every `qe_suggest_kpoints` answer it recorded and
+refuses a spacing whose ceiling hangs on rounding, every point generates, the
+energies depend only on (cutoff, grid) and the band edges also on the path,
+neighbouring instances sit at least twice the zero-credit tolerance apart, and
+an inconsistent record (another pseudopotential copied, wrong band or point
+count, a different file set, no gap) is refused. The measurement script's
+literal round-trips to the committed table and `--check` reports every
+difference. Verifier scenarios: a genuine Claude and Codex run pass; any
+spelling of the suggested grid (`7 7 7`, `7x7x7`, `7`) chains, another grid,
+another run directory or an unlisted band file breaks the chain; reading the
+directory first (D2) and retrying is still a PASS; without the trajectory's raw
+`output_dir` the path links are a WARN coverage gap; another Si pick (D1) fails
+the index call; installs, imports, `pw.x` and the server's own interpreter are
+bypasses while reading the band file with `cat` is a WARN and a pasted tool
+payload is not.
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
@@ -938,6 +976,38 @@ instance grid: ecut 350 eV was dropped because its relaxation stops on the force
 criterion (2 BFGS steps, fmax 0.0495 against 0.05) and reports an indirect
 Gamma->K gap, so ground truth there would be one GPAW release away from
 changing.
+
+For quantum_espresso: `python3 scripts/mcp/e2e/setup.py quantum_espresso`
+(needs `micromamba`; the conda prefix is ~1.5 GB), then
+`~/mcp/quantum_espresso/.venv/bin/python scripts/mcp/e2e/smoke.py
+quantum_espresso --config ~/mcp/quantum_espresso.mcp.json`. No network and no
+credentials; about a minute of single-threaded DFT on bulk Si (2 atoms,
+30/120 Ry, 4×4×4, a 40-point band path), the server's calls and our own
+`pw.x`/`bands.x`/`dos.x` reference runs taking 2–8 s each. Outcome on the
+pinned revision, aarch64 VM and AWS amd64 (2026-10-07): `PASS` with 44 PASS,
+18 WARN, 0 FAIL on both, every compared energy identical across the two
+platforms; amd64 took about twice as long per DFT call (band structure 14.3 s,
+DOS 14.6 s). The DFT tools agree with the references to the printed digit
+(Si SCF `-15.75077338 Ry`, Fermi `6.5233 eV`; band gap 0.551 eV indirect;
+2208 DOS points, dos.x EFermi 6.716 eV), and a reference with `degauss` 0.01
+instead of the documented 0.02 turns all twelve DFT comparisons into FAILs. The
+18 WARN: D1 (43 of 69 elements got an older file in the VM's directory
+order, 33 on amd64; Si got the newest on both), D2 ×2, D10, D11 ×3 (relax, vc-relax, and
+`relax_and_scf`'s relaxation energy), D12, D13 ×3, and seven documented in-band
+errors (unparseable structure, three missing files, `qe_get_job_status` with
+the local runner, two Materials Project tools without a key). The report
+records `qe_versions`, `sg15_elements`, `sg15_pick` (the Si file and every
+stale element), the workload and `seconds_by_step`.
+
+Ground truth for `mcp_e2e.qe_si_bandstructure`:
+`~/mcp/quantum_espresso/.venv/bin/python scripts/mcp/e2e/measure_qe_table.py
+--config ~/mcp/quantum_espresso.mcp.json --output ~/mcp/qe-table.json` runs the
+task's three-tool band-structure chain at all 27 grid points (180 s on the
+aarch64 VM, 2026-10-07; a repeat run was identical) and writes the `MEASURED`
+literal next to the JSON. `--ecut N` measures one cutoff (for a host with a
+short command limit) and `--merge a.json b.json c.json` joins the parts; add
+`--check` to compare with the table `generate_gt.py` carries (exit 1 on any
+difference). Run `--check` on a new run host before an agent round.
 
 The live agent run (generate → run → score → verify) is documented in
 `examples/mcp-e2e-tasks/README.md`.

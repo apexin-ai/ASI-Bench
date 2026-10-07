@@ -1,0 +1,72 @@
+task_id: mcp_e2e.qe_si_bandstructure
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    - scorer: qe_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  # Tolerances are absolute, in eV, and set by the measurement. The reference is
+  # the pinned server's own answer on the same conda lock; QE is deterministic
+  # single-threaded (a second measurement of all 27 points was identical, and
+  # the L1 smoke's energies were bit-identical on aarch64 and amd64, so
+  # `measure_qe_table.py --check` on the run host is expected to pass). pw.x prints energies to 1e-8 Ry, the Fermi level to 1e-4 eV and band
+  # eigenvalues to 1e-3 eV, so full credit ends at 1e-6 eV (a value rounded to
+  # six decimals still scores) and credit runs out at 5e-4 eV, half the closest
+  # two different instances come on any scored energy: 1.0e-3 eV on the band
+  # edges (one printed digit), 2.0e-3 eV on the total energy, 2.7e-3 eV on the
+  # Fermi level. A number copied from another instance's run earns nothing.
+  #
+  # Weights: the energies and band edges cannot be known without running this
+  # instance's calculation (the total energy and Fermi level move with the
+  # cutoff and the grid, the conduction-band minimum with the path sampling
+  # too). The rest is lighter: the grid follows a documented rule, the band
+  # count and gap character are constant over the grid, the path length is a
+  # property of the cell, and the pseudopotential file name is mostly a check
+  # that the run host indexes the file the table was measured with.
+  scoring:
+    - scorer: qe_e2e_energies
+      weight: 35
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 5.0e-4
+    - scorer: qe_e2e_band_edges
+      weight: 35
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 5.0e-4
+    - scorer: qe_e2e_grid
+      weight: 10
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+    - scorer: qe_e2e_band_file
+      weight: 10
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+        full_score_tol: 1.0e-6
+        zero_score_tol: 5.0e-4
+    - scorer: qe_e2e_pseudopotential
+      weight: 10
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 120

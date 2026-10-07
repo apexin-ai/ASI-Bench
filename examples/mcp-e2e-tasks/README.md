@@ -37,6 +37,7 @@ An E2E pass needs both. The verifier reads the run artefacts and the task's
 | `mcp_e2e.build123d_plate_measure` | `build123d` | `execute` → `validate` → `measure` → `find_holes`/`find_hole_patterns` → `export` (STEP+STL) → `import_cad_file` (one session) | closed form: box − bore − corner slivers − bolt circle, extruded (stdlib only) |
 | `mcp_e2e.gpaw_mos2_bandgap` | `gpaw` | `fetch_structure` → `relax_structure` → `check_convergence` → `calc_band_dos` → `verify_run` → `get_run_artifacts` (one run) | DFT **measured** against the pinned server by [`measure_gpaw_table.py`](../../scripts/mcp/e2e/measure_gpaw_table.py); k-grid, convergence recommendation and verification verdict recomputed in stdlib |
 | `mcp_e2e.ncbi_gene_protein_card` | `ncbi` | `NCBIGene_search` → `NCBIGene_get_summary` (id from the search) + `NCBIProtein_get_summary` (GI from the input file) | raw E-utilities, cross-checked against `gene_table`, protein FASTA and the Datasets API (needs network; the GI freezes the protein facts, the gene's band and assembly accession track the current build, so generate just before the run) |
+| `mcp_e2e.qe_si_bandstructure` | `quantum_espresso` | `qe_list_pseudopotentials` + `qe_suggest_kpoints` → `qe_workflow_bandstructure` (suggested grid) → `qe_list_files` (its run directory) → `qe_read_bands` (the listed band file) | DFT **measured** against the pinned server by [`measure_qe_table.py`](../../scripts/mcp/e2e/measure_qe_table.py); k-grid rule, band and point counts derived in stdlib |
 | `mcp_e2e.alphafold_isoform_profile` | `alphafold_db` | `alphafold_get_prediction` + `alphafold_get_summary` + `alphafold_get_annotations` (one accession) | raw AlphaFold DB API; every per-residue score checked against the AlphaMissense CSV mean (needs network; the input file lists the entry ids to rank, so a newly added isoform model does not change the answer) |
 
 How each task picks its instances, scores answers and keeps the tool the only
@@ -64,6 +65,7 @@ works; it is not a pass rate.
 | `gpaw_mos2_bandgap` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `ncbi_gene_protein_card` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 | `alphafold_isoform_profile` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
+| `qe_si_bandstructure` | 2026-10-07 | 4 × 100, 4/4 | 4 × 100, 4/4 |
 
 In every run at B3/B4 the agent found the tools without being told their names.
 
@@ -126,6 +128,12 @@ bumping the server revision or the conda lock, re-run
 `scripts/mcp/e2e/measure_gpaw_table.py` and replace the `MEASURED` table in
 `generate_gt.py` wholesale.
 
+`qe_si_bandstructure` is measured the same way (`measure_qe_table.py`, about
+three minutes), but its band-structure workflow takes seconds, so
+`--timeout 1200` is ample. Before a round, run `measure_qe_table.py --check`
+on the run host (it also confirms the host indexes the Si pseudopotential the
+table was measured with) and clear `~/mcp/quantum_espresso/qe_calculations`.
+
 ## Adding a task
 
 1. Add the server to `scripts/mcp/e2e/manifest.json` and make its smoke test pass.
@@ -153,6 +161,7 @@ bumping the server revision or the conda lock, re-run
    | measured reference, forbidden one-call shortcut, listing and status extractors | `gpaw_mos2_bandgap` |
    | records a REST wrapper keys by the requested uid, in-band failures | `ncbi_gene_protein_card` |
    | answers that need a ranking or a count over a returned list (scorer-only) | `alphafold_isoform_profile` |
+   | result → argument chains through host paths, measured table with `--check` | `qe_si_bandstructure` |
 
 4. Prompts name the server and the tool (e.g. "`pyscf_rhf_energy` of the
    `pyscf` server"). Never use a harness-specific name such as
@@ -183,7 +192,7 @@ The verifier handles these; they matter only if you are debugging it.
   verifier restores shell commands, tool results **and** path-like tool
   arguments from `*.trajectory.json`, matched by call id; the trajectory keeps
   them because `ai4sci_bench.core.trajectory.KEY_ARG_NAMES` lists the arguments
-  an extractor preserves (`filename`, `path`, `file_path`, `command`, …).
+  an extractor preserves (`filename`, `path`, `file_path`, `output_dir`, `command`, …).
   What it cannot restore is reported as a coverage gap, never as a failure: a
   scrubbed command is a `no_bypass` WARN, and a comparison that only a
   placeholder made fail becomes "not observable in this evidence".

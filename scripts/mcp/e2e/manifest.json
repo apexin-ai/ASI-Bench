@@ -287,6 +287,53 @@
       ]
     },
     {
+      "id": "quantum_espresso",
+      "catalog_id": "quantum_espresso",
+      "repository": "https://github.com/frimpsjoek/qe-mcp.git",
+      "revision": "eecdbbe8931a840f6010d8bae73dea1bf5501717",
+      "python": "3.12",
+      "install": "conda-explicit",
+      "conda": {
+        "channel": "conda-forge",
+        "specs": [
+          "python=3.12.14",
+          "qe=7.5",
+          "mcp=1.28.1",
+          "ase=3.29.0",
+          "numpy=2.5.3",
+          "spglib=2.7.0",
+          "pyyaml=6.0.3",
+          "python-dotenv=1.2.4"
+        ],
+        "locks": {
+          "linux-64": "locks/quantum_espresso-linux-64.txt",
+          "linux-aarch64": "locks/quantum_espresso-linux-aarch64.txt"
+        }
+      },
+      "launch": {
+        "command": ".venv/bin/python",
+        "args": ["-m", "qe_mcp.server"],
+        "env": {
+          "OMP_NUM_THREADS": "1",
+          "PYTHONPATH": "{checkout}/src",
+          "QE_NPROCS": "1",
+          "QE_PREFIX": "{checkout}/.venv/bin",
+          "QE_PSEUDO_DIR": "{checkout}/pseudopotentials/sg15_oncv",
+          "QE_RUNNER": "local",
+          "QE_USE_DOCKER": "false"
+        }
+      },
+      "expected_tools": [
+        "qe_get_job_status", "qe_get_kpath", "qe_get_mp_structure",
+        "qe_list_files", "qe_list_pseudopotentials", "qe_load_structure",
+        "qe_read_bands", "qe_read_dos", "qe_read_pdos",
+        "qe_run_relax", "qe_run_scf", "qe_run_vc_relax",
+        "qe_search_materials_project", "qe_status", "qe_suggest_kpoints",
+        "qe_validate_structure", "qe_workflow_bandstructure", "qe_workflow_dos",
+        "qe_workflow_relax_and_scf"
+      ]
+    },
+    {
       "id": "atomictoolkit",
       "catalog_id": "ase",
       "repository": "https://github.com/XirtamEsrevni/mcp-atomictoolkit.git",

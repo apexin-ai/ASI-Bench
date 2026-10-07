@@ -1,0 +1,61 @@
+id: mcp_e2e.qe_si_bandstructure
+name: "MCP E2E: silicon SCF grid, band structure and band file through the quantum_espresso MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. Five tools, each fed by the previous one's answer: the
+# suggested SCF grid is the workflow's k-point argument, the run directory is
+# what gets listed and the listed band file is what gets read; see
+# examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: materials_science
+subdomain: "electronic_structure_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/frimpsjoek/qe-mcp"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 5-15
+  requires_gpu: false
+  requires_network: false
+
+tags: [mcp_e2e, quantum_espresso, dft, band_structure, tool_chain]
+
+# The reference is measured, not recomputed: pw.x and bands.x only exist
+# inside the server's pinned conda environment, so generate_gt.py carries a
+# table produced by scripts/mcp/e2e/measure_qe_table.py and derives the k-grid
+# policy and the band/point counts in the standard library.
+#
+# Generate instances with `asibench generate --sandbox task`; run the agent with
+# --sandbox none and --mcp-config so Quantum ESPRESSO is reachable only through
+# the server. Budget --timeout 1200: the band-structure workflow takes 5-15 s
+# single-threaded, so nearly all of it is the agent's own time.
+runtime:
+  python: ">=3.11"
+  packages: []
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: calculation.json
+      type: data
+      description: "The built-in structure name, the wavefunction cutoff (Ry), the k-point
+        spacing (1/Å) that fixes the SCF grid and the number of band-path points for this
+        instance, and the file to hand back."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with the silicon pseudopotential file, the suggested SCF grid,
+        the band-structure run's energies and band edges, and the point count and path length
+        of its band file, exactly as the MCP tools returned them."
