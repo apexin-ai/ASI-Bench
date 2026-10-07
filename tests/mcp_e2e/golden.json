@@ -120,6 +120,70 @@
   "tests/mcp_e2e/test_task_jsbsim_engine_run.py::test_trim_is_flagged_for_review": [
     {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"create": "PASS", "engine": "PASS", "mixture": "PASS", "read_property": "PASS", "step": "PASS", "telemetry": "SKIP", "throttle": "PASS"}, "tool_sequence": ["mcp__jsbsim__create_session", "mcp__jsbsim__set_initial_conditions", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__set_property", "mcp__jsbsim__trim", "mcp__jsbsim__step", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property", "mcp__jsbsim__get_property"], "verdict": "PASS"}
   ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_a_gene_read_by_symbol_without_searching_is_not_chained": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "FAIL", "tool_correct": "WARN"}, "failure": "tool_chain", "per_call": {"gene": "WARN", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_answer_values_must_come_from_the_tools": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"},
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_codex_run_passes_and_web_search_items_are_recorded": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "PASS"},
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["web_search", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_extra_server_tools_warn_about_the_workspace_trap": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "WARN", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_gene_record_read_for_an_id_the_search_did_not_return_breaks_the_chain": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"gene": "PASS", "protein": "PASS", "search": "FAIL"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_genuine_three_call_run_passes": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["Bash", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_identifiers_are_compared_as_the_record_spells_them": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_in_band_eutils_failures_are_not_results": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"gene": "FAIL", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"},
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"gene": "FAIL", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"},
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"gene": "FAIL", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"},
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"gene": "FAIL", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_nothing_found_search_fails_the_call": [
+    {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "FAIL", "tool_correct": "FAIL"}, "failure": "tool_correct", "per_call": {"gene": "PASS", "protein": "PASS", "search": "FAIL"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_shell_access_to_ncbi_is_a_bypass[curl -s 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=gene&id=5053']": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["Bash", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_shell_access_to_ncbi_is_a_bypass[datasets summary gene symbol PAH --taxon human]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["Bash", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_shell_access_to_ncbi_is_a_bypass[esearch -db gene -query 'PAH[Symbol]' | efetch -format docsum]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["Bash", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_shell_access_to_ncbi_is_a_bypass[pip install biopython]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["Bash", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_shell_access_to_ncbi_is_a_bypass[python3 - <<'EOF'\\nfrom Bio import Entrez\\nEOF]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["Bash", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_shell_access_to_ncbi_is_a_bypass[python3 -c \"import urllib.request; urllib.request.urlopen('https://eutils.ncbi.nlm.nih.gov/x')\"]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["Bash", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_shell_access_to_ncbi_is_a_bypass[uv run --with biopython python card.py]": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["Bash", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_uid_keyed_records_are_read_without_a_dotted_path": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_web_fetch_of_ncbi_is_a_bypass_and_web_search_a_warning": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "FAIL", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "no_bypass", "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["WebFetch", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "FAIL"},
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["WebSearch", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "PASS"},
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "WARN", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["WebFetch", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "PASS"}
+  ],
+  "tests/mcp_e2e/test_task_ncbi_gene_protein_card.py::test_writing_the_answer_with_python_is_not_a_bypass": [
+    {"checks": {"answer_from_tool": "PASS", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": null, "per_call": {"gene": "PASS", "protein": "PASS", "search": "PASS"}, "tool_sequence": ["Bash", "mcp__ncbi__NCBIGene_search", "mcp__ncbi__NCBIGene_get_summary", "mcp__ncbi__NCBIProtein_get_summary"], "verdict": "PASS"}
+  ],
   "tests/mcp_e2e/test_task_psi4_opt_freq.py::test_answers_must_be_copied_from_tool_results": [
     {"checks": {"answer_from_tool": "FAIL", "mcp_connected": "PASS", "no_bypass": "PASS", "tool_called": "PASS", "tool_chain": "PASS", "tool_correct": "PASS"}, "failure": "answer_from_tool", "per_call": {"freq": "PASS", "opt": "PASS"}, "tool_sequence": ["mcp__psi4__optimize", "mcp__psi4__frequency"], "verdict": "FAIL"}
   ],

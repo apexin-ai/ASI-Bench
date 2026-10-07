@@ -122,8 +122,64 @@ def canon_exported_files(value):
     return canon_file_name(value)
 
 
+# --- records keyed by the identifier that was requested -----------------------
+
+def _extract_json_scalars(data):
+    """Every scalar leaf of a result, at any depth.
+
+    A REST wrapper keys its records by the identifier the caller asked for
+    (``data.result.<uid>.slen`` of an E-utilities esummary), so no static dotted
+    path reaches them, and the values are identifiers (an accession, a cytogenetic
+    band) rather than numbers. Pairs with :func:`canon_scalar` and ``match:
+    "member"``: the answer has to be one of the values the call returned."""
+    out: list = []
+    stack = [data]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            stack.extend(node.values())
+        elif isinstance(node, (list, tuple)):
+            stack.extend(node)
+        elif isinstance(node, bool) or node is None:
+            continue
+        elif isinstance(node, (str, int, float)):
+            out.append(node)
+    return out or None
+
+
+def canon_scalar(value):
+    """One scalar as a canonical string; a list as its sorted, unique canonical strings.
+
+    A finite number and its string spelling canonicalise together (``644`` ==
+    ``"644"``, ``0.457`` == ``"0.4570"``), so a value a tool returns as a JSON number
+    and an answer written as a string still compare equal; everything else is the
+    stripped string (``"NP_000268.1"``, ``"12q23.2"``), compared case-sensitively.
+    Anything that is not a scalar is ``None``: an answer file and a tool argument are
+    agent-controlled, so a nested list or an object must read as "no value", never
+    raise."""
+    if isinstance(value, (list, tuple)):
+        canonical = {item for item in (canon_scalar(v) for v in value) if isinstance(item, str)}
+        return sorted(canonical) or None
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return None
+    text = str(value).strip()
+    if not text or "_" in text:                    # "1_000" is a float() literal, not a number here
+        return text or None
+    try:
+        return str(int(text))
+    except ValueError:                             # not an integer spelling: a float, or text
+        pass
+    try:
+        number = float(text)
+    except ValueError:
+        return text
+    return text if not math.isfinite(number) else (str(int(number)) if number == int(number)
+                                                   else repr(number))
+
+
 EXTRACTORS: dict[str, Extractor] = {
     "arxiv_ids": Extractor(_extract_arxiv_ids, canon_ids),
+    "json_scalars": Extractor(_extract_json_scalars, canon_scalar),
     "term_counts": Extractor(_extract_term_counts, canon_counts),
     "text": Extractor(lambda data: data if isinstance(data, str) else None, canon_text),
     "rdkit_mol": Extractor(_extract_mol_field, canon_text),

@@ -1113,3 +1113,44 @@ Lessons — process:
   `auto_query_params` overwriting a caller's `type`, but FastMCP rejects
   undeclared arguments, so over MCP that defect is unreachable and the real run
   PASSed. Only a tri-state check survived the difference.
+
+## 2026-10-07: ncbi_gene_protein_card (L2) and the json_scalars extractor
+
+- Framework: `json_scalars` (+ `canon_scalar`) in `e2e_verify/extractors.py`.
+  A REST wrapper keys its record by the identifier that was requested
+  (`data.result.<uid>.slen`), so no static dotted path reaches it, and the
+  values are identifiers, which `Selector.key` cannot read at all (it goes
+  through `numbers()`). One generic extractor plus `match: "member"` covers
+  every such field; the call-level checks still use plain paths
+  (`data.esearchresult.idlist`, `data.result.uids` — digit strings that
+  `numbers()` accepts).
+- `canon` runs on agent-controlled values (an answer file, a tool argument), so
+  it must be total: a nested list or an object reads as "no value", never
+  raises. The first version did `{canon_scalar(i) for i in value}`, and a
+  `result.json` holding `[[5053]]` raised `TypeError` inside `verify_one` —
+  which has no per-check guard, so one malformed answer would have killed the
+  report for every result in the run.
+- A scorer must not be more forgiving than the verifier. Upper-casing
+  identifiers in the scorer made `np_000268.1` score 100/100 while
+  `answer_from_tool` reported "does not come from the tool", because the
+  verifier compares with the tool's own spelling. Both are case-sensitive now;
+  numbers stay lenient on both sides (`452` == `"452"`).
+- The hard gate stays structural (seven keys, usable types) like the other fake
+  tasks: an unversioned accession or an absurd length is a wrong field worth its
+  own weight, not a zeroed instance.
+- Fixtures must be measured, not written from memory: `PLUS_STRAND_TABLE` in
+  `test_smoke_ncbi.py` invented a `(plus strand)` marker, which hid that a live
+  plus-strand `gene_table` has **no marker at all** — so `GENE_TABLE_LOCUS`
+  silently failed to parse CFTR, SOD1 and HBA1. The orientation now comes from
+  the coordinates (`from > to` ⇔ minus, as for the esummary locus) and the
+  marker is only cross-checked: the smoke WARNs on a contradiction, the
+  generator raises.
+- Generation asserts every scored field against a second endpoint (`gene_table`
+  for the id/locus, protein FASTA and the gene_table's `annotated AA length`
+  for the length, Datasets `v2alpha` as a soft check) and raises instead of
+  writing an instance. All five curated cases verified live, ~6.5 s each.
+  Honest scope: the GI freezes the protein facts, but the band, the `NC_…`
+  version and the symbol query's uniqueness track the current NCBI build, so
+  generate right before a run.
+- Offline: `tests/mcp_e2e` + `test_ci_workflow` `683 passed / 3 skipped`;
+  `golden.json` 129 → 148 entries, none changed or removed.

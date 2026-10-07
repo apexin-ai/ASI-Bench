@@ -705,7 +705,9 @@ documented empty annotation state WARNing while an HTTP 500 or an
 `isError=true` sentinel FAILs, the undeclared-`type` three-state (the MCP layer
 rejecting it is a PASS, a silent `auto_query_params` override a WARN), and the
 `return_schema` drift check read from a fake checkout; ncbi — `gene_table`
-parsing for both strands, the 0-based → 1-based locus shift (comparing the raw
+parsing for both strands (a plus-strand table carries no strand marker at all,
+so requiring one made every plus-strand gene read as an unparsable reference),
+the 0-based → 1-based locus shift (comparing the raw
 values is the mistake the test pins), the reference-assembly entry chosen over
 index 0, FASTA residue counting, the three in-band failure shapes plus zero hits
 with no error field (a WARN, not a FAIL — only records for an impossible id
@@ -717,7 +719,10 @@ WARN, and the identification check read from a fake checkout.
 inapplicable and invalid keys, dangling and optional-from-required
 references, regexes, schema-1 normalisation, requirement grouping, `select` on
 a call result) and value reading (`select` modes, structured-output
-unwrapping, string/number chaining, geometry comparison).
+unwrapping, string/number chaining, geometry comparison, and the generic
+`json_scalars` extractor: scalar leaves at any depth of a record keyed by the
+requested uid, `None`/`False` never answerable, and a number canonicalised
+together with its string spelling).
 
 `test_verify_evidence.py`: event shapes from real `codex exec --json` runs
 (codex-cli 0.159.2): the Codex extractor (call ids, server/tool, text results,
@@ -741,7 +746,14 @@ default cap, WebFetch/shell HTTP bypass, workspace trap; jsbsim_engine_run:
 chunked steps WARN, another session id, no state read, trim WARN;
 s4_grating_spectrum: default harmonics, uncopied spectrum values, RCWA code
 WARN; psi4_opt_freq: reformatted geometry still chains, frequencies at the
-start geometry, in-band `ok:false`, default method). With PySCF and geomeTRIC
+start geometry, in-band `ok:false`, default method;
+ncbi_gene_protein_card: a gene record read for an id the search did not return
+or fetched by symbol instead of uid breaks the chain, a value the record does
+not carry fails `answer_from_tool` while the per-call check still passes (the
+call result only pins the record's identity), all three in-band E-utilities
+failure shapes plus an empty `uids` list count as failed calls, and
+Biopython/entrez-direct/`datasets`/`curl` are bypasses while a plain WebSearch
+is a WARN). With PySCF and geomeTRIC
 installed (`uv run --with pyscf==2.14.0 --with geometric==1.1.1 ...`) the psi4
 file also regenerates seed 31415 and compares with the recorded reference.
 

@@ -35,6 +35,7 @@ An E2E pass needs both. The verifier reads the run artefacts and the task's
 | `mcp_e2e.psi4_opt_freq` | `psi4` | `optimize` → `frequency` at the returned geometry | PySCF DF-RHF + geomeTRIC |
 | `mcp_e2e.rdkit_conformer` | `rdkit` | `smiles_to_mol` → `EmbedMolecule` → `mol_to_sdf` (writes the file), `Max`/`MinPartialCharge` | RDKit ETKDGv3 at the instance's seed + Gasteiger charges |
 | `mcp_e2e.build123d_plate_measure` | `build123d` | `execute` → `validate` → `measure` → `find_holes`/`find_hole_patterns` → `export` (STEP+STL) → `import_cad_file` (one session) | closed form: box − bore − corner slivers − bolt circle, extruded (stdlib only) |
+| `mcp_e2e.ncbi_gene_protein_card` | `ncbi` | `NCBIGene_search` → `NCBIGene_get_summary` (id from the search) + `NCBIProtein_get_summary` (GI from the input file) | raw E-utilities, cross-checked against `gene_table`, protein FASTA and the Datasets API (needs network; the GI freezes the protein facts, the gene's band and assembly accession track the current build, so generate just before the run) |
 
 How each task picks its instances, scores answers and keeps the tool the only
 practical source of the numbers is described in its `generate_gt.py` and
@@ -120,7 +121,10 @@ that is what `no_bypass` is for. `--mcp-config` also turns on web search
 3. Write `e2e_check.json` (schema 2: `calls`, `answers`, bypass patterns). The
    format is documented in the `verify_run.py` docstring and checked strictly
    when loaded (a typo fails with `invalid_spec`). A new non-numeric result
-   type is a named extractor in `scripts/mcp/e2e/e2e_verify/extractors.py`.
+   type is a named extractor in `scripts/mcp/e2e/e2e_verify/extractors.py`;
+   `json_scalars` already covers a record a REST wrapper keys by the identifier
+   that was requested (`data.result.<uid>.slen`), which no static dotted path
+   reaches — use it with `match: "member"`.
    Copy from an existing task:
 
    | Pattern | Task |
@@ -133,6 +137,7 @@ that is what `no_bypass` is for. `--mcp-config` also turns on web search
    | nested keys, geometry chain | `psi4_opt_freq` |
    | opaque strings a tool chain passes on | `rdkit_conformer` |
    | path arguments, binary artefacts, closed-form reference | `build123d_plate_measure` |
+   | records a REST wrapper keys by the requested uid, in-band failures | `ncbi_gene_protein_card` |
 
 4. Prompts name the server and the tool (e.g. "`pyscf_rhf_energy` of the
    `pyscf` server"). Never use a harness-specific name such as
