@@ -340,19 +340,27 @@ def openroad_printed_lines(output: str) -> list[str]:
     return out
 
 
-def _numeric_token(token: str) -> str | None:
-    """A whitespace token that is a finite number once punctuation is trimmed from its
-    ends (``30%`` -> ``30``, ``12.0`` -> ``12``); tokens inside paths do not count."""
+_TOKEN_PARTS = re.compile(r"[=:,]")
+
+
+def _numeric_parts(token: str) -> list[str]:
+    """The numbers in one whitespace token: its ``=`` / ``:`` / ``,``-separated parts that are
+    finite numbers once punctuation is trimmed from their ends (``30%`` -> ``30``, ``12.0``
+    -> ``12``, ``die_w=13000`` -> ``13000``). A token holding a path counts for nothing."""
     if "/" in token:
-        return None
-    text = token.strip(_TOKEN_EDGES)
-    if not text or "_" in text:
-        return None
-    try:
-        number = float(text)
-    except ValueError:
-        return None
-    return canon_scalar(text) if math.isfinite(number) else None
+        return []
+    out = []
+    for part in _TOKEN_PARTS.split(token):
+        text = part.strip(_TOKEN_EDGES)
+        if not text or "_" in text:
+            continue
+        try:
+            number = float(text)
+        except ValueError:
+            continue
+        if math.isfinite(number):
+            out.append(canon_scalar(text))
+    return out
 
 
 def _extract_openroad_output(data):
@@ -361,8 +369,8 @@ def _extract_openroad_output(data):
     The result is ``{"output": <PTY text>, "error": null, ...}``; a command the server
     flagged with an ``error`` printed nothing usable (``None``). Lines that read the
     design (``read_lef`` / ``read_def`` INFO lines) or report its area become labelled
-    facts (``components=5``, ``design_area_um2=10``); every number printed anywhere
-    becomes a bare value (``9400``). A call check pins the facts it expects
+    facts (``components=5``, ``design_area_um2=10``); every number printed anywhere,
+    also as ``key=value`` / ``key: value``, becomes a bare value (``9400``). A call check pins the facts it expects
     (``match: superset``), an answer has to be one of the printed numbers
     (``match: member``), so a value computed outside the session — read from the DEF
     file, or converted by hand — is not "from the tool". Only the first line of the
@@ -375,7 +383,7 @@ def _extract_openroad_output(data):
             match = pattern.search(line)
             if match:
                 out += [f"{label}={canon_scalar(value)}" for label, value in zip(labels, match.groups())]
-        out += [n for n in (_numeric_token(t) for t in line.split()) if n is not None]
+        out += [n for token in line.split() for n in _numeric_parts(token)]
     return out or None
 
 

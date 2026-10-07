@@ -933,10 +933,12 @@ warns, commands on another session break the chain; an HPWL or a die width not
 printed in the session fails `answer_from_tool`; Tcl `exec` through either
 session tool, the `openroad` binary, `import odb`, installs, the server's
 `main.js` and KLayout are bypasses, Tcl `open`/`file`, grepping the DEF, listing
-the checkout and web lookups are WARN; skipping grep is an uncalled requirement.
+the checkout and web lookups are WARN; skipping grep is an uncalled requirement; Claude's
+AWS B3 (both files in one command, die and HPWL printed as `key=value` by its own
+Tcl, a failed first attempt) passes for Claude and Codex.
 `test_verify_values.py` pins the `openroad_output` extractor on AWS-recorded
-outputs (facts, printed numbers, message ids/`u^2`/path digits/echo excluded,
-flagged commands give nothing).
+outputs (facts, printed numbers also as `key=value` / `key: value`, message
+ids/`u^2`/path digits/echo excluded, flagged commands give nothing).
 
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`

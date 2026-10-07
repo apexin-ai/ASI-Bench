@@ -334,3 +334,16 @@ def test_openroad_output_reads_facts_and_printed_numbers():
     assert verify.values.matches(read(_session(_READ_DEF)), canon(["components=3", "nets=4"]), "superset")
     assert not verify.values.matches(read(_session(_READ_DEF)), canon(["components=4"]), "superset")
     assert verify.values.matches(read(_session(_READ_DEF)), canon(4), "member")
+
+
+def test_openroad_output_reads_key_value_prints():
+    """Agents print ``die_w=13000`` / ``hpwl_total=35200 raw=35200.0`` (Claude B3 on AWS,
+    2026-10-07): the value after ``=`` or ``:`` is a printed number too."""
+    read = lambda call: verify.values.read(call, verify.spec.Selector(extract="openroad_output"))
+    out = ("set blk [ord::get_db_block]; puts \"counts inst=[llength [$blk getInsts]]\"\n"
+           "counts inst=6 nets=7 bterms=2 die_w=13000 die_h=10000\n"
+           "net in pts=2 hpwl=5000.0\nhpwl_total=35200 raw=35200.0\nt 14:09:43, a,b\n%")
+    got = set(read(_session(out)))
+    assert {"6", "7", "2", "13000", "10000", "5000", "35200", "14", "9", "43"} <= got
+    assert not {"inst", "die_w", "raw", "a", "b"} & got
+    assert "1" not in set(read(_session("x\nread /w/run=1/x.def --opt=/a/2\n%")) or [])   # paths stay out

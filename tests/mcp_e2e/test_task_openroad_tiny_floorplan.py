@@ -252,8 +252,9 @@ class FakeServer:
     """OpenROAD-MCP v1.1.0 result shapes as recorded on the AWS host (2026-10-07): compact JSON,
     ``output`` = the PTY echo, what the command printed, a bare ``%`` prompt."""
 
-    def __init__(self, units=False):
+    def __init__(self, units=False, scripted=None):
         self.units, self.count, self.printed = units, 0, []
+        self.scripted = scripted or {}                    # command -> printed lines (an agent's own Tcl)
 
     def result(self, tool, args):
         if tool == "create_interactive_session":
@@ -282,6 +283,11 @@ class FakeServer:
                 "bytes_discarded": 0, "total_bytes": len(output), "error": error}
 
     def run(self, command):
+        if command in self.scripted:
+            return self.scripted[command], None
+        if command.startswith("read_lef ") and "; read_def " in command:         # both files in one command
+            lef, deff = (part.split(" ", 1)[1] for part in command.split("; "))
+            return self.run(f"read_lef {lef}")[0] + self.run(f"read_def {deff}")[0], None
         if command.startswith("read_lef "):
             return [f"[INFO ODB-0227] LEF file: {command[9:]}, created 1 layers, 2 library cells"], None
         if command.startswith("read_def "):
@@ -342,11 +348,11 @@ def _stream(calls, extra=(), server=None):
     return jsonl(events)
 
 
-def _codex(calls, extra=()):
+def _codex(calls, extra=(), server=None):
     events = list(codex.START)
     for k, (name, args) in enumerate(extra):
         events += codex.shell(f"s{k}", args["command"])
-    for k, ((tool, args), text) in enumerate(zip(calls, _payloads(calls))):
+    for k, ((tool, args), text) in enumerate(zip(calls, _payloads(calls, server))):
         events += codex.mcp(f"m{k}", SERVER, tool, args, text)
     events.append(codex.done())
     return jsonl(events)
@@ -458,3 +464,40 @@ def test_skipping_grep_is_an_uncalled_requirement(tmp_path):
     calls = [c for c in _b1_calls() if c[0] != "grep_session_output"]
     row = _run(tmp_path, _stream(calls))
     assert row["failure"] == "tool_called" and "grep" in row["checks"]["tool_called"]["detail"]
+
+
+# Claude B3 on AWS (2026-10-07): both files read in one command, die and HPWL printed as
+# key=value by the agent's own Tcl, a first HPWL attempt failing in band (SWIG overload).
+B3_COUNTS = ("set blk [ord::get_db_block]; set d [$blk getDieArea]; puts \"counts inst=[llength [$blk getInsts]] "
+             "die_w=[expr {[$d xMax]-[$d xMin]}] die_h=[expr {[$d yMax]-[$d yMin]}]\"; $t apply $r")
+B3_HPWL = ("set tot 0; foreach n [$blk getNets] { foreach it [$n getITerms] { set b [$it getBBox] } }; "
+           "puts \"hpwl_total=[expr {int($tot)}] raw=$tot\"")
+B3_OUTPUT = {
+    B3_COUNTS: [f"counts inst={REF['instance_count']} die_w={REF['die_width_dbu']} die_h={REF['die_height_dbu']}",
+                "Wrong number or type of arguments for overloaded function 'dbTransform_apply'."],
+    B3_HPWL: [f"net {name} pts=2 hpwl={float(h)}" for name, h in REF["hpwl_per_net_dbu"].items()]
+             + [f"hpwl_total={REF['hpwl_total_dbu']} raw={float(REF['hpwl_total_dbu'])}"],
+}
+
+
+def _b3_calls(workdir="/tmp/ai4sci_ws_x/workspace"):
+    ex = "interactive_openroad_exec"
+    return [("create_interactive_session", {"session_id": SID, "cwd": workdir}),
+            (ex, {"session_id": SID,
+                  "command": f"read_lef {workdir}/data/design.lef; read_def {workdir}/data/design.def"}),
+            (ex, {"command": B3_COUNTS, "session_id": SID}),
+            (ex, {"command": B3_HPWL, "session_id": SID}),
+            (ex, {"command": "set_cmd_units -distance um", "session_id": SID}),
+            ("interactive_openroad_query", {"command": "report_design_area", "session_id": SID}),
+            ("grep_session_output", {"session_id": SID, "pattern": "^Design area"}),
+            ("terminate_interactive_session", {"session_id": SID})]
+
+
+def test_genuine_b3_run_with_key_value_prints_passes(tmp_path):
+    """Values printed as ``die_w=13000`` / ``hpwl_total=35200`` are printed numbers; this
+    run was a false FAIL before the extractor read ``key=value`` tokens."""
+    workdir = str(tmp_path / "a" / "ws")
+    row = _run(tmp_path / "a", _stream(_b3_calls(workdir), server=FakeServer(scripted=B3_OUTPUT)))
+    assert row["verdict"] == "PASS" and set(_status(row).values()) == {"PASS"}, row["checks"]
+    row = _run(tmp_path / "b", _codex(_b3_calls(), server=FakeServer(scripted=B3_OUTPUT)), harness="codex")
+    assert row["verdict"] == "PASS" and set(_status(row).values()) == {"PASS"}, row["checks"]
