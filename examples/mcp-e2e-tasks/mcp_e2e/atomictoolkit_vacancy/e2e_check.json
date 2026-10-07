@@ -1,0 +1,187 @@
+{
+  "schema_version": 2,
+  "server": "atomictoolkit",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": [
+    "analyze_structure_workflow",
+    "analyze_trajectory_workflow",
+    "autocorrelation_workflow",
+    "build_structure",
+    "build_structure_workflow",
+    "create_download_artifact",
+    "estimate_elastic_workflow",
+    "import_structure_workflow",
+    "list_workspace_capabilities_workflow",
+    "manipulate_structure_workflow",
+    "optimize_structure_workflow",
+    "optimize_with_mlip",
+    "read_structure_file",
+    "relax_and_md_workflow",
+    "run_md_workflow",
+    "single_point_workflow",
+    "write_structure_file",
+    "write_structure_workflow"
+  ],
+  "calls": [
+    {
+      "name": "build",
+      "tool": "build_structure_workflow",
+      "inputs_from_reference": {
+        "formula": "element",
+        "crystal_system": "crystal_system",
+        "lattice_constant": "lattice_constant"
+      },
+      "result": {
+        "format": "json",
+        "extract": "output_file",
+        "reference_key": "unit_cell_file",
+        "match": "equal"
+      }
+    },
+    {
+      "name": "supercell",
+      "tool": "manipulate_structure_workflow",
+      "inputs_from_reference": {
+        "operation": "operation_supercell"
+      },
+      "inputs_from_call": {
+        "call": "build",
+        "extract": "output_file",
+        "args": ["input_filepath"],
+        "match": "member"
+      },
+      "result": {
+        "format": "json",
+        "key": "num_atoms",
+        "reference_key": "n_atoms_perfect",
+        "abs_tol": 0
+      }
+    },
+    {
+      "name": "vacancy",
+      "tool": "manipulate_structure_workflow",
+      "inputs_from_reference": {
+        "operation": "operation_vacancy"
+      },
+      "inputs_from_call": {
+        "call": "supercell",
+        "extract": "output_file",
+        "args": ["input_filepath"],
+        "match": "member"
+      },
+      "result": {
+        "format": "json",
+        "key": "num_atoms",
+        "reference_key": "n_atoms_vacancy",
+        "abs_tol": 0
+      }
+    },
+    {
+      "name": "sp_perfect",
+      "tool": "single_point_workflow",
+      "inputs_from_reference": {
+        "calculator_name": "calculator"
+      },
+      "inputs_from_call": {
+        "call": "supercell",
+        "extract": "output_file",
+        "args": ["input_filepath"],
+        "match": "member"
+      },
+      "result": {
+        "format": "json",
+        "key": "energy",
+        "reference_key": "energy_perfect_eV",
+        "abs_tol": 1e-09
+      }
+    },
+    {
+      "name": "sp_vacancy",
+      "tool": "single_point_workflow",
+      "inputs_from_reference": {
+        "calculator_name": "calculator"
+      },
+      "inputs_from_call": {
+        "call": "vacancy",
+        "extract": "output_file",
+        "args": ["input_filepath"],
+        "match": "member"
+      },
+      "result": {
+        "format": "json",
+        "key": "energy",
+        "reference_key": "energy_vacancy_eV",
+        "abs_tol": 1e-09
+      }
+    },
+    {
+      "name": "analyze",
+      "tool": "analyze_structure_workflow",
+      "inputs_from_call": {
+        "call": "vacancy",
+        "extract": "output_file",
+        "args": ["filepath"],
+        "match": "member"
+      },
+      "result": {
+        "format": "json",
+        "key": "analysis.summary.coordination.average",
+        "reference_key": "coordination_average",
+        "abs_tol": 1e-09
+      }
+    },
+    {
+      "name": "elastic",
+      "tool": "estimate_elastic_workflow",
+      "inputs_from_reference": {
+        "calculator_name": "calculator",
+        "strain_max": "strain_max"
+      },
+      "inputs_from_call": {
+        "call": "build",
+        "extract": "output_file",
+        "args": ["input_filepath"],
+        "match": "member"
+      },
+      "result": {
+        "format": "json",
+        "key": "bulk_modulus_GPa",
+        "reference_key": "bulk_modulus_GPa",
+        "abs_tol": 1e-06
+      }
+    }
+  ],
+  "answers": [
+    {"prediction_key": "n_atoms_perfect", "from_call": "supercell", "result_key": "num_atoms",
+     "reference_key": "n_atoms_perfect", "abs_tol": 0},
+    {"prediction_key": "energy_perfect_eV", "from_call": "sp_perfect", "result_key": "energy",
+     "reference_key": "energy_perfect_eV", "abs_tol": 1e-09},
+    {"prediction_key": "energy_vacancy_eV", "from_call": "sp_vacancy", "result_key": "energy",
+     "reference_key": "energy_vacancy_eV", "abs_tol": 1e-09},
+    {"prediction_key": "coordination_average", "from_call": "analyze",
+     "result_key": "analysis.summary.coordination.average", "reference_key": "coordination_average",
+     "abs_tol": 1e-09},
+    {"prediction_key": "bulk_modulus_GPa", "from_call": "elastic", "result_key": "bulk_modulus_GPa",
+     "reference_key": "bulk_modulus_GPa", "abs_tol": 1e-06}
+  ],
+  "bypass_patterns": [
+    "(import|from)\\s+(ase|pymatgen|mcp_atomictoolkit|asap3|matscipy|gpaw|lammps)\\b",
+    "\\b(pip|pip3|uv|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\b(ase|pymatgen|asap3|matscipy|kimpy|lammps|mcp-atomictoolkit)\\b",
+    "\\buvx\\b[^\\n]*\\b(ase|pymatgen)\\b",
+    "\\bpython3?\\s+-m\\s+(ase|mcp_atomictoolkit)\\b",
+    "\\batomictoolkit/\\.venv/bin/"
+  ],
+  "suspicious_patterns": [
+    "\\b(pip|pip3|conda|mamba|micromamba)\\b[^\\n]*\\binstall\\b",
+    "\\buvx?\\b",
+    "\\bpymatgen\\b",
+    "\\batomictoolkit\\b"
+  ],
+  "suspicious_tools": {
+    "WebFetch": "(?i)\\b(emt|effective[ -]medium|vacancy|bulk\\s*modulus|coordination)\\b",
+    "WebSearch": "(?i)\\b(emt|effective[ -]medium|vacancy|bulk\\s*modulus|coordination)\\b",
+    "web_fetch": "(?i)\\b(emt|effective[ -]medium|vacancy|bulk\\s*modulus|coordination)\\b",
+    "web_search": "(?i)\\b(emt|effective[ -]medium|vacancy|bulk\\s*modulus|coordination)\\b"
+  }
+}

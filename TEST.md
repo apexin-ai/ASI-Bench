@@ -869,6 +869,24 @@ the index call; installs, imports, `pw.x` and the server's own interpreter are
 bypasses while reading the band file with `cat` is a WARN and a pasted tool
 payload is not.
 
+`test_task_atomictoolkit_vacancy.py` (stdlib only; the reference test imports ASE
+when present): cases are deterministic, cover all six elements, both supercell
+sizes and the three strain ranges, and keep every lattice constant 0.02 Å clear of
+a neighbour-shell cutoff; the scorer gives full credit to the tools' values
+(strings, another evaluation order of E_vac), partial credit to rounding, and
+loses the right parts for the default 2x2x2 supercell (the ignored-kwarg trap,
+D10), another strain range and the physical (skin 0) coordination. Verifier
+scenarios with server-shaped payloads: a genuine Claude and Codex run pass; the
+scrubbed `<workspace>/<name>` arguments still chain by file name, relative paths
+into the checkout too, a path outside workspace and home is a WARN coverage gap,
+and a defect structure no manipulate call wrote is a chain FAIL; the 2x2x2
+supercell fails `tool_correct`; E_vac is scored, not traced; failed calls of the
+task-required and deprecated tools first do not matter; ASE/pymatgen imports and
+installs and the server's interpreter are bypasses, listing the checkout is a
+WARN, arithmetic in `python3 -c` is not. `test_verify_values.py` pins the
+`output_file` extractor and `link_input_lost` (a scrubbed argument whose file
+name survives is compared; a bare `<abs_path>` is not).
+
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
 then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke.py pyscf --config

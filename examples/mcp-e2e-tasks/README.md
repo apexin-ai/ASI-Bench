@@ -39,6 +39,7 @@ An E2E pass needs both. The verifier reads the run artefacts and the task's
 | `mcp_e2e.ncbi_gene_protein_card` | `ncbi` | `NCBIGene_search` → `NCBIGene_get_summary` (id from the search) + `NCBIProtein_get_summary` (GI from the input file) | raw E-utilities, cross-checked against `gene_table`, protein FASTA and the Datasets API (needs network; the GI freezes the protein facts, the gene's band and assembly accession track the current build, so generate just before the run) |
 | `mcp_e2e.qe_si_bandstructure` | `quantum_espresso` | `qe_list_pseudopotentials` + `qe_suggest_kpoints` → `qe_workflow_bandstructure` (suggested grid) → `qe_list_files` (its run directory) → `qe_read_bands` (the listed band file) | DFT **measured** against the pinned server by [`measure_qe_table.py`](../../scripts/mcp/e2e/measure_qe_table.py); k-grid rule, band and point counts derived in stdlib |
 | `mcp_e2e.alphafold_isoform_profile` | `alphafold_db` | `alphafold_get_prediction` + `alphafold_get_summary` + `alphafold_get_annotations` (one accession) | raw AlphaFold DB API; every per-residue score checked against the AlphaMissense CSV mean (needs network; the input file lists the entry ids to rank, so a newly added isoform model does not change the answer) |
+| `mcp_e2e.atomictoolkit_vacancy` | `atomictoolkit` | `build_structure_workflow` → `manipulate_structure_workflow` (`supercell`, then `vacancy`, each on the file the previous call wrote) → `single_point_workflow` ×2 + `analyze_structure_workflow` + `estimate_elastic_workflow` (chained by the written files' names) | ASE EMT on the same extxyz files (bit-identical to the server over 41 seeds); coordination with the server's 0.3 Å neighbour-list skin; the unrelaxed vacancy formation energy is derived, so only the scorer grades it |
 
 How each task picks its instances, scores answers and keeps the tool the only
 practical source of the numbers is described in its `generate_gt.py` and
@@ -134,6 +135,13 @@ three minutes), but its band-structure workflow takes seconds, so
 on the run host (it also confirms the host indexes the Si pseudopotential the
 table was measured with) and clear `~/mcp/quantum_espresso/qe_calculations`.
 
+`atomictoolkit_vacancy` needs `--timeout 900` at most (every tool answers in well
+under a second). The server's cwd is its checkout, and relative paths, default
+output names and every in-band error's `tool_errors/` log land there; the prompts
+ask for absolute paths in the working directory, but clear the known names before a
+round (`structure.extxyz*`, `manipulated.extxyz*`, `analysis_outputs/`,
+`tool_errors/` in `~/mcp/atomictoolkit`) — never `git clean`, which deletes `.venv`.
+
 ## Adding a task
 
 1. Add the server to `scripts/mcp/e2e/manifest.json` and make its smoke test pass.
@@ -162,6 +170,7 @@ table was measured with) and clear `~/mcp/quantum_espresso/qe_calculations`.
    | records a REST wrapper keys by the requested uid, in-band failures | `ncbi_gene_protein_card` |
    | answers that need a ranking or a count over a returned list (scorer-only) | `alphafold_isoform_profile` |
    | result → argument chains through host paths, measured table with `--check` | `qe_si_bandstructure` |
+| file chains through path arguments the trajectory does not keep (compared by file name), a scorer-only derived answer | `atomictoolkit_vacancy` |
 
 4. Prompts name the server and the tool (e.g. "`pyscf_rhf_energy` of the
    `pyscf` server"). Never use a harness-specific name such as
@@ -195,7 +204,11 @@ The verifier handles these; they matter only if you are debugging it.
   an extractor preserves (`filename`, `path`, `file_path`, `output_dir`, `command`, …).
   What it cannot restore is reported as a coverage gap, never as a failure: a
   scrubbed command is a `no_bypass` WARN, and a comparison that only a
-  placeholder made fail becomes "not observable in this evidence".
+  placeholder made fail becomes "not observable in this evidence". An argument
+  outside `KEY_ARG_NAMES` (`atomictoolkit`'s `input_filepath`) is only in the
+  persisted log, as `<workspace>/<name>`; a link that compares file names
+  (`output_file`) still compares it, so a wrong file there is a FAIL, while a bare
+  `<abs_path>` (a path outside the workspace and home) stays a coverage gap.
 - **Codex:** each call is an `mcp_tool_call` item that keeps its inputs and
   results, but Codex does not list servers or offered tools. Its own
   `list_mcp_resources*` calls are not counted as required tools.

@@ -28,7 +28,9 @@ Persistence replaces host paths with placeholders (<abs_path>, <home>,
 <workspace>, <run_output_dir>, <repo_root>). Tool results, shell commands and
 path-like tool arguments are restored from the trajectory by call id; a
 comparison that only a placeholder made fail is reported as unobservable
-(WARN), never as a wrong result or a wrong input.
+(WARN), never as a wrong result or a wrong input. A chained argument compared by
+a canonical form the placeholder leaves intact (``output_file``: the file name
+of ``<workspace>/cu31.extxyz``) was compared, so its mismatch is a FAIL.
 
 Per-task expectations come from ``e2e_check.json`` in the task directory
 (examples in examples/mcp-e2e-tasks/mcp_e2e/*/). It is validated strictly when
@@ -56,7 +58,7 @@ field to one element (``reduce`` max/min, ``argmax_of``/``argmin_of`` another
 field, or ``where_key`` equal to the reference value ``equals_reference_key``,
 e.g. R at a given wavelength of a returned spectrum); ``extract`` instead
 applies a named extractor (``arxiv_ids``, ``term_counts``, ``file_name``,
-``exported_files``, …; see e2e_verify/extractors.py) to the whole result.
+``exported_files``, ``output_file``, …; see e2e_verify/extractors.py) to the whole result.
 
 ``result.format`` is ``number`` (the whole text result), ``json`` (``key`` or
 ``extract``) or ``image`` (+ ``media_type``); numbers match within ``abs_tol``,

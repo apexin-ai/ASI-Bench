@@ -186,7 +186,7 @@ def _judge_link(ctx: Context, cs: CallSpec) -> tuple[str, str]:
                        for arg in b.args) for b, same in compare):
                 return "PASS", f"{where}: {args} equal a {link.call} result"
     seen = [{arg: c.input.get(arg) for arg in args if c.input.get(arg) is not None} for c in observed]
-    if any(c.input_lost(*args) for c in observed):
+    if any(values.link_input_lost(c, b) for c in observed for b in link.bindings):
         return "WARN", (f"{where}: {args} are only available scrubbed in this evidence "
                         f"({seen[:3]}), so the link is not checkable")
     return "FAIL", f"{where}: {args} do not equal any of {len(sources)} {link.call} result(s); inputs seen: {seen[:3]}"

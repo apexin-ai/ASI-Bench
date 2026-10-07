@@ -12,7 +12,7 @@ import math
 import re
 
 from .extractors import EXTRACTORS
-from .evidence import SCRUBBED
+from .evidence import SCRUBBED, is_scrubbed
 from .spec import Selector
 
 
@@ -292,6 +292,26 @@ def matches(value, ref, mode: str) -> bool:
         return isinstance(value, list) and isinstance(ref, list) and bool(ref) and \
             all(item in value for item in ref)
     return value == ref or same_text(value, ref)
+
+
+def link_input_lost(call, binding) -> bool:
+    """Whether a consumer's chained input carries nothing to compare: an argument only
+    available scrubbed, unless the link compares a canonical form the scrub left intact
+    (``output_file``'s file name of ``<workspace>/cu31.extxyz``). Such a link was compared
+    and its mismatch is real; a bare ``<abs_path>`` canonicalises to a placeholder and
+    stays a coverage gap."""
+    if not isinstance(call.input, dict):
+        return True
+    for arg in binding.args:
+        value = call.input.get(arg)
+        if not is_scrubbed(value):
+            continue
+        if binding.compare != "member":
+            return True
+        canonical = EXTRACTORS[binding.source.extract].canon(value)
+        if canonical is None or is_scrubbed(canonical):
+            return True
+    return False
 
 
 def link_comparator(binding):

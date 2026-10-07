@@ -178,6 +178,18 @@ def canon_paths(value):
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def _extract_output_file(data):
+    """The file a result says it wrote: its top-level ``filepath`` string
+    (mcp-atomictoolkit's build / manipulate answers; the input file they read is a
+    separate ``input_filepath``, and the ``artifacts`` list carries both, so it is
+    not used). Pairs with :func:`canon_file_name`: a path argument scrubbed in the
+    persisted log (``<workspace>/cu31.extxyz``) still compares by its file name."""
+    if not isinstance(data, dict):
+        return None
+    path = data.get("filepath")
+    return path if isinstance(path, str) and path.strip() else None
+
+
 _GRID_SEPARATORS = re.compile(r"[,\sx×]+")
 
 
@@ -312,4 +324,5 @@ EXTRACTORS: dict[str, Extractor] = {
     "categorized_files": Extractor(_extract_categorized_files, canon_exported_files),
     "categorized_paths": Extractor(_extract_categorized_files, canon_paths),
     "kpoint_grid": Extractor(_extract_kpoint_grid, canon_kpoint_grid),
+    "output_file": Extractor(_extract_output_file, canon_file_name),
 }

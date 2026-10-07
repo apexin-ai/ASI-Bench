@@ -524,3 +524,10 @@ known defects is in each smoke script.
   ~1e-13 eV). EMT energies are bit-identical on amd64 and aarch64;
   `estimate_elastic` (`np.polyfit`) differs in the last digit (~5e-16
   relative): compare it with rtol 1e-9, never exactly.
+- `manipulate_structure_workflow`'s `operation_kwargs` keys are documented
+  nowhere and unknown keys are ignored silently: a supercell takes `size`
+  (`{"repeat": [3, 3, 3]}` quietly gives the default 2x2x2), a vacancy or a
+  substitution `index`. A task must name them at every prompt level.
+- `input_filepath` / `filepath` are not trajectory key arguments, so in agent
+  runs they exist only scrubbed (`<workspace>/<name>`); chain them with the
+  `output_file` extractor, which compares the written file's name.
