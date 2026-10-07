@@ -1,0 +1,63 @@
+id: mcp_e2e.openroad_tiny_floorplan
+name: "MCP E2E: read a tiny placed design into an OpenROAD session and report its counts, die, area, utilisation and HPWL through the OpenROAD MCP server"
+version: "1.0"
+
+# Fake task for MCP end-to-end testing, not a benchmark task. It lives outside
+# tasks/ and is only discovered with --tasks-dir examples/mcp-e2e-tasks
+# --include-test. One interactive OpenROAD session: create it, read our own
+# LEF/DEF, report the design area, print the die box and the total HPWL from the
+# database with Tcl, and find the area report again with grep_session_output;
+# see examples/mcp-e2e-tasks/README.md.
+status: test
+
+domain: engineering
+subdomain: "eda_mcp_e2e"
+
+source:
+  paper: null
+  repo: "https://github.com/The-OpenROAD-Project/OpenROAD-MCP"
+
+difficulty:
+  estimated_lines: 0-20
+  estimated_time_minutes: 2-10
+  requires_gpu: false
+  requires_network: false
+
+tags: [mcp_e2e, openroad, eda, lef_def, placement, hpwl, tool_chain]
+
+# The generator and the scorers are standard library only: every scored
+# quantity has a closed form, so neither needs openroad. Generate with
+# `asibench generate`; run the agent with --sandbox none and --mcp-config so
+# that openroad is reachable only through the MCP server. Budget --timeout 900:
+# every session command answers in well under a second.
+runtime:
+  python: ">=3.11"
+  packages: []
+
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+
+input:
+  files:
+    - name: task.json
+      type: data
+      description: "The design name, the LEF and DEF file names, the session id to use and the
+        grep pattern of the area report."
+    - name: design.lef
+      type: data
+      description: "Technology and library LEF of our own: one routing layer, one core site,
+        the INV and BUF macros."
+    - name: design.def
+      type: data
+      description: "The placed design: die area, rows, components, two I/O pins and the nets."
+
+output:
+  files:
+    - name: result.json
+      type: data
+      description: "JSON object with the instance, net and I/O pin counts, the die width and
+        height in DBU, the design area and utilisation, the total HPWL in DBU and the area
+        report line, each as OpenROAD printed it in the session."

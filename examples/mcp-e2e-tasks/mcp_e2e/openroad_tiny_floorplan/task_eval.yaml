@@ -1,0 +1,54 @@
+task_id: mcp_e2e.openroad_tiny_floorplan
+
+output:
+  files:
+    - name: result.json
+      type: data
+
+evaluation:
+  gates:
+    - scorer: openroad_e2e_schema
+      severity: hard
+      config:
+        pred_file: result.json
+
+  # Every quantity is an exact integer by construction (generate_gt.py): whole
+  # um^2 cell areas, a utilisation never within 0.05 of a rounding tie, pin-shape
+  # centres on even DBU sums. A field is therefore right or wrong; there is no
+  # tolerance band. HPWL weighs most: it is the only number that needs a Tcl
+  # walk over the database (the counts are printed by read_def, the area by one
+  # report). The area line checks the grep step.
+  scoring:
+    - scorer: openroad_e2e_counts
+      weight: 25
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+    - scorer: openroad_e2e_die
+      weight: 10
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+    - scorer: openroad_e2e_area
+      weight: 20
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+    - scorer: openroad_e2e_hpwl
+      weight: 30
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+    - scorer: openroad_e2e_report_line
+      weight: 15
+      config:
+        pred_file: result.json
+        ref_file: reference.json
+
+# Use --params '{"seed": 31415}' so the instance id ends in __seed31415, which
+# `asibench score --repo seed31415` requires for local scoring.
+generation:
+  script: generate_gt.py
+  mode: infinite
+  parameters: {}
+  timeout_seconds: 120

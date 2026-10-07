@@ -287,3 +287,50 @@ def test_canon_scalar_pairs_numbers_with_their_string_spelling():
     # result.json and tool arguments are agent-controlled: a nested list or an object reads as
     # "no value" instead of raising (a raise here would abort the whole verify_run report).
     assert canon([[5053]]) is None and canon({"a": 1}) is None and canon([{"a": 1}, "ok"]) == ["ok"]
+
+
+# Session results as OpenROAD-MCP v1.1.0 returned them on the AWS host (openroad v2.0-17598).
+_READ_DEF = ("read_def /home/e2e/or-pre/tiny_31415.def\n[INFO ODB-0127] Reading DEF file: /home/e2e/or-pre/tiny_31415.def\n"
+             "[INFO ODB-0128] Design: tiny\n[INFO ODB-0130]     Created 2 pins.\n"
+             "[INFO ODB-0131]     Created 3 components and 6 component-terminals.\n"
+             "[INFO ODB-0133]     Created 4 nets and 6 connections.\n"
+             "[INFO ODB-0134] Finished DEF file: /home/e2e/or-pre/tiny_31415.def\n%")
+
+
+def _session(output, error=None):
+    return _call({"output": output, "session_id": "pre1", "timestamp": "2026-10-07T11:30:10.804Z",
+                  "execution_time": 0.003, "command_count": 3, "buffer_size": 131072, "truncated": False,
+                  "error": error})
+
+
+def test_openroad_output_reads_facts_and_printed_numbers():
+    """Labelled facts from the read_lef / read_def INFO lines and report_design_area, plus every
+    printed number; message ids (``ODB-0131``), ``u^2``, paths and the echoed command do not count."""
+    read = lambda call: verify.values.read(call, verify.spec.Selector(extract="openroad_output"))
+    got = read(_session(_READ_DEF))
+    assert {"pins=2", "components=3", "component_terminals=6", "nets=4", "connections=6"} <= set(got)
+    assert {"2", "3", "4", "6"} <= set(got)
+    assert not {"0127", "127", "131", "31415", "-0131"} & set(got)       # ids and path digits
+    lef = read(_session("read_lef /w/tiny.lef\n[INFO ODB-0227] LEF file: /w/tiny.lef, created 1 layers, "
+                        "2 library cells\n%"))
+    assert {"layers=1", "library_cells=2"} <= set(lef)
+    area = read(_session("% report_design_area\nDesign area 10 u^2 37% utilization.\n%"))
+    assert set(area) == {"design_area_um2=10", "utilization_percent=37", "10", "37"}     # canonical: sorted, unique
+    assert {"design_area_um2=6", "utilization_percent=30"} <= \
+        set(read(_session("report_design_area\nDesign area 6.0 u^2 30% utilization.")))
+    # bare numbers of a user Tcl line, after a stale prompt; the echo's literal 1000 is dropped
+    assert read(_session("puts \"HPWL_TOTAL [expr {9400 * 1000 / 1000}]\"\n% HPWL_TOTAL 9400\n%")) == ["9400"]
+    assert read(_session("x\nDIE 0 0 12000 6000\n%")) == ["0", "12000", "6000"]
+    assert set(read(_session("x\n12.0, (6.5); -3 nan inf 1_0 0x10 v2.0-17598"))) == {"12", "6.5", "-3"}
+    # nothing printed, a flagged command, or not a session result
+    for bad in (_session("set_cmd_units -distance um\n%"),
+                _session("read_lef /x.lef\n[ERROR ORD-0001] /x.lef does not exist.\nORD-0001",
+                         error="OpenROAD ORD-0001: /x.lef does not exist."),
+                _call({"session_id": "a", "command_count": 0}), _call(["x\n3"]),
+                verify.evidence.ToolCall(result_text=None)):
+        assert read(bad) is None
+    canon = verify.extractors.EXTRACTORS["openroad_output"].canon
+    assert canon(37) == canon("37") == canon(37.0) == "37"
+    assert verify.values.matches(read(_session(_READ_DEF)), canon(["components=3", "nets=4"]), "superset")
+    assert not verify.values.matches(read(_session(_READ_DEF)), canon(["components=4"]), "superset")
+    assert verify.values.matches(read(_session(_READ_DEF)), canon(4), "member")

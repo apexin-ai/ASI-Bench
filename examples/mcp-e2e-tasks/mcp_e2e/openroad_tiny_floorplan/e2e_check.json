@@ -1,0 +1,122 @@
+{
+  "schema_version": 2,
+  "server": "openroad",
+  "reference_file": "reference.json",
+  "prediction_file": "result.json",
+  "server_tools": [
+    "cancel_orfs_job",
+    "create_interactive_session",
+    "get_orfs_job",
+    "get_session_history",
+    "get_session_metrics",
+    "grep_session_output",
+    "inspect_interactive_session",
+    "interactive_openroad_exec",
+    "interactive_openroad_query",
+    "list_interactive_sessions",
+    "list_report_images",
+    "read_orfs_metrics",
+    "read_report_image",
+    "run_orfs_stage",
+    "terminate_interactive_session"
+  ],
+  "calls": [
+    {
+      "name": "create",
+      "tool": "create_interactive_session",
+      "inputs_from_reference": {"session_id": "session_id"},
+      "result": {"format": "json", "key": "command_count", "reference_key": "created_command_count", "abs_tol": 0}
+    },
+    {
+      "name": "read_lef",
+      "tool": "interactive_openroad_exec",
+      "inputs_from_call": {"call": "create", "map": {"session_id": "session_id"}},
+      "result": {"format": "json", "extract": "openroad_output", "reference_key": "lef_facts", "match": "superset"}
+    },
+    {
+      "name": "read_def",
+      "tool": "interactive_openroad_exec",
+      "inputs_from_call": {"call": "create", "map": {"session_id": "session_id"}},
+      "result": {"format": "json", "extract": "openroad_output", "reference_key": "def_facts", "match": "superset"}
+    },
+    {
+      "name": "area_query",
+      "tool": "interactive_openroad_query",
+      "optional": true,
+      "group": "area",
+      "inputs_from_call": {"call": "create", "map": {"session_id": "session_id"}},
+      "result": {"format": "json", "extract": "openroad_output", "reference_key": "area_facts", "match": "superset"}
+    },
+    {
+      "name": "area_exec",
+      "tool": "interactive_openroad_exec",
+      "optional": true,
+      "group": "area",
+      "inputs_from_call": {"call": "create", "map": {"session_id": "session_id"}},
+      "result": {"format": "json", "extract": "openroad_output", "reference_key": "area_facts", "match": "superset"}
+    },
+    {
+      "name": "die",
+      "tool": "interactive_openroad_exec",
+      "result": {"format": "json", "extract": "openroad_output", "reference_key": "die_numbers", "match": "superset"}
+    },
+    {
+      "name": "hpwl",
+      "tool": "interactive_openroad_exec",
+      "result": {"format": "json", "extract": "openroad_output", "reference_key": "hpwl_numbers", "match": "superset"}
+    },
+    {
+      "name": "grep",
+      "tool": "grep_session_output",
+      "inputs_from_call": {"call": "create", "map": {"session_id": "session_id"}},
+      "result": {"format": "json", "extract": "json_scalars", "reference_key": "area_report_line", "match": "member"}
+    }
+  ],
+  "answers": [
+    {"prediction_key": "instance_count", "reference_key": "instance_count", "extract": "openroad_output",
+     "match": "member", "from_calls": [{"call": "read_def"}, {"call": "area_query"}]},
+    {"prediction_key": "net_count", "reference_key": "net_count", "extract": "openroad_output",
+     "match": "member", "from_calls": [{"call": "read_def"}, {"call": "area_query"}]},
+    {"prediction_key": "io_pin_count", "reference_key": "io_pin_count", "extract": "openroad_output",
+     "match": "member", "from_calls": [{"call": "read_def"}, {"call": "area_query"}]},
+    {"prediction_key": "die_width_dbu", "reference_key": "die_width_dbu", "extract": "openroad_output",
+     "match": "member", "from_calls": [{"call": "die"}, {"call": "area_query"}]},
+    {"prediction_key": "die_height_dbu", "reference_key": "die_height_dbu", "extract": "openroad_output",
+     "match": "member", "from_calls": [{"call": "die"}, {"call": "area_query"}]},
+    {"prediction_key": "design_area_um2", "reference_key": "design_area_um2", "extract": "openroad_output",
+     "match": "member", "from_calls": [{"call": "area_query"}, {"call": "area_exec"}]},
+    {"prediction_key": "utilization_percent", "reference_key": "utilization_percent", "extract": "openroad_output",
+     "match": "member", "from_calls": [{"call": "area_query"}, {"call": "area_exec"}]},
+    {"prediction_key": "hpwl_total_dbu", "reference_key": "hpwl_total_dbu", "extract": "openroad_output",
+     "match": "member", "from_calls": [{"call": "hpwl"}, {"call": "area_query"}]},
+    {"prediction_key": "area_report_line", "reference_key": "area_report_line", "extract": "json_scalars",
+     "match": "member", "from_call": "grep"}
+  ],
+  "bypass_patterns": [
+    "(?m)(^|[;&|(`]|\\$\\()\\s*(\\S*/)?openroad\\b(?![-.\\w/])",
+    "\\bopenroad\\s+-(no_init|no_splash|exit|python|threads|log|metrics|gui)\\b",
+    "(import|from)\\s+(odb|openroad|opendbpy)\\b",
+    "\\b(pip|pip3|uv|conda|mamba|micromamba)\\b[^\\n]*(\\binstall\\b|\\badd\\b|--with\\b)[^\\n]*\\b(openroad|openroad-mcp|opendbpy|siliconcompiler|klayout)\\b",
+    "\\bapt(-get)?\\b[^\\n]*\\binstall\\b[^\\n]*\\bopenroad\\b",
+    "\\bopenroad-mcp\\b",
+    "typescript/dist/main\\.js",
+    "\\bklayout\\b"
+  ],
+  "suspicious_patterns": [
+    "\\bopenroad\\b",
+    "\\b(DIEAREA|COMPONENTS)\\b",
+    "\\bpython3?\\b"
+  ],
+  "bypass_tools": {
+    "mcp__openroad__interactive_openroad_exec": "(^|[\\s;{\\[\"])exec\\s",
+    "mcp__openroad__interactive_openroad_query": "(^|[\\s;{\\[\"])exec\\s"
+  },
+  "suspicious_tools": {
+    "mcp__openroad__interactive_openroad_exec": "(^|[\\s;{\\[\"])(open|file)\\s",
+    "mcp__openroad__interactive_openroad_query": "(^|[\\s;{\\[\"])(open|file)\\s",
+    "WebFetch": "(?i)\\b(openroad|opendb|hpwl|DIEAREA|report_design_area)\\b",
+    "WebSearch": "(?i)\\b(openroad|opendb|hpwl|DIEAREA|report_design_area)\\b",
+    "web_fetch": "(?i)\\b(openroad|opendb|hpwl|DIEAREA|report_design_area)\\b",
+    "web_search": "(?i)\\b(openroad|opendb|hpwl|DIEAREA|report_design_area)\\b"
+  }
+}

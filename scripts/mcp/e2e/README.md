@@ -583,3 +583,8 @@ known defects is in each smoke script.
   started; cancel and timeout kill the run's whole process group. Which
   process notices first varies: make either dies of the SIGTERM (`signal`) or
   reaps its killed recipe and exits 2 (`exit_code`, no signal).
+- L2 (`openroad_tiny_floorplan`) only uses closed-form quantities of our own
+  LEF/DEF, so a number alone proves nothing: the `openroad_output` extractor
+  reads what a session command printed (echo line and prompts dropped, ODB INFO
+  and area lines as labelled facts, path tokens ignored), and an answer must be
+  one of those printed numbers. Tcl `exec` through the session tools is a bypass.

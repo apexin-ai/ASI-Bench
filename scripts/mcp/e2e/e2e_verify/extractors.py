@@ -311,6 +311,74 @@ def canon_scalar(value):
                                                    else repr(number))
 
 
+# --- OpenROAD-MCP interactive sessions ----------------------------------------
+
+_OPENROAD_FACTS = (  # matched on each printed line, by text (not by message id)
+    (re.compile(r"created (\d+) layers?, (\d+) library cells?\b"), ("layers", "library_cells")),
+    (re.compile(r"Created (\d+) pins?\."), ("pins",)),
+    (re.compile(r"Created (\d+) components? and (\d+) component-terminals?\."),
+     ("components", "component_terminals")),
+    (re.compile(r"Created (\d+) nets? and (\d+) connections?\."), ("nets", "connections")),
+    (re.compile(r"^Design area ([0-9.eE+-]+) u\^2 ([0-9.eE+-]+)% utilization\.$"),
+     ("design_area_um2", "utilization_percent")),
+)
+_TOKEN_EDGES = ",.;:%()[]{}<>\"'`"
+
+
+def openroad_printed_lines(output: str) -> list[str]:
+    """The lines a command printed, from an interactive_openroad_* ``output``: the PTY
+    text is the echoed command (always the first line, sometimes behind a stale ``% ``
+    prompt), what the command printed, then usually a bare ``%`` prompt. The echo is
+    dropped, prompts are stripped, blank lines skipped."""
+    out = []
+    for line in output.replace("\r", "").split("\n")[1:]:
+        line = line.strip()
+        while line.startswith("% ") or line == "%":
+            line = line[2:].strip()
+        if line:
+            out.append(line)
+    return out
+
+
+def _numeric_token(token: str) -> str | None:
+    """A whitespace token that is a finite number once punctuation is trimmed from its
+    ends (``30%`` -> ``30``, ``12.0`` -> ``12``); tokens inside paths do not count."""
+    if "/" in token:
+        return None
+    text = token.strip(_TOKEN_EDGES)
+    if not text or "_" in text:
+        return None
+    try:
+        number = float(text)
+    except ValueError:
+        return None
+    return canon_scalar(text) if math.isfinite(number) else None
+
+
+def _extract_openroad_output(data):
+    """What an OpenROAD-MCP session command printed: labelled facts and bare numbers.
+
+    The result is ``{"output": <PTY text>, "error": null, ...}``; a command the server
+    flagged with an ``error`` printed nothing usable (``None``). Lines that read the
+    design (``read_lef`` / ``read_def`` INFO lines) or report its area become labelled
+    facts (``components=5``, ``design_area_um2=10``); every number printed anywhere
+    becomes a bare value (``9400``). A call check pins the facts it expects
+    (``match: superset``), an answer has to be one of the printed numbers
+    (``match: member``), so a value computed outside the session — read from the DEF
+    file, or converted by hand — is not "from the tool". Only the first line of the
+    echo is dropped: a multi-line command's later lines count as printed."""
+    if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("output"), str):
+        return None
+    out: list[str] = []
+    for line in openroad_printed_lines(data["output"]):
+        for pattern, labels in _OPENROAD_FACTS:
+            match = pattern.search(line)
+            if match:
+                out += [f"{label}={canon_scalar(value)}" for label, value in zip(labels, match.groups())]
+        out += [n for n in (_numeric_token(t) for t in line.split()) if n is not None]
+    return out or None
+
+
 EXTRACTORS: dict[str, Extractor] = {
     "arxiv_ids": Extractor(_extract_arxiv_ids, canon_ids),
     "json_scalars": Extractor(_extract_json_scalars, canon_scalar),
@@ -325,4 +393,5 @@ EXTRACTORS: dict[str, Extractor] = {
     "categorized_paths": Extractor(_extract_categorized_files, canon_paths),
     "kpoint_grid": Extractor(_extract_kpoint_grid, canon_kpoint_grid),
     "output_file": Extractor(_extract_output_file, canon_file_name),
+    "openroad_output": Extractor(_extract_openroad_output, canon_scalar),
 }

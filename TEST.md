@@ -917,6 +917,27 @@ WARN, arithmetic in `python3 -c` is not. `test_verify_values.py` pins the
 `output_file` extractor and `link_input_lost` (a scrubbed argument whose file
 name survives is compared; a bare `<abs_path>` is not).
 
+`test_task_openroad_tiny_floorplan.py` (stdlib; the B1 Tcl test needs `tclsh`):
+cases are deterministic and varied (4–7 INV/BUF cells, one or two rows, an
+optional fan-out net); with the L1 constants the renderers reproduce the smoke's
+`TINY_LEF` / `TINY_DEF` byte for byte and the reference equals its closed form;
+for eight seeds the reference equals an independent regex reading of the written
+LEF/DEF (counts, die, row box, legal placements, HPWL, no rounding tie); the B1
+one-line Tcl (die box, HPWL procedure) prints the reference against a fake odb
+under `tclsh`; every field scores its exact share, malformed submissions are
+valid zeros, a broken reference is an evaluator failure. Verifier scenarios with
+server-shaped payloads: genuine Claude and Codex runs pass (also with workspace
+paths scrubbed, and Codex without a trajectory); the area report through exec
+satisfies the group; no `set_cmd_units` (area 0) fails; an own session id only
+warns, commands on another session break the chain; an HPWL or a die width not
+printed in the session fails `answer_from_tool`; Tcl `exec` through either
+session tool, the `openroad` binary, `import odb`, installs, the server's
+`main.js` and KLayout are bypasses, Tcl `open`/`file`, grepping the DEF, listing
+the checkout and web lookups are WARN; skipping grep is an uncalled requirement.
+`test_verify_values.py` pins the `openroad_output` extractor on AWS-recorded
+outputs (facts, printed numbers, message ids/`u^2`/path digits/echo excluded,
+flagged commands give nothing).
+
 Live L0/L1 smoke (network + upstream install, Linux, opt-in): follow
 `scripts/mcp/e2e/README.md`, e.g. `python3 scripts/mcp/e2e/setup.py pyscf`
 then `~/mcp/pyscf/.venv/bin/python scripts/mcp/e2e/smoke.py pyscf --config
