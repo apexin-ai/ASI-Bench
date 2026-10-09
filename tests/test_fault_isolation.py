@@ -95,7 +95,7 @@ class TestScorerExceptionIsolation:
                 return mock_crashing
             return mock_good
 
-        with patch("ai4sci_bench.runner.orchestrator.get_scorer", side_effect=get_scorer_side_effect):
+        with patch("ai4sci_bench.core.scoring.get_scorer", side_effect=get_scorer_side_effect):
             gate_results, hard_passed, soft_fails, score_results, final_score = (
                 _evaluate_gates_and_scores(evaluation, tmp_path, tmp_path, {})
             )
@@ -140,7 +140,7 @@ class TestScorerExceptionIsolation:
                 mock.score = MagicMock(return_value=result)
             return mock
 
-        with patch("ai4sci_bench.runner.orchestrator.get_scorer", side_effect=get_scorer_side_effect):
+        with patch("ai4sci_bench.core.scoring.get_scorer", side_effect=get_scorer_side_effect):
             gate_results, hard_passed, soft_fails, score_results, final_score = (
                 _evaluate_gates_and_scores(evaluation, tmp_path, tmp_path, {})
             )
@@ -180,7 +180,7 @@ class TestScorerExceptionIsolation:
                 mock.score = MagicMock(return_value=good_result)
             return mock
 
-        with patch("ai4sci_bench.runner.orchestrator.get_scorer", side_effect=get_scorer_side_effect):
+        with patch("ai4sci_bench.core.scoring.get_scorer", side_effect=get_scorer_side_effect):
             gate_results, hard_passed, soft_fails, score_results, final_score = (
                 _evaluate_gates_and_scores(evaluation, tmp_path, tmp_path, {})
             )
