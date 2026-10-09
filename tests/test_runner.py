@@ -1166,7 +1166,7 @@ class TestEvaluateGatesAndScoresPromptLevel:
                 )
 
         monkeypatch.setattr(
-            "ai4sci_bench.runner.orchestrator.get_scorer",
+            "ai4sci_bench.core.scoring.get_scorer",
             lambda name: RecordingScorer(name),
         )
 
@@ -1214,7 +1214,7 @@ class TestEvaluateGatesAndScoresPromptLevel:
                 )
 
         monkeypatch.setattr(
-            "ai4sci_bench.runner.orchestrator.get_scorer",
+            "ai4sci_bench.core.scoring.get_scorer",
             lambda name: RecordingScorer(),
         )
 
