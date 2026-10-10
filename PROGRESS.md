@@ -1296,6 +1296,23 @@ Lessons — process:
 - AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4.
 - Commit: `e7a8ab3`.
 
+## 2026-10-10: Harbor seed31415 verifier entry point
+
+- A Harbor verifier needs a single materialized task/instance/artifact entry
+  point, without an `asibench run` result JSON. `harbor-verify` constructs one
+  local-scoring job and reuses its staging, scorer, runtime, and failure paths.
+  A missing artifact stays a valid zero; a missing reference, unsafe merge, or
+  broken evaluator leaves no reward and writes `evaluation_invalid` details.
+- The verifier must delete a stale reward before scoring, keep `--out` separate
+  from all read-only inputs (including symlink aliases), and retain task bundle
+  and artifact hashes when a copied bundle has no Git metadata. Future Harbor
+  export work should restore only declared artifacts into the verifier.
+- Tests: 13 Harbor-specific cases passed; affected scoring/CLI suite 217 passed;
+  full offline suite 3782 passed, 7 skipped, 26 deselected (24 default
+  integration/E2E exclusions plus 2 pre-existing macOS-only failures). Wheel
+  and sdist built with the new module included.
+- Commit: `545f7c193365243b85b6ccd2feb97fdf8f31a6a8`.
+
 ## 2026-10-07: atomictoolkit smoke (L1)
 
 - One manifest id (`atomictoolkit`, catalog `ase`) for the catalog's `ase` and
