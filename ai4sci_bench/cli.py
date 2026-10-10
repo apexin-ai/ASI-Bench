@@ -805,6 +805,50 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
         )
 
 
+@cli.command("harbor-verify")
+@click.option("--task-dir", required=True, type=click.Path(file_okay=False),
+              help="Public task bundle with task_meta.yaml and task_eval.yaml")
+@click.option("--instance-dir", required=True, type=click.Path(file_okay=False),
+              help="Materialized seed31415 instance with public reference/")
+@click.option("--outputs-dir", required=True, type=click.Path(file_okay=False),
+              help="Harbor-restored agent artifact root")
+@click.option("--prompt-level", required=True,
+              type=click.Choice(["b1", "b2", "b3", "b4"]))
+@click.option("--out", required=True, type=click.Path(file_okay=False),
+              help="Harbor verifier directory for reward.json and score_detail.json")
+@click.option("--judge-api-base", default=None, envvar="ASIBENCH_JUDGE_API_BASE")
+@click.option("--judge-api-key-env", default=None, envvar="ASIBENCH_JUDGE_API_KEY_ENV",
+              metavar="ENV_VAR")
+@click.option("--judge-api-protocol", default=None,
+              type=click.Choice(["native", "openai"], case_sensitive=False),
+              envvar="ASIBENCH_JUDGE_API_PROTOCOL")
+def harbor_verify_cmd(task_dir: str, instance_dir: str, outputs_dir: str,
+                      prompt_level: str, out: str, judge_api_base: str | None,
+                      judge_api_key_env: str | None,
+                      judge_api_protocol: str | None) -> None:
+    """Score one Harbor attempt with public seed31415 references (non-official)."""
+    from ai4sci_bench.core.judge_api import (
+        JudgeAPIConfigurationError,
+        resolve_judge_api_override,
+    )
+    from ai4sci_bench.harbor_verify import HarborScoringError, verify_harbor_task
+
+    try:
+        override = resolve_judge_api_override(
+            judge_api_base, judge_api_key_env, judge_api_protocol
+        )
+        detail = verify_harbor_task(
+            task_dir, instance_dir, outputs_dir, prompt_level, out,
+            judge_api_override=override,
+        )
+    except (HarborScoringError, JudgeAPIConfigurationError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        f"Harbor seed31415 score (non-official): {detail['final_score']:.2f} / "
+        f"{detail['max_score']:.2f}"
+    )
+
+
 @cli.command("run-score")
 @click.option("--instances-dir", required=True, help="Pulled seed31415 instances directory.")
 @click.option("--tasks-dir", default="tasks/", show_default=True)

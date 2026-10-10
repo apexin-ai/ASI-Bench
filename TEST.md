@@ -387,6 +387,15 @@ must synchronize workers through persistent handshake files and use generous
 timeouts only as a safety net: a fresh scoring worker's cold start (including
 the litellm import) can exceed 3 s on CI.
 
+`harbor-verify` takes one public seed31415 task bundle and materialized instance.
+Its tests compare the same nonempty prediction with `asibench score`, verify an
+empty submission is a valid zero, and check evaluator failures, unsafe artifact
+merges, stale reward removal, and seed42 rejection:
+
+```bash
+uv run pytest -q tests/test_harbor_verify.py
+```
+
 ```bash
 uv run pytest -q \
   tests/test_retired_features.py \

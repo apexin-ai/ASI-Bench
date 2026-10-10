@@ -211,13 +211,37 @@ See the **[BenchFlow integration guide](docs/guide/benchflow.md)** for the
 end-to-end run, schema-v2 manifest, scoring command, status fields, retries,
 and Judge API configuration.
 
+#### Harbor verifier
+
+`asibench harbor-verify` scores one already-materialized seed31415 instance in a
+Harbor verifier container. The task bundle must contain the public
+`task_meta.yaml` and `task_eval.yaml`, and the instance must contain its public
+`reference/`. Point `--outputs-dir` at the artifact root restored by Harbor:
+
+```bash
+asibench harbor-verify \
+  --task-dir /tests/task_bundle \
+  --instance-dir /tests/instance/physics.example__seed31415 \
+  --outputs-dir /workspace \
+  --prompt-level b1 \
+  --out /logs/verifier
+```
+
+The command writes only `reward.json` (`reward = final_score / 100`) and
+`score_detail.json` under `--out`. The score is non-official. Missing agent
+artifacts are a valid zero-score submission; evaluator failures write diagnostics,
+remove any stale reward, and exit non-zero. It stages immutable instance `data/`
+and restored artifacts with the same safety checks and scorer logic as
+`asibench score`. `--out` must be separate from all input directories. This
+entry point does not generate instances or support seed42.
+
 #### Configure an LLM/VLM Judge API
 
 Some seed31415 scoring contracts use an LLM or VLM Judge. Judge credentials and
 transport overrides are runtime operator settings: keep the secret in an
 ignored `.env` file or process environment, never in `task_eval.yaml` or a
-command-line argument. `score`, `run-score`, and `benchflow-score` expose the
-same options:
+command-line argument. `score`, `run-score`, `benchflow-score`, and
+`harbor-verify` expose the same options:
 
 | Option | Environment equivalent | Meaning |
 |---|---|---|
