@@ -1312,6 +1312,12 @@ Lessons — process:
   integration/E2E exclusions plus 2 pre-existing macOS-only failures). Wheel
   and sdist built with the new module included.
 - Commit: `545f7c193365243b85b6ccd2feb97fdf8f31a6a8`.
+- Follow-up: CLI Judge selector validation originally ran before stale reward
+  removal, so an invalid key setting could leave a previous score visible.
+  Shared `prepare_harbor_output` now checks directory separation and clears
+  reward/diagnostics before selector validation; keep a regression case for
+  every new pre-evaluation failure path. 14 Harbor cases and 218 affected
+  tests passed; wheel/sdist rebuilt. Commit: `c311c2530e6762d3872a2eb99747c3cac6c84456`.
 
 ## 2026-10-07: atomictoolkit smoke (L1)
 
