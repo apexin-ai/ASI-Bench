@@ -1394,3 +1394,20 @@ Lessons — process:
   real server, multi-line Tcl via exec, cwd clean); Claude Code and Codex B1-B4
   each 4 × 100 (400/400), verifier 4/4.
 - Commits: L1 `c396ccc`, `24fa71c`; L2 `54bf973`, `key=value` fix `5e4ef51`.
+
+## 2026-10-10: Harbor B1 export and local Docker smoke
+
+- Exporting from public task metadata plus a materialized seed31415 instance kept
+  prompt/data in the agent image and reference/scorer only in the separate
+  verifier. The first Docker run failed because the host's Docker proxy could
+  not reach PyPI; a host-prepared Linux ARM64 dependency image let the local
+  smoke proceed without changing Harbor.
+- The first verifier run exposed an undeclared practical dependency: importing
+  scoring needs `litellm`. Add it to the generated verifier Dockerfile. Nop then
+  completed with reward 0; a local reference-backed artifact replay completed
+  with reward 0.55. The replay verifies transport and scoring, not agent solving.
+- Re-scoring Harbor's six persisted artifact files with `asibench score` gave
+  55/100 and identical gate/scorer details and artifact SHA-256. Keep this
+  same-file comparison for future real agent trials. Related tests: 71 passed.
+- Commit: `acd2f46`.
+
