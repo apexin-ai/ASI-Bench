@@ -234,8 +234,12 @@ its public reference and scorer bundle stay in `tests/`, outside the agent image
 Generated datasets contain public prompts and references and must be kept out of
 the ASI-Bench Git repository. The generated Dockerfiles install dependencies
 from PyPI at build time; for an offline Docker host, prepare an equivalent local
-dependency image. `evaluation.runtime: task` needs a dedicated verifier image
-and is rejected by this initial exporter.
+dependency image. For `evaluation.runtime: task`, the exporter builds a
+task-specific verifier image with the declared packages and checks its Python
+version at build time. Verifier images also include NumPy for the framework's
+base scorers, even when the task declares no runtime packages. The verifier
+reuses those installed packages in an isolated scoring worker, so scoring does
+not install packages at runtime.
 
 `asibench harbor-verify` scores one already-materialized seed31415 instance in a
 Harbor verifier container. The task bundle must contain the public

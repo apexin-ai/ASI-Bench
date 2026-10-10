@@ -73,7 +73,10 @@
 - Harbor `harbor export` 当前只导出单个已物化的 seed31415 task/level；需要当前
   框架 wheel，输出含独立 verifier、最小 registry 和 wheel SHA-256。reference 与
   scorer 只进入 verifier 镜像，导出目录含公开 prompt/reference，不入本仓库。
-  `evaluation.runtime: task` 暂不支持，需专用 verifier 镜像。
+  `evaluation.runtime: task` 使用专用 verifier 镜像，在构建时安装并检查 task
+  依赖与 Python 约束，评分时复用镜像依赖且保持 fresh worker 隔离。
+  verifier 基础依赖含 NumPy；agent/verifier 镜像标识绑定 task、instance，verifier
+  另绑定 wheel SHA-256。
 - BenchFlow 运行 `asibench run` 必须启用 `--fail-on-agent-error`，且不得只信任
   进程退出码；manifest schema v2 必须提供对应 run result JSON，并将
   `prediction_dir` 绑定到其 persisted outputs，分别报告 attempt 与 evaluation 状态。

@@ -843,6 +843,7 @@ def harbor_export_cmd(task_dir: str, instance_dir: str, level: str,
               type=click.Choice(["b1", "b2", "b3", "b4"]))
 @click.option("--out", required=True, type=click.Path(file_okay=False),
               help="Harbor verifier directory for reward.json and score_detail.json")
+@click.option("--task-runtime-preinstalled", is_flag=True, hidden=True)
 @click.option("--judge-api-base", default=None, envvar="ASIBENCH_JUDGE_API_BASE")
 @click.option("--judge-api-key-env", default=None, envvar="ASIBENCH_JUDGE_API_KEY_ENV",
               metavar="ENV_VAR")
@@ -850,7 +851,8 @@ def harbor_export_cmd(task_dir: str, instance_dir: str, level: str,
               type=click.Choice(["native", "openai"], case_sensitive=False),
               envvar="ASIBENCH_JUDGE_API_PROTOCOL")
 def harbor_verify_cmd(task_dir: str, instance_dir: str, outputs_dir: str,
-                      prompt_level: str, out: str, judge_api_base: str | None,
+                      prompt_level: str, out: str, task_runtime_preinstalled: bool,
+                      judge_api_base: str | None,
                       judge_api_key_env: str | None,
                       judge_api_protocol: str | None) -> None:
     """Score one Harbor attempt with public seed31415 references (non-official)."""
@@ -872,6 +874,7 @@ def harbor_verify_cmd(task_dir: str, instance_dir: str, outputs_dir: str,
         detail = verify_harbor_task(
             task_dir, instance_dir, outputs_dir, prompt_level, out,
             judge_api_override=override,
+            task_runtime_preinstalled=task_runtime_preinstalled,
         )
     except (HarborScoringError, JudgeAPIConfigurationError) as exc:
         raise click.ClickException(str(exc)) from exc

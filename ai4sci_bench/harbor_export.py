@@ -84,8 +84,10 @@ def export_harbor_task(
         raise HarborExportError("task_eval.yaml task_id does not match task_meta.yaml")
     if instance.name != f"{task_id}__seed31415":
         raise HarborExportError("Only the matching materialized seed31415 instance is supported")
-    if evaluation.get("evaluation", {}).get("runtime") == "task":
-        raise HarborExportError("Task evaluator runtimes need a dedicated verifier image")
+    evaluation_config = evaluation.get("evaluation", {})
+    runtime_mode = evaluation_config.get("runtime") if isinstance(evaluation_config, dict) else None
+    if runtime_mode not in (None, "task"):
+        raise HarborExportError(f"Unsupported evaluation.runtime: {runtime_mode!r}")
     reference = instance / "reference"
     if not reference.is_dir() or not any(reference.iterdir()):
         raise HarborExportError("Public seed31415 reference/ is missing or empty")
@@ -152,28 +154,50 @@ def export_harbor_task(
         )
         base = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
         packages = " ".join(shlex.quote(p) for p in runtime_packages)
+        task_image_identity = (
+            f'LABEL org.asibench.task_id="{task_id}" '
+            f'org.asibench.instance_id="{instance.name}"\n'
+        )
         (exported / "environment" / "Dockerfile").write_text(
             f"FROM {base}\n"
+            + task_image_identity
             + (f"RUN uv pip install --system {packages}\n" if packages else "")
             + "COPY workspace/ /workspace/\nWORKDIR /workspace\n",
             encoding="utf-8",
         )
         (exported / "tests" / "Dockerfile").write_text(
             f"FROM {base}\n"
+            + task_image_identity
+            + f'LABEL org.asibench.wheel_sha256="{hashlib.sha256(wheel_path.read_bytes()).hexdigest()}"\n'
             f"COPY wheels/{wheel_path.name} /tmp/{wheel_path.name}\n"
-            f"RUN uv pip install --system {shlex.quote('/tmp/' + wheel_path.name)} litellm "
-            + packages + "\n"
             "COPY task_bundle/ /tests/task_bundle/\n"
-            "COPY instance/ /tests/instance/\n"
-            "COPY --chmod=755 test.sh /tests/test.sh\n"
-            "WORKDIR /workspace\n",
+            f"RUN uv pip install --system {shlex.quote('/tmp/' + wheel_path.name)} "
+            "litellm 'numpy>=1.26' "
+            + packages + "\n"
+            + (
+                "RUN python -c 'import platform, yaml; from pathlib import Path; "
+                "from ai4sci_bench.runner.task_env import TaskEnvironmentManager; "
+                "spec = yaml.safe_load(Path(\"/tests/task_bundle/task_meta.yaml\").read_text())"
+                ".get(\"runtime\", {}).get(\"python\") or \"\"; "
+                "manager = TaskEnvironmentManager(Path(\"/tests\")); "
+                "assert manager._version_satisfies(spec, platform.python_version()), "
+                "\"Verifier Python does not satisfy runtime.python\"'\n"
+                "RUN uv pip check\n"
+                "ENV ASIBENCH_HARBOR_TASK_RUNTIME_PREINSTALLED=1\n"
+                if runtime_mode == "task" else ""
+            )
+            + "COPY instance/ /tests/instance/\n"
+            + "COPY --chmod=755 test.sh /tests/test.sh\n"
+            + "WORKDIR /workspace\n",
             encoding="utf-8",
         )
         (exported / "tests" / "test.sh").write_text(
             "#!/bin/sh\nset -eu\n"
             f"exec asibench harbor-verify --task-dir /tests/task_bundle "
             f"--instance-dir /tests/instance/{instance.name} "
-            f"--outputs-dir /workspace --prompt-level {level} --out /logs/verifier\n",
+            f"--outputs-dir /workspace --prompt-level {level} --out /logs/verifier"
+            + (" --task-runtime-preinstalled" if runtime_mode == "task" else "")
+            + "\n",
             encoding="utf-8",
         )
         (exported / "tests" / "test.sh").chmod(0o755)

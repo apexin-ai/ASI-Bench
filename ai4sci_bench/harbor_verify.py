@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import platform
 from dataclasses import replace
 from pathlib import Path
@@ -30,6 +31,12 @@ from ai4sci_bench.local_scoring import (
 
 class HarborScoringError(ValueError):
     """The Harbor task bundle is invalid or its evaluator could not score."""
+
+
+class HarborRuntimeUnavailable(RuntimeError):
+    """The dedicated verifier image cannot provide its declared task runtime."""
+
+    failure_kind = "evaluator_unavailable"
 
 
 def _require_directory(label: str, value: str | Path) -> Path:
@@ -148,6 +155,7 @@ def verify_harbor_task(
     out: str | Path,
     *,
     judge_api_override: JudgeAPIOverride | None = None,
+    task_runtime_preinstalled: bool = False,
 ) -> dict[str, Any]:
     """Write Harbor reward plus full non-official diagnostics for one attempt.
 
@@ -173,7 +181,25 @@ def verify_harbor_task(
             raise _MissingEvaluatorInputError(
                 f"Public seed31415 reference directory is missing or empty: {reference_dir}"
             )
-        job = _prepare_score_runtimes([job], tasks_root=task.parent)[0]
+        if task_runtime_preinstalled:
+            if job.task_runtime is None or os.environ.get(
+                "ASIBENCH_HARBOR_TASK_RUNTIME_PREINSTALLED"
+            ) != "1":
+                raise HarborRuntimeUnavailable(
+                    "Dedicated task runtime verifier image is required"
+                )
+            from ai4sci_bench.runner.task_env import TaskEnvironmentManager
+
+            python_spec = job.task_runtime.get("_runtime_python") or ""
+            if not TaskEnvironmentManager(task.parent)._version_satisfies(
+                python_spec, platform.python_version()
+            ):
+                raise HarborRuntimeUnavailable(
+                    f"Verifier Python {platform.python_version()} does not satisfy "
+                    f"runtime.python {python_spec!r}"
+                )
+        else:
+            job = _prepare_score_runtimes([job], tasks_root=task.parent)[0]
         if job.task_runtime is not None and job.runtime_error is None:
             result = _score_jobs_parallel(
                 [replace(job, index=0)],

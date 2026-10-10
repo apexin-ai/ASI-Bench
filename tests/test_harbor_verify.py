@@ -128,6 +128,43 @@ def test_harbor_verify_task_runtime_failure_is_evaluator_unavailable(tmp_path, m
     assert detail["failure_kind"] == "evaluator_unavailable"
 
 
+def test_harbor_verify_preinstalled_runtime_bypasses_dynamic_install(tmp_path, monkeypatch):
+    task, instance, outputs, out = _paths(tmp_path)
+    _enable_task_scoring_runtime(tmp_path / "tasks")
+    monkeypatch.setenv("ASIBENCH_HARBOR_TASK_RUNTIME_PREINSTALLED", "1")
+
+    def unexpected_install(*_args, **_kwargs):
+        raise AssertionError("runtime installer should not run inside the verifier")
+
+    monkeypatch.setattr(
+        "ai4sci_bench.harbor_verify._prepare_score_runtimes", unexpected_install,
+    )
+    result = CliRunner().invoke(
+        cli,
+        ["harbor-verify", "--task-dir", str(task), "--instance-dir", str(instance),
+         "--outputs-dir", str(outputs), "--prompt-level", "b1", "--out", str(out),
+         "--task-runtime-preinstalled"],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads((out / "score_detail.json").read_text())["evaluation_status"] == "completed"
+
+
+def test_harbor_verify_preinstalled_runtime_requires_dedicated_image(tmp_path):
+    task, instance, outputs, out = _paths(tmp_path)
+    _enable_task_scoring_runtime(tmp_path / "tasks")
+    result = CliRunner().invoke(
+        cli,
+        ["harbor-verify", "--task-dir", str(task), "--instance-dir", str(instance),
+         "--outputs-dir", str(outputs), "--prompt-level", "b1", "--out", str(out),
+         "--task-runtime-preinstalled"],
+        env={"ASIBENCH_HARBOR_TASK_RUNTIME_PREINSTALLED": ""},
+    )
+    assert result.exit_code != 0
+    assert not (out / "reward.json").exists()
+    detail = json.loads((out / "score_detail.json").read_text())
+    assert detail["evaluation_status"] == "evaluation_invalid"
+
+
 def test_harbor_verify_missing_scorer_dependency_is_unavailable(tmp_path, monkeypatch):
     task, instance, outputs, out = _paths(tmp_path)
 

@@ -47,6 +47,11 @@ def test_export_separates_agent_input_from_verifier_reference(tmp_path: Path) ->
     assert (exported / "tests/instance/math.example__seed31415/reference/answer.json").exists()
     assert (exported / "tests/task_bundle/custom_scorer.py").exists()
     assert " litellm " in (exported / "tests/Dockerfile").read_text()
+    assert "'numpy>=1.26'" in (exported / "tests/Dockerfile").read_text()
+    assert 'org.asibench.task_id="math.example"' in (exported / "tests/Dockerfile").read_text()
+    assert 'org.asibench.instance_id="math.example__seed31415"' in (
+        exported / "environment/Dockerfile"
+    ).read_text()
     assert "--prompt-level b1" in (exported / "tests/test.sh").read_text()
     assert 'artifacts = ["/workspace/result.json"]' in (exported / "task.toml").read_text()
     registry = json.loads((output / "registry.json").read_text())
@@ -85,3 +90,22 @@ def test_export_rejects_path_escape(tmp_path: Path) -> None:
             task_dir=task, instance_dir=instance, level="b1", wheel=wheel,
             output_dir=tmp_path / "bad",
         )
+
+
+def test_export_task_runtime_uses_dedicated_verifier_image(tmp_path: Path) -> None:
+    task, instance, wheel = _inputs(tmp_path)
+    (task / "task_eval.yaml").write_text(
+        "task_id: math.example\nevaluation:\n  runtime: task\n  scoring: []\n",
+        encoding="utf-8",
+    )
+    exported = export_harbor_task(
+        task_dir=task, instance_dir=instance, level="b1", wheel=wheel,
+        output_dir=tmp_path / "export",
+    )
+    dockerfile = (exported / "tests/Dockerfile").read_text()
+    assert "numpy>=2.0" in dockerfile
+    assert "ASIBENCH_HARBOR_TASK_RUNTIME_PREINSTALLED=1" in dockerfile
+    assert "--task-runtime-preinstalled" in (exported / "tests/test.sh").read_text()
+    assert "ASIBENCH_HARBOR_TASK_RUNTIME_PREINSTALLED" not in (
+        exported / "environment/Dockerfile"
+    ).read_text()

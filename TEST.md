@@ -397,8 +397,10 @@ rejection:
 uv run pytest -q tests/test_harbor_verify.py
 ```
 
-`harbor export` tests its seed31415 boundary, safe output paths, and separation
-of agent input from verifier reference:
+`harbor export` tests its seed31415 boundary, safe output paths, separation
+of agent input from verifier reference, and the dedicated verifier image for
+`evaluation.runtime: task`. The `harbor-verify` tests cover the preinstalled
+runtime path and reject its use outside the dedicated image:
 
 ```bash
 uv run pytest -q tests/test_harbor_export.py
