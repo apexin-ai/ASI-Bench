@@ -1411,3 +1411,23 @@ Lessons — process:
   same-file comparison for future real agent trials. Related tests: 71 passed.
 - Commit: `acd2f46`.
 
+## 2026-10-10: Harbor P1 five-task offline export and parity
+
+- The MPSC task declares `evaluation.runtime: task`; Harbor needs a dedicated
+  verifier image with task packages installed at build time and a Python-version
+  check. Keep scoring in a fresh worker while reusing those installed packages.
+  The generic verifier also needs NumPy even when task metadata omits it.
+- Five public seed31415 B1 tasks passed Harbor `nop` (valid zero), missing-reference
+  failure cleanup, and byte-for-byte replay of historical predictions. Independent
+  `asibench score` matched each replay's artifact hashes, total, gates, and scorer
+  details. Replays establish scoring parity, not new agent capability.
+- A particle replay once ran a stale homotopy `test.sh` from the verifier image;
+  preserve the failed job, inspect image labels and script, then force a rebuild
+  and recheck the same-file comparison. Record wheel and Dockerfile hashes so
+  image reuse can be diagnosed without exposing predictions.
+- Focused tests: 29 passed. Full suite under restricted network: 3759 passed,
+  9 skipped, 24 deselected, 26 failed, 5 errors; the first failure tried to
+  fetch PyPI while constructing an unrelated task sandbox. Do not report it as
+  a green full-suite run.
+- Commit: `61bdfb4`.
+
