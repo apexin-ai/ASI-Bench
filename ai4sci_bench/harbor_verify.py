@@ -112,20 +112,13 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def verify_harbor_task(
+def prepare_harbor_output(
     task_dir: str | Path,
     instance_dir: str | Path,
     outputs_dir: str | Path,
-    prompt_level: str,
     out: str | Path,
-    *,
-    judge_api_override: JudgeAPIOverride | None = None,
-) -> dict[str, Any]:
-    """Write Harbor reward plus full non-official diagnostics for one attempt.
-
-    A failed evaluator writes diagnostics but deliberately leaves reward absent.
-    Missing agent outputs are an ordinary zero-score submission.
-    """
+) -> Path:
+    """Clear prior verifier files before any selector or evaluator can fail."""
     destination = Path(out).absolute()
     outputs = Path(outputs_dir).absolute()
     for input_path in (Path(task_dir).absolute(), Path(instance_dir).absolute(), outputs):
@@ -144,6 +137,27 @@ def verify_harbor_task(
     reward_path.unlink(missing_ok=True)
     detail_path = destination / "score_detail.json"
     detail_path.unlink(missing_ok=True)
+    return destination
+
+
+def verify_harbor_task(
+    task_dir: str | Path,
+    instance_dir: str | Path,
+    outputs_dir: str | Path,
+    prompt_level: str,
+    out: str | Path,
+    *,
+    judge_api_override: JudgeAPIOverride | None = None,
+) -> dict[str, Any]:
+    """Write Harbor reward plus full non-official diagnostics for one attempt.
+
+    A failed evaluator writes diagnostics but deliberately leaves reward absent.
+    Missing agent outputs are an ordinary zero-score submission.
+    """
+    destination = prepare_harbor_output(task_dir, instance_dir, outputs_dir, out)
+    outputs = Path(outputs_dir).absolute()
+    reward_path = destination / "reward.json"
+    detail_path = destination / "score_detail.json"
 
     task = _require_directory("task_dir", task_dir)
     instance = _require_directory("instance_dir", instance_dir)

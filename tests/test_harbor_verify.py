@@ -203,3 +203,23 @@ def test_harbor_verify_rejects_symlinked_output_destination(tmp_path):
 
     assert result.exit_code != 0
     assert not (outputs / "reward.json").exists()
+
+
+def test_harbor_verify_invalid_judge_selector_removes_stale_reward(tmp_path, monkeypatch):
+    task, instance, outputs, out = _paths(tmp_path)
+    out.mkdir()
+    (out / "reward.json").write_text('{"reward": 1}')
+    monkeypatch.delenv("ASIBENCH_HARBOR_MISSING_JUDGE_KEY", raising=False)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "harbor-verify", "--task-dir", str(task),
+            "--instance-dir", str(instance), "--outputs-dir", str(outputs),
+            "--prompt-level", "b1", "--out", str(out),
+            "--judge-api-key-env", "ASIBENCH_HARBOR_MISSING_JUDGE_KEY",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert not (out / "reward.json").exists()

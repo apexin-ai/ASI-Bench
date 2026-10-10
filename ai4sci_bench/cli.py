@@ -831,9 +831,14 @@ def harbor_verify_cmd(task_dir: str, instance_dir: str, outputs_dir: str,
         JudgeAPIConfigurationError,
         resolve_judge_api_override,
     )
-    from ai4sci_bench.harbor_verify import HarborScoringError, verify_harbor_task
+    from ai4sci_bench.harbor_verify import (
+        HarborScoringError,
+        prepare_harbor_output,
+        verify_harbor_task,
+    )
 
     try:
+        prepare_harbor_output(task_dir, instance_dir, outputs_dir, out)
         override = resolve_judge_api_override(
             judge_api_base, judge_api_key_env, judge_api_protocol
         )
