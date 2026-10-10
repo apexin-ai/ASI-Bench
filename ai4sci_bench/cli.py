@@ -805,6 +805,33 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
         )
 
 
+@cli.group("harbor")
+def harbor_group() -> None:
+    """Export public seed31415 tasks for Harbor."""
+
+
+@harbor_group.command("export")
+@click.option("--task-dir", required=True, type=click.Path(file_okay=False))
+@click.option("--instance-dir", required=True, type=click.Path(file_okay=False))
+@click.option("--level", required=True, type=click.Choice(["b1", "b2", "b3", "b4"]))
+@click.option("--wheel", required=True, type=click.Path(dir_okay=False),
+              help="Wheel built from the current asibench revision")
+@click.option("--output-dir", required=True, type=click.Path(file_okay=False))
+def harbor_export_cmd(task_dir: str, instance_dir: str, level: str,
+                      wheel: str, output_dir: str) -> None:
+    """Export one materialized public task and a minimal registry.json."""
+    from ai4sci_bench.harbor_export import HarborExportError, export_harbor_task
+
+    try:
+        exported = export_harbor_task(
+            task_dir=task_dir, instance_dir=instance_dir, level=level,
+            wheel=wheel, output_dir=output_dir,
+        )
+    except HarborExportError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Harbor task: {exported}")
+
+
 @cli.command("harbor-verify")
 @click.option("--task-dir", required=True, type=click.Path(file_okay=False),
               help="Public task bundle with task_meta.yaml and task_eval.yaml")

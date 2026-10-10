@@ -213,6 +213,30 @@ and Judge API configuration.
 
 #### Harbor verifier
 
+Build a wheel from the current branch, pull a public instance, and export one
+level as a local Harbor dataset:
+
+```bash
+uv build --wheel --out-dir /tmp/asibench-wheel
+asibench task pull --repo seed31415 --tasks robotics.particle_filter \
+  --output-dir /tmp/asi-seed31415
+asibench harbor export \
+  --task-dir tasks/robotics/particle_filter \
+  --instance-dir /tmp/asi-seed31415/robotics.particle_filter__seed31415 \
+  --level b1 --wheel /tmp/asibench-wheel/asibench-0.1.6-py3-none-any.whl \
+  --output-dir /tmp/asi-harbor-b1
+harbor run -p /tmp/asi-harbor-b1/tasks/robotics-particle-filter-b1 -a nop
+```
+
+The export includes a minimal `registry.json`, a separate verifier image, and
+the wheel SHA-256. It accepts only a matching materialized seed31415 instance;
+its public reference and scorer bundle stay in `tests/`, outside the agent image.
+Generated datasets contain public prompts and references and must be kept out of
+the ASI-Bench Git repository. The generated Dockerfiles install dependencies
+from PyPI at build time; for an offline Docker host, prepare an equivalent local
+dependency image. `evaluation.runtime: task` needs a dedicated verifier image
+and is rejected by this initial exporter.
+
 `asibench harbor-verify` scores one already-materialized seed31415 instance in a
 Harbor verifier container. The task bundle must contain the public
 `task_meta.yaml` and `task_eval.yaml`, and the instance must contain its public

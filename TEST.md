@@ -397,6 +397,21 @@ rejection:
 uv run pytest -q tests/test_harbor_verify.py
 ```
 
+`harbor export` tests its seed31415 boundary, safe output paths, and separation
+of agent input from verifier reference:
+
+```bash
+uv run pytest -q tests/test_harbor_export.py
+```
+
+For a Docker smoke, export one public B1 task, run `harbor run -p <task> -a nop`
+and check one completed trial with reward 0. Add a local oracle solution that
+copies a known nonempty prediction into `/workspace`, then compare its Harbor
+`verifier/score_detail.json` with `asibench score` on the exact persisted
+`artifacts/workspace` bytes. Assert final/max score, gates, scorer details,
+and artifact SHA-256 match. A reference-backed oracle fixture verifies artifact
+transport and scoring, not agent solving quality.
+
 ```bash
 uv run pytest -q \
   tests/test_retired_features.py \
