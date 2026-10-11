@@ -75,6 +75,10 @@
   task 基础镜像，框架必须按当前 `agent_type` 单独叠加且只安装所选 CLI；无 agent
   时直接使用 task 基础镜像。agent image cache identity 必须绑定 task/base image、
   agent 类型与精确安装命令，produce-only result 也必须持久化原生 token cost。
+- `runtime.services` 是 OS sandbox 的可选、task 级运行期 Docker 服务声明：每实例创建
+  internal 网络，健康检查通过后才启动 agent，并在所有退出路径清理；服务不发布宿主端口，
+  仅 agent 按现有策略接入其 API/外网网络。服务镜像必须自带 Docker `HEALTHCHECK`；此功能
+  不提供 Portal 私有镜像存储/分发，隐藏规则必须留在 task 仓库之外的服务镜像中。
 - 持久化元数据的路径脱敏必须保留完整 HTTP(S) API endpoint，只替换 URL
   之外的宿主机绝对路径；agent 执行失败必须报告为 `attempt_status:
   execution_failed`，不得与 scorer 完成或低分混淆。sandbox 运行只在执行失败且

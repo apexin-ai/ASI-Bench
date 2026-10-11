@@ -221,6 +221,18 @@ uv run pytest -m integration -q \
   tests/test_os_sandbox_p1p2p3.py::TestTaskDockerfileAgentOverlayIntegration
 ```
 
+Task-declared `runtime.services` are opt-in and covered by mocked Docker tests:
+strict service schema validation, internal per-instance networking, service
+health readiness before agent start, inherited agent egress policy, and cleanup
+of service containers/networks. Existing tasks without services must continue
+using the one-shot `docker run --rm` path. Run the focused suite with:
+
+```bash
+uv run --frozen pytest -q tests/test_os_sandbox_p1p2p3.py::TestTaskServices \
+  tests/test_os_sandbox_p1p2p3.py::TestSecurityAdversarial \
+  tests/test_os_sandbox_adapters.py
+```
+
 ## Per-run harness home isolation (claude_code / kimi_code / codex)
 
 CLI harnesses keep session transcripts, history, and auto-memory under their

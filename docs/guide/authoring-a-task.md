@@ -52,6 +52,41 @@ settings, reference specifications, reference answers, and private solver
 assets stay private**. You do not manage this split yourself; the portal and
 maintainers handle it.
 
+### Optional interactive Docker services
+
+Tasks that require a private query API during solving can declare one or more
+Docker services under `runtime.services`. Services start for each instance,
+must pass the image's Docker `HEALTHCHECK` before the agent starts, and are
+removed with the agent container. Each instance gets a private internal Docker
+network; service ports are not published on the host. The agent receives a URL
+such as `ASIBENCH_SERVICE_SCHEDULER_URL=http://scheduler:8080`.
+At most two services can be declared; each is limited to 1 GiB memory, one CPU,
+and 512 processes.
+
+```yaml
+runtime:
+  services:
+    - name: scheduler
+      image: registry.example.org/benchmark/scheduler:local
+      port: 8080
+      command: ["python", "-m", "scheduler_api"]
+      startup_timeout_seconds: 90
+      environment:
+        QUERY_LIMIT: "60"
+```
+
+Service images are not task runtime files and are not bundled by `task pull`;
+make the image available to the Docker daemon (for a private registry, log in
+with Docker before running). Keep hidden rules and solver code inside the
+service image, never in the task repository, metadata, prompts, or mounted
+workspace. `environment` is public task configuration and must not contain
+secrets. This feature requires `--sandbox os`; other sandbox modes fail the task
+instead of silently running without the service. The Portal does not currently
+provide private image storage or distribute image credentials, so that part of
+an official deployment must be arranged by the platform separately. CLI agents
+using `AI4SCI_DOCKER_NETWORK` must use a connectable bridge network; Docker's
+special `host` and `none` modes cannot be combined with task services.
+
 ### The difficulty ladder (B1–B4)
 
 Every task provides four prompt levels of decreasing guidance:

@@ -706,6 +706,162 @@ class TestSecurityAdversarial:
         assert "--tmpfs" in cmd
 
 
+class TestTaskServices:
+    def test_task_services_validate_contract_and_defaults(self):
+        services = OSSandbox._task_services({
+            "runtime": {"services": [{"name": "scheduler", "image": "local/scheduler:dev", "port": 8080}]}
+        })
+        assert services[0]["startup_timeout_seconds"] == 60
+        assert services[0]["environment"] == {}
+
+    @pytest.mark.parametrize("service, message", [
+        ({"name": "Scheduler", "image": "scheduler", "port": 80}, "DNS-safe"),
+        ({"name": "scheduler", "image": "scheduler", "port": True}, "integer"),
+        ({"name": "scheduler", "image": "scheduler", "port": 80, "ports": [80]}, "unsupported fields"),
+        ({"name": "scheduler", "image": "scheduler", "port": 80, "environment": {"ASIBENCH_SERVICE_X_URL": "x"}}, "reserved"),
+    ])
+    def test_task_services_reject_unsafe_or_unknown_configuration(self, service, message):
+        with pytest.raises(ValueError, match=message):
+            OSSandbox._task_services({"runtime": {"services": [service]}})
+
+    def test_agent_container_can_be_created_without_changing_run_default(self):
+        sandbox = OSSandbox(Path("/fake"), image_builder=MagicMock())
+        kwargs = dict(
+            container_name="agent", image="agent:latest", workspace=Path("/tmp/ws"),
+            exec_args=["agent"], requires_network=False, requires_gpu=False,
+        )
+        run_cmd = sandbox._build_docker_cmd(**kwargs)
+        create_cmd = sandbox._build_docker_cmd(**kwargs, docker_action="create")
+        assert run_cmd[1] == "run" and "--rm" in run_cmd
+        assert create_cmd[1] == "create" and "--rm" not in create_cmd
+
+    @patch("ai4sci_bench.runner.os_sandbox.subprocess.run")
+    def test_task_service_requires_image_healthcheck(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="missing", stderr="")
+        sandbox = OSSandbox(Path("/fake"), image_builder=MagicMock())
+        with pytest.raises(RuntimeError, match="must declare a Docker HEALTHCHECK"):
+            sandbox._wait_for_task_service(
+                {"name": "scheduler", "startup_timeout_seconds": 1},
+                "scheduler-container",
+            )
+
+    def test_service_mode_preserves_only_policy_allowed_external_network(self, monkeypatch):
+        monkeypatch.delenv("AI4SCI_DOCKER_NETWORK", raising=False)
+        assert OSSandbox._agent_external_network(
+            agent_type="codex", requires_network=False, allow_external_tools=False,
+        ) == "bridge"
+        assert OSSandbox._agent_external_network(
+            agent_type=None, requires_network=False, allow_external_tools=False,
+        ) is None
+        assert OSSandbox._agent_external_network(
+            agent_type=None, requires_network=True, allow_external_tools=True,
+        ) == "bridge"
+
+    def test_service_mode_rejects_docker_special_network_modes(self, monkeypatch):
+        monkeypatch.setenv("AI4SCI_DOCKER_NETWORK", "host")
+        with pytest.raises(ValueError, match="connectable bridge network"):
+            OSSandbox._agent_external_network(
+                agent_type="codex", requires_network=False, allow_external_tools=False,
+            )
+
+    @patch("ai4sci_bench.runner.os_sandbox.subprocess.run")
+    def test_run_agent_connects_services_before_start_and_cleans_up(
+        self, mock_run, tmp_path, monkeypatch,
+    ):
+        monkeypatch.delenv("AI4SCI_DOCKER_NETWORK", raising=False)
+        image_builder = MagicMock()
+        image_builder.ensure_image.return_value = "agent:latest"
+        image_builder.get_image_identity.return_value = "sha256:agent"
+        sandbox = OSSandbox(tmp_path, image_builder=image_builder)
+        sandbox._create_task_service_network = MagicMock(return_value="private-network")
+        def start_services(_services, _network, containers):
+            containers.append("scheduler-container")
+            return {"ASIBENCH_SERVICE_SCHEDULER_URL": "http://scheduler:8080"}
+
+        sandbox._start_task_services = MagicMock(side_effect=start_services)
+        sandbox._remove_container = MagicMock()
+        sandbox._remove_task_service_network = MagicMock()
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="agent-id", stderr=""),
+            MagicMock(returncode=0, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout="done", stderr=""),
+        ]
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        metadata = {"runtime": {"services": [{"name": "scheduler", "image": "scheduler", "port": 8080}]}}
+
+        result = sandbox.run_agent(
+            metadata, agent_cmd=["agent"], workspace=workspace, timeout=30,
+            agent_type="codex",
+        )
+
+        assert result[0] is True
+        commands = [call.args[0] for call in mock_run.call_args_list]
+        assert commands[0][1] == "create"
+        assert commands[0][commands[0].index("--network") + 1] == "private-network"
+        assert commands[1][:4] == ["docker", "network", "connect", "bridge"]
+        assert commands[2][:3] == ["docker", "start", "--attach"]
+        assert commands[2][3].startswith("ai4sci-agent-")
+        assert "ASIBENCH_SERVICE_SCHEDULER_URL=http://scheduler:8080" in commands[0]
+        sandbox._remove_container.assert_any_call("scheduler-container")
+        sandbox._remove_task_service_network.assert_called_once_with("private-network")
+
+    def test_run_agent_cleans_network_when_service_startup_fails(self, tmp_path):
+        image_builder = MagicMock()
+        image_builder.ensure_image.return_value = "agent:latest"
+        image_builder.get_image_identity.return_value = "sha256:agent"
+        sandbox = OSSandbox(tmp_path, image_builder=image_builder)
+        sandbox._create_task_service_network = MagicMock(return_value="private-network")
+        sandbox._start_task_services = MagicMock(side_effect=RuntimeError("health check failed"))
+        sandbox._remove_container = MagicMock()
+        sandbox._remove_task_service_network = MagicMock()
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        result = sandbox.run_agent(
+            {"runtime": {"services": [{"name": "scheduler", "image": "scheduler", "port": 8080}]}},
+            agent_cmd=["agent"], workspace=workspace, timeout=30,
+        )
+
+        assert result[0] is False
+        assert "health check failed" in result[1]
+        sandbox._remove_task_service_network.assert_called_once_with("private-network")
+        sandbox._remove_container.assert_called_once()
+
+    @patch("ai4sci_bench.runner.os_sandbox.subprocess.run")
+    def test_execute_python_uses_declared_services(self, mock_run, tmp_path):
+        image_builder = MagicMock()
+        image_builder.ensure_image.return_value = "task:latest"
+        image_builder.get_image_identity.return_value = "sha256:task"
+        sandbox = OSSandbox(tmp_path, image_builder=image_builder)
+        sandbox._create_task_service_network = MagicMock(return_value="private-network")
+        sandbox._start_task_services = MagicMock(return_value={
+            "ASIBENCH_SERVICE_SCHEDULER_URL": "http://scheduler:8080",
+        })
+        sandbox._remove_container = MagicMock()
+        sandbox._remove_task_service_network = MagicMock()
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="container-id", stderr=""),
+            MagicMock(returncode=0, stdout="done", stderr=""),
+        ]
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        result = sandbox.execute_python(
+            {"runtime": {"services": [{"name": "scheduler", "image": "scheduler", "port": 8080}]}},
+            workspace=workspace, code_file="solve.py", timeout=30,
+        )
+
+        assert result[0] is True
+        assert mock_run.call_args_list[0].args[0][1] == "create"
+        assert mock_run.call_args_list[1].args[0][1:3] == ["start", "--attach"]
+        assert mock_run.call_args_list[1].args[0][3].startswith("ai4sci-os-")
+        sandbox._remove_container.assert_called_once_with(
+            mock_run.call_args_list[1].args[0][3]
+        )
+        sandbox._remove_task_service_network.assert_called_once_with("private-network")
+
+
 # ============================================================
 # P2: Adapter containerized test patterns
 # ============================================================

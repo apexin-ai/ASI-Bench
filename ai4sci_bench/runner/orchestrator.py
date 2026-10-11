@@ -661,6 +661,22 @@ class BenchmarkOrchestrator:
 
     def _run_agent(self, instance: TaskInstance) -> AgentOutput:
         """Run the agent on one instance."""
+        runtime = instance.metadata.get("runtime", {})
+        if isinstance(runtime, dict) and runtime.get("services") and self.config.sandbox != "os":
+            message = (
+                "Task runtime.services require --sandbox os so the framework can "
+                "isolate and manage their Docker lifecycle."
+            )
+            return AgentOutput(
+                instance_id=instance.instance_id,
+                output_dir=instance.workspace_dir,
+                code_files=[],
+                data_files=[],
+                log=message,
+                execution_time_seconds=0.0,
+                status=RunStatus.FAILED,
+                error_message=message,
+            )
         try:
             return self.agent.solve(instance)
         except Exception as e:
