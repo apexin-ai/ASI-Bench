@@ -1371,3 +1371,21 @@ Lessons — process:
   real server, multi-line Tcl via exec, cwd clean); Claude Code and Codex B1-B4
   each 4 × 100 (400/400), verifier 4/4.
 - Commits: L1 `c396ccc`, `24fa71c`; L2 `54bf973`, `key=value` fix `5e4ef51`.
+
+## 2026-10-14: Prepare PyPI 0.2.0 release
+
+- Problem: PyPI 0.1.6 predates 55 repository commits, including parallel local
+  scoring, evaluator/runtime fixes, model-call evidence, Responses protocol
+  repairs, and task-level Docker services.
+- Resolution: prepare a minor release with package metadata, runtime version,
+  lockfile, and version assertion synchronized at 0.2.0; document upgrading and
+  the version synchronization checklist. Publish through the existing GitHub
+  Release workflow after required CI passes.
+- Verification: baseline Python 3.12 and updated Python 3.11 locked offline
+  suites each passed 3784 tests, with 8 skipped and 24 deselected. Wheel and
+  sdist passed strict Twine validation and public-boundary inspection. A clean
+  Python 3.11 wheel installation passed both CLI help/version checks and matched
+  package metadata with runtime version 0.2.0.
+- Prevention: validate runtime and distribution versions together, inspect both
+  public artifacts, and wait for required CI before creating the release tag.
+- Version bump commit: `679f91663f1ed6ab059a24bf00bfcbb8188919a9`.
