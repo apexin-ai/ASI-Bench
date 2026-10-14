@@ -748,6 +748,12 @@ BenchFlow attempt.
 
 ## Documentation
 
+Maintainer handoffs for the integration work are available in Chinese:
+[BenchFlow](docs/handoff/benchflow.md) and [Harbor](docs/handoff/harbor.md).
+They record the code branches, verified scope, remaining work, and rebuilding
+steps after retirement of the original personal server. Harbor functionality
+remains on `feat/harbor-verify`; these documents do not merge it into main.
+
 Installation, execution, submission, task contribution, catalog, and
 leaderboard documentation are available on the
 [ASI-Bench website](https://asibench.apexin.ai/).

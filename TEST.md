@@ -1,5 +1,12 @@
 # Testing
 
+Integration handoff documents live in `docs/handoff/benchflow.md` and
+`docs/handoff/harbor.md`. When updating them, verify branch/module availability
+and command options against the named source revision; distinguish historical
+server experiments from tests rerun during the handoff. The original server
+and its runtime resources are retired. The Harbor-specific tests exist on
+`feat/harbor-verify`, not on the current main branch.
+
 Install development dependencies and run the default offline-safe suite. Tests
 marked `integration` or `e2e` are excluded so a configured API key or installed
 agent CLI cannot trigger paid/external execution unexpectedly:
