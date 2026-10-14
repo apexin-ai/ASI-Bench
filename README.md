@@ -114,6 +114,12 @@ pip install asibench
 asibench --help
 ```
 
+To upgrade to the 0.2.0 release:
+
+```bash
+pip install --upgrade 'asibench==0.2.0'
+```
+
 **Requirements:** Python 3.11 or later. The default installation is lightweight
 and includes everything needed to download public benchmark instances. For
 local agent execution or task authoring, install the optional full stack:

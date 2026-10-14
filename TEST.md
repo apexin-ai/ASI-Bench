@@ -525,7 +525,9 @@ distribution is `asibench`, the preferred and compatibility CLI entry points
 both target `ai4sci_bench.cli:main`, and the import package remains
 `ai4sci_bench`.
 
-Before a release, build and inspect both artifacts:
+Before a release, keep `pyproject.toml`, `ai4sci_bench.__version__`, `uv.lock`,
+and the version assertion in `tests/test_parallel.py` synchronized (0.2.0 for
+this release). Run `uv run --frozen pytest -q`, then build and inspect both artifacts:
 
 ```bash
 uv build
