@@ -1389,3 +1389,22 @@ Lessons — process:
 - Prevention: validate runtime and distribution versions together, inspect both
   public artifacts, and wait for required CI before creating the release tag.
 - Version bump commit: `679f91663f1ed6ab059a24bf00bfcbb8188919a9`.
+
+## 2026-10-14 — BenchFlow / Harbor handoff after server retirement
+
+- Problem: integration knowledge lived in ignored local stage notes that still
+  referred to a retired personal server, credentials, images, and job artifacts.
+- Resolution: add standalone Chinese handoffs in `docs/handoff/benchflow.md`
+  and `docs/handoff/harbor.md`, with branch identities, historical evidence
+  limits, rebuilding steps, outstanding work, and explicit resource retirement.
+- Findings: Harbor modules remain on `feat/harbor-verify`, absent from main;
+  BenchFlow native integration is in the personal fork branch `feat/asi-bench`.
+  Its parity CLI remains a stub despite historical manual comparisons.
+- Verification: before/after focused tests passed: BenchFlow adapter 67, ASI
+  manifest bridge 14, Harbor branch 20. Markdown fences, local links, retirement
+  notices, and whitespace checks passed. No live model, Docker, or full suite
+  validation was performed for this documentation-only change.
+- Prevention: preserve integration code in team-controlled repositories; treat
+  historical summaries as context and rebuild evidence on team infrastructure.
+  Do not merge feature implementation merely to publish handoff documents.
+- Handoff documentation commit: `1a8ca3f`.
