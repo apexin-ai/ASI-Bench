@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import secrets
 import shlex
 import shutil
 import tempfile
@@ -18,7 +19,7 @@ class HarborExportError(ValueError):
     """The public instance or task bundle cannot be exported safely."""
 
 
-_DOCKER_SCORERS = {
+_ISOLATED_EXECUTOR_SCORERS = {
     "cmos_opamp_testbench_judge",
     "max3sat_solver_total_score",
     "tsp_solver_total_score",
@@ -124,8 +125,10 @@ def audit_harbor_tasks(
                 blockers.append("runtime.dockerfile uses COPY/ADD; custom build context is not exported")
             else:
                 notes.append(f"agent image uses task runtime Dockerfile {dockerfile_name}")
-        if _DOCKER_SCORERS & scorer_names:
-            blockers.append("scorer launches Docker; Harbor verifier has no nested Docker runtime")
+        if _ISOLATED_EXECUTOR_SCORERS & scorer_names:
+            notes.append(
+                "untrusted solver or ngspice rerun uses a constrained Harbor executor sidecar; verifier references and Judge credentials stay outside it"
+            )
         uses_judge = bool(
             {"llm_judge", "vlm_judge", "cmos_opamp_testbench_judge"} & scorer_names
         )
@@ -265,6 +268,13 @@ def export_harbor_task(
         or item.get("mode") in {"llm_judge", "vlm_judge"}
         for item in _walk_mappings(evaluation.get("evaluation", {}))
     )
+    scorer_names = {
+        item.get(key)
+        for item in _walk_mappings(evaluation.get("evaluation", {}))
+        for key in ("scorer", "mode")
+        if isinstance(item.get(key), str)
+    }
+    uses_executor = bool(_ISOLATED_EXECUTOR_SCORERS & scorer_names)
     if uses_judge:
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", judge_api_key_env):
             raise HarborExportError("judge_api_key_env must be an environment-variable name")
@@ -287,6 +297,7 @@ def export_harbor_task(
 
     slug = task_id.replace(".", "-").replace("_", "-") + f"-{level}"
     task_name = f"asi-bench/{slug}"
+    executor_token = secrets.token_urlsafe(32) if uses_executor else None
     exported = destination / "tasks" / slug
     try:
         (exported / "environment" / "workspace").mkdir(parents=True)
@@ -304,7 +315,11 @@ def export_harbor_task(
                 if source.is_symlink() or not source.is_file():
                     raise HarborExportError(f"Unsafe instance file: {source}")
                 shutil.copy2(source, exported / "tests" / "instance" / instance.name / filename)
-        for source in (meta_path, eval_path, *sorted(task.glob("*_scorer.py")), *sorted(task.glob("*_eval_runtime.py"))):
+        task_sources = [meta_path, eval_path, *sorted(task.glob("*_scorer.py")), *sorted(task.glob("*_eval_runtime.py"))]
+        tsp_common = task / "tsp_common.py"
+        if task_id == "computer_science.euclidean_tsp_tour_optimization":
+            task_sources.append(tsp_common)
+        for source in task_sources:
             if source.is_symlink() or not source.is_file():
                 raise HarborExportError(f"Unsafe task bundle file: {source}")
             shutil.copy2(source, exported / "tests" / "task_bundle" / source.name)
@@ -339,6 +354,15 @@ def export_harbor_task(
                     f"ASIBENCH_JUDGE_API_BASE = {_toml_string(judge_api_base)}\n"
                     f"ASIBENCH_JUDGE_API_PROTOCOL = {_toml_string(judge_api_protocol or '')}\n"
                 )
+        if uses_executor:
+            task_toml += (
+                "\n[verifier.env]\n"
+                if not uses_judge else ""
+            )
+            task_toml += (
+                'ASIBENCH_HARBOR_EXECUTOR_URL = "http://executor:8080"\n'
+                f'ASIBENCH_HARBOR_EXECUTOR_TOKEN = {_toml_string(executor_token or "")}\n'
+            )
         (exported / "task.toml").write_text(task_toml, encoding="utf-8")
         base = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
         packages = " ".join(shlex.quote(p) for p in runtime_packages)
@@ -400,6 +424,58 @@ def export_harbor_task(
             encoding="utf-8",
         )
         (exported / "tests" / "test.sh").chmod(0o755)
+        if uses_executor:
+            executor_dir = exported / "tests" / "executor"
+            executor_dir.mkdir()
+            server_source = Path(__file__).with_name("runner") / "harbor_executor_server.py"
+            shutil.copy2(server_source, executor_dir / "server.py")
+            (executor_dir / "Dockerfile").write_text(
+                "FROM python:3.12-slim\n"
+                "RUN apt-get update && apt-get install -y --no-install-recommends ngspice "
+                "&& rm -rf /var/lib/apt/lists/* && pip install --no-cache-dir 'numpy>=1.24'\n"
+                "COPY server.py /opt/harbor-executor.py\n"
+                "EXPOSE 8080\n"
+                'CMD ["python", "/opt/harbor-executor.py"]\n',
+                encoding="utf-8",
+            )
+            (exported / "tests" / "docker-compose.yaml").write_text(
+                "services:\n"
+                "  main:\n"
+                "    depends_on:\n"
+                "      executor:\n"
+                "        condition: service_healthy\n"
+                "    networks:\n"
+                "      - default\n"
+                "      - asibench-executor\n"
+                "  executor:\n"
+                "    build: ./executor\n"
+                "    environment:\n"
+                f"      ASIBENCH_HARBOR_EXECUTOR_TOKEN: {_toml_string(executor_token or '')}\n"
+                "    networks:\n"
+                "      - asibench-executor\n"
+                "    read_only: true\n"
+                "    tmpfs:\n"
+                "      - /tmp:rw,exec,nosuid,nodev,size=2g,mode=1777\n"
+                "    cap_drop:\n"
+                "      - ALL\n"
+                "    cap_add:\n"
+                "      - SETUID\n"
+                "      - SETGID\n"
+                "    security_opt:\n"
+                "      - no-new-privileges:true\n"
+                "    cpus: 1.0\n"
+                "    mem_limit: 4g\n"
+                "    pids_limit: 1024\n"
+                "    healthcheck:\n"
+                '      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(\'http://127.0.0.1:8080/health\', timeout=2)"]\n'
+                "      interval: 2s\n"
+                "      timeout: 3s\n"
+                "      retries: 30\n"
+                "networks:\n"
+                "  asibench-executor:\n"
+                "    internal: true\n",
+                encoding="utf-8",
+            )
         (destination / "registry.json").write_text(
             json.dumps([{
                 "name": "asi-bench", "version": "seed31415",
@@ -413,6 +489,7 @@ def export_harbor_task(
                 "level": level, "asibench_wheel": wheel_path.name,
                 "asibench_wheel_sha256": hashlib.sha256(wheel_path.read_bytes()).hexdigest(),
                 "official": False,
+                "isolated_executor_required": uses_executor,
             }, indent=2) + "\n", encoding="utf-8"
         )
     except Exception:
@@ -524,6 +601,9 @@ def export_harbor_dataset(
                 "skipped_count": len(blocked),
                 "wheel": wheel_path.name,
                 "wheel_sha256": report["wheel_sha256"],
+                "isolated_executor_task_count": sum(
+                    item.get("isolated_executor_required", False) for item in manifests
+                ),
                 "tasks": manifests,
             }, indent=2) + "\n",
             encoding="utf-8",

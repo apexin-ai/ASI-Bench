@@ -408,20 +408,25 @@ uv run pytest -q tests/test_harbor_export.py
 
 The batch exporter tests strict rejection of blocked cells, partial exports
 with a compatibility report, unsupported Python runtime constraints, and the
-empty-dataset boundary. Aggregation tests ensure completed zero scores count
-while evaluator-invalid results are excluded:
+empty-dataset boundary. Solver/CMOS export tests check the isolated executor
+service, internal network, and verifier environment wiring. Executor server
+tests cover process-result and artifact transport plus path traversal rejection.
+Aggregation tests ensure completed zero scores count while evaluator-invalid
+results are excluded:
 
 ```bash
 uv run pytest -q tests/test_harbor_export.py tests/test_harbor_verify.py \
-  tests/test_harbor_aggregate.py
+  tests/test_harbor_aggregate.py tests/test_harbor_executor_server.py
 ```
 
 For a materialized public seed31415 tree, audit all 60 tasks across B1-B4 with
 `asibench harbor audit`, then use `asibench harbor export-batch --skip-unsupported`
-to produce the compatible subset. The current static profile blocks TSP,
-Max3SAT, and CMOS op-amp because their scorers launch Docker from the verifier.
-The audit's ready count is an exporter compatibility result, not agent
-performance validation. Harbor `score_detail.json` files can be summarized with
+to produce the compatible subset. TSP, Max3SAT, and CMOS op-amp use a constrained
+Compose executor sidecar and require Harbor support for
+`tests/docker-compose.yaml`. TSP and Max3SAT passed local Harbor Oracle smoke
+runs with their solver-validity gates passing; CMOS requires a configured Judge
+API for an end-to-end candidate evaluation. The audit's ready count is an exporter compatibility result, not
+agent performance validation. Harbor `score_detail.json` files can be summarized with
 `asibench harbor aggregate --details-dir <jobs> --out <report.json>`.
 
 For a Docker smoke, export one public B1 task, run `harbor run -p <task> -a nop`

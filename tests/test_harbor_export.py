@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -141,7 +142,11 @@ def _write_batch_task(root: Path, task_id: str, *, scorer: str = "file_match") -
 
 def test_batch_export_creates_one_registry_and_records_skipped_cells(tmp_path: Path) -> None:
     _write_batch_task(tmp_path, "math.alpha")
-    _write_batch_task(tmp_path, "math.beta", scorer="tsp_solver_total_score")
+    blocked_task, _ = _write_batch_task(tmp_path, "math.beta")
+    (blocked_task / "task_meta.yaml").write_text(
+        (blocked_task / "task_meta.yaml").read_text().replace(">=3.11", ">=3.13"),
+        encoding="utf-8",
+    )
     wheel = tmp_path / "asibench-0.1.6-py3-none-any.whl"
     wheel.write_bytes(b"wheel")
     report = audit_harbor_tasks(
@@ -173,14 +178,87 @@ def test_batch_export_creates_one_registry_and_records_skipped_cells(tmp_path: P
     assert len(list((tmp_path / "partial/tasks").iterdir())) == 1
 
 
-def test_audit_identifies_python_runtime_and_nested_docker_blockers(tmp_path: Path) -> None:
+def test_audit_identifies_python_runtime_blocker_and_executor_support(tmp_path: Path) -> None:
     task, _ = _write_batch_task(tmp_path, "math.runtime", scorer="tsp_solver_total_score")
     meta = (task / "task_meta.yaml").read_text().replace(">=3.11", ">=3.13")
     (task / "task_meta.yaml").write_text(meta, encoding="utf-8")
     report = audit_harbor_tasks(tasks_dir=tmp_path / "tasks", levels=("b1",))
     assert report["blocked_count"] == 1
     assert any("Python 3.12" in item for item in report["cells"][0]["blockers"])
-    assert any("nested Docker" in item for item in report["cells"][0]["blockers"])
+    assert any("executor sidecar" in item for item in report["cells"][0]["notes"])
+
+
+def test_tsp_export_adds_isolated_executor_compose_service(tmp_path: Path) -> None:
+    task, instance, wheel = _inputs(tmp_path)
+    task_id = "computer_science.euclidean_tsp_tour_optimization"
+    (task / "task_meta.yaml").write_text(
+        (task / "task_meta.yaml").read_text().replace("math.example", task_id),
+        encoding="utf-8",
+    )
+    (task / "task_eval.yaml").write_text(
+        f"task_id: {task_id}\nevaluation:\n  scoring:\n"
+        "  - scorer: tsp_solver_total_score\n",
+        encoding="utf-8",
+    )
+    (task / "tsp_common.py").write_text("VALUE = 1\n", encoding="utf-8")
+    materialized = tmp_path / "instances" / f"{task_id}__seed31415"
+    materialized.parent.mkdir()
+    instance.rename(materialized)
+    exported = export_harbor_task(
+        task_dir=task, instance_dir=materialized,
+        level="b1", wheel=wheel, output_dir=tmp_path / "tsp-export",
+    )
+    compose = (exported / "tests/docker-compose.yaml").read_text()
+    assert "asibench-executor" in compose
+    assert "internal: true" in compose
+    assert "cap_drop" in compose
+    assert "healthcheck" in compose
+    assert (exported / "tests/executor/server.py").is_file()
+    assert (exported / "tests/task_bundle/tsp_common.py").is_file()
+    task_toml = (exported / "task.toml").read_text()
+    verifier_env = tomllib.loads(task_toml)["verifier"]["env"]
+    assert verifier_env["ASIBENCH_HARBOR_EXECUTOR_URL"] == "http://executor:8080"
+    assert len(verifier_env["ASIBENCH_HARBOR_EXECUTOR_TOKEN"]) >= 32
+
+
+@pytest.mark.parametrize(
+    ("task_id", "scorer"),
+    [
+        ("computer_science.max3sat_assignment_optimization", "max3sat_solver_total_score"),
+        ("electrical_engineering.cmos_opamp_design", "cmos_opamp_testbench_judge"),
+    ],
+)
+def test_solver_and_cmos_exports_use_isolated_executor(
+    tmp_path: Path, task_id: str, scorer: str,
+) -> None:
+    task, instance, wheel = _inputs(tmp_path)
+    (task / "task_meta.yaml").write_text(
+        (task / "task_meta.yaml").read_text().replace("math.example", task_id),
+        encoding="utf-8",
+    )
+    (task / "task_eval.yaml").write_text(
+        f"task_id: {task_id}\nevaluation:\n  scoring:\n"
+        f"  - scorer: {scorer}\n",
+        encoding="utf-8",
+    )
+    materialized = tmp_path / "instances" / f"{task_id}__seed31415"
+    materialized.parent.mkdir()
+    instance.rename(materialized)
+
+    exported = export_harbor_task(
+        task_dir=task, instance_dir=materialized, level="b1", wheel=wheel,
+        output_dir=tmp_path / "task-export",
+    )
+
+    assert (exported / "tests/executor/server.py").is_file()
+    compose = (exported / "tests/docker-compose.yaml").read_text()
+    assert "internal: true" in compose
+    assert "cap_drop" in compose
+    verifier_env = tomllib.loads((exported / "task.toml").read_text())["verifier"]["env"]
+    assert verifier_env["ASIBENCH_HARBOR_EXECUTOR_URL"] == "http://executor:8080"
+    if scorer == "cmos_opamp_testbench_judge":
+        assert "ASIBENCH_JUDGE_API_KEY_ENV" in verifier_env
+        assert "OPENAI_API_KEY" in verifier_env
 
 
 def test_audit_reports_unsupported_python_specifier_as_blocker(tmp_path: Path) -> None:
@@ -193,7 +271,11 @@ def test_audit_reports_unsupported_python_specifier_as_blocker(tmp_path: Path) -
 
 
 def test_batch_export_refuses_all_blocked_dataset(tmp_path: Path) -> None:
-    _write_batch_task(tmp_path, "math.blocked", scorer="tsp_solver_total_score")
+    task, _ = _write_batch_task(tmp_path, "math.blocked")
+    (task / "task_meta.yaml").write_text(
+        (task / "task_meta.yaml").read_text().replace(">=3.11", ">=3.13"),
+        encoding="utf-8",
+    )
     wheel = tmp_path / "asibench-0.1.6-py3-none-any.whl"
     wheel.write_bytes(b"wheel")
     with pytest.raises(HarborExportError, match="No compatible task-level cells"):

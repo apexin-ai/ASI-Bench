@@ -6,6 +6,8 @@ import json
 import math
 import os
 import platform
+import sys
+import traceback
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -211,6 +213,7 @@ def verify_harbor_task(
             with _redact_scoring_logs(secret):
                 result = _evaluate_score_job(job, judge_api_override)
     except Exception as exc:
+        print(_redact_secret(traceback.format_exc(), secret), file=sys.stderr)
         result = _worker_failure_result(
             job,
             error_type=type(exc).__name__,

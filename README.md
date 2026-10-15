@@ -264,13 +264,18 @@ asibench harbor aggregate \
 Batch export writes one registry, an `export_manifest.json`, and a per-cell
 `compatibility_report.json`. Without `--skip-unsupported`, any blocked cell
 stops the export. With it, only ready cells are exported and every omitted cell
-is recorded. The current profile rejects scorers that launch Docker from inside
-the verifier; this applies to TSP, Max3SAT, and CMOS op-amp tasks. Supporting
-those tasks requires a separate execution design because mounting the host
-Docker socket into verifier containers expands their host access. The current
-seed31415 audit found 228 of 240 task-level cells statically exportable and 12
-blocked (the four levels of each of those three tasks). This is a partial
-dataset, not a validated full-60-task Harbor run.
+is recorded. TSP, Max3SAT, and CMOS op-amp scorer reruns use a constrained
+Harbor Compose executor on a private internal network; the verifier sends only
+the submission and required simulation inputs, while references and Judge
+credentials remain in the verifier. Harbor deployments must support the task's
+`tests/docker-compose.yaml`. The 60-task seed31415 audit found 240 of 240
+task-level cells statically exportable. TSP and Max3SAT passed Docker Oracle
+smokes with their solver-validity gates passing and 0 exceptions; this validates
+execution and scoring transport, not solver quality. CMOS export and
+Judge/executor configuration are covered
+by tests, but a real CMOS Judge evaluation still requires the configured Judge
+API and a candidate submission. These results do not establish a full-60-task
+agent run.
 
 For Judge-scored tasks, the exporter writes a Harbor verifier environment
 reference such as `${OPENAI_API_KEY}`; the secret itself is never written to

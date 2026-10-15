@@ -77,6 +77,10 @@
   依赖与 Python 约束，评分时复用镜像依赖且保持 fresh worker 隔离。
   verifier 基础依赖含 NumPy；agent/verifier 镜像标识绑定 task、instance，verifier
   另绑定 wheel SHA-256。
+- TSP、Max3SAT、CMOS op-amp 的 Harbor scorer 通过 `tests/docker-compose.yaml`
+  中受限、内部网络 executor sidecar 执行 solver/ngspice；不得挂载宿主 Docker
+  socket。该路径要求 Harbor Docker Compose provider，并且不等同完整 agent
+  评测验证。
 - BenchFlow 运行 `asibench run` 必须启用 `--fail-on-agent-error`，且不得只信任
   进程退出码；manifest schema v2 必须提供对应 run result JSON，并将
   `prediction_dir` 绑定到其 persisted outputs，分别报告 attempt 与 evaluation 状态。
