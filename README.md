@@ -241,6 +241,49 @@ base scorers, even when the task declares no runtime packages. The verifier
 reuses those installed packages in an isolated scoring worker, so scoring does
 not install packages at runtime.
 
+To audit and export a complete materialized seed31415 tree across multiple
+levels, use the batch commands. The audit is static: `ready` means the task fits
+this exporter profile, not that an agent has solved or passed the task.
+
+```bash
+asibench harbor audit \
+  --tasks-dir /path/to/ASI-Bench/tasks \
+  --instances-dir /tmp/asi-seed31415 \
+  --out /tmp/asi-harbor-audit.json
+asibench harbor export-batch \
+  --tasks-dir /path/to/ASI-Bench/tasks \
+  --instances-dir /tmp/asi-seed31415 \
+  --wheel /tmp/asibench-wheel/asibench-0.1.6-py3-none-any.whl \
+  --output-dir /tmp/asi-harbor-seed31415 \
+  --skip-unsupported
+harbor run -p /tmp/asi-harbor-seed31415 --agent nop
+asibench harbor aggregate \
+  --details-dir /tmp/harbor-jobs --out /tmp/asi-harbor-scores.json
+```
+
+Batch export writes one registry, an `export_manifest.json`, and a per-cell
+`compatibility_report.json`. Without `--skip-unsupported`, any blocked cell
+stops the export. With it, only ready cells are exported and every omitted cell
+is recorded. The current profile rejects scorers that launch Docker from inside
+the verifier; this applies to TSP, Max3SAT, and CMOS op-amp tasks. Supporting
+those tasks requires a separate execution design because mounting the host
+Docker socket into verifier containers expands their host access. The current
+seed31415 audit found 228 of 240 task-level cells statically exportable and 12
+blocked (the four levels of each of those three tasks). This is a partial
+dataset, not a validated full-60-task Harbor run.
+
+For Judge-scored tasks, the exporter writes a Harbor verifier environment
+reference such as `${OPENAI_API_KEY}`; the secret itself is never written to
+the task package. Set the named variable in the environment where Harbor runs,
+and use `--judge-api-key-env` to choose another variable name. Optional
+`--judge-api-base` and `--judge-api-protocol` must be provided together. The
+verifier container needs network access to the Judge API.
+
+The aggregate command reads Harbor `score_detail.json` files, includes completed
+zero scores, and excludes evaluator-invalid trials. Its summary is non-official
+and reports both included and excluded trial counts. It does not establish
+agent quality or solve missing-task compatibility.
+
 `asibench harbor-verify` scores one already-materialized seed31415 instance in a
 Harbor verifier container. The task bundle must contain the public
 `task_meta.yaml` and `task_eval.yaml`, and the instance must contain its public

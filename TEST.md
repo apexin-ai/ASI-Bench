@@ -406,6 +406,24 @@ runtime path and reject its use outside the dedicated image:
 uv run pytest -q tests/test_harbor_export.py
 ```
 
+The batch exporter tests strict rejection of blocked cells, partial exports
+with a compatibility report, unsupported Python runtime constraints, and the
+empty-dataset boundary. Aggregation tests ensure completed zero scores count
+while evaluator-invalid results are excluded:
+
+```bash
+uv run pytest -q tests/test_harbor_export.py tests/test_harbor_verify.py \
+  tests/test_harbor_aggregate.py
+```
+
+For a materialized public seed31415 tree, audit all 60 tasks across B1-B4 with
+`asibench harbor audit`, then use `asibench harbor export-batch --skip-unsupported`
+to produce the compatible subset. The current static profile blocks TSP,
+Max3SAT, and CMOS op-amp because their scorers launch Docker from the verifier.
+The audit's ready count is an exporter compatibility result, not agent
+performance validation. Harbor `score_detail.json` files can be summarized with
+`asibench harbor aggregate --details-dir <jobs> --out <report.json>`.
+
 For a Docker smoke, export one public B1 task, run `harbor run -p <task> -a nop`
 and check one completed trial with reward 0. Add a local oracle solution that
 copies a known nonempty prediction into `/workspace`, then compare its Harbor

@@ -817,8 +817,14 @@ def harbor_group() -> None:
 @click.option("--wheel", required=True, type=click.Path(dir_okay=False),
               help="Wheel built from the current asibench revision")
 @click.option("--output-dir", required=True, type=click.Path(file_okay=False))
+@click.option("--judge-api-key-env", default="OPENAI_API_KEY", show_default=True,
+              help="Host environment variable forwarded to verifier for Judge tasks")
+@click.option("--judge-api-base", default=None, help="Optional Judge API endpoint")
+@click.option("--judge-api-protocol", default=None,
+              type=click.Choice(["native", "openai"], case_sensitive=False))
 def harbor_export_cmd(task_dir: str, instance_dir: str, level: str,
-                      wheel: str, output_dir: str) -> None:
+                      wheel: str, output_dir: str, judge_api_key_env: str,
+                      judge_api_base: str | None, judge_api_protocol: str | None) -> None:
     """Export one materialized public task and a minimal registry.json."""
     from ai4sci_bench.harbor_export import HarborExportError, export_harbor_task
 
@@ -826,10 +832,126 @@ def harbor_export_cmd(task_dir: str, instance_dir: str, level: str,
         exported = export_harbor_task(
             task_dir=task_dir, instance_dir=instance_dir, level=level,
             wheel=wheel, output_dir=output_dir,
+            judge_api_key_env=judge_api_key_env,
+            judge_api_base=judge_api_base,
+            judge_api_protocol=judge_api_protocol,
         )
     except HarborExportError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Harbor task: {exported}")
+
+
+def _harbor_levels(value: str) -> tuple[str, ...]:
+    levels = tuple(part.strip().lower() for part in value.split(",") if part.strip())
+    if not levels or len(levels) != len(set(levels)):
+        raise click.BadParameter("provide one or more unique levels")
+    invalid = set(levels) - {"b1", "b2", "b3", "b4"}
+    if invalid:
+        raise click.BadParameter(f"unsupported level(s): {', '.join(sorted(invalid))}")
+    return levels
+
+
+@harbor_group.command("audit")
+@click.option("--tasks-dir", required=True, type=click.Path(file_okay=False, exists=True))
+@click.option("--instances-dir", type=click.Path(file_okay=False, exists=True))
+@click.option("--levels", default="b1,b2,b3,b4", show_default=True)
+@click.option("--out", type=click.Path(dir_okay=False), help="Optional JSON report path")
+def harbor_audit_cmd(tasks_dir: str, instances_dir: str | None, levels: str, out: str | None) -> None:
+    """Audit task-level Harbor compatibility without exporting task data."""
+    from ai4sci_bench.harbor_export import HarborExportError, audit_harbor_tasks
+
+    try:
+        report = audit_harbor_tasks(
+            tasks_dir=tasks_dir,
+            instances_dir=instances_dir,
+            levels=_harbor_levels(levels),
+        )
+    except HarborExportError as exc:
+        raise click.ClickException(str(exc)) from exc
+    rendered = json.dumps(report, indent=2, ensure_ascii=False)
+    if out:
+        Path(out).write_text(rendered + "\n", encoding="utf-8")
+        click.echo(f"Compatibility report: {out}")
+    else:
+        click.echo(rendered)
+    click.echo(
+        f"Ready: {report['ready_count']} / {report['cell_count']} cells; "
+        f"blocked: {report['blocked_count']}"
+    )
+    if report["blocked_count"]:
+        raise click.ClickException("Some task-level cells are not compatible with this Harbor export profile")
+
+
+@harbor_group.command("export-batch")
+@click.option("--tasks-dir", required=True, type=click.Path(file_okay=False, exists=True))
+@click.option("--instances-dir", required=True, type=click.Path(file_okay=False, exists=True))
+@click.option("--levels", default="b1,b2,b3,b4", show_default=True)
+@click.option("--wheel", required=True, type=click.Path(dir_okay=False, exists=True))
+@click.option("--output-dir", required=True, type=click.Path(file_okay=False))
+@click.option("--skip-unsupported", is_flag=True, help="Export ready cells and record blocked cells")
+@click.option("--judge-api-key-env", default="OPENAI_API_KEY", show_default=True,
+              help="Host environment variable forwarded to verifier for Judge tasks")
+@click.option("--judge-api-base", default=None, help="Optional Judge API endpoint")
+@click.option("--judge-api-protocol", default=None,
+              type=click.Choice(["native", "openai"], case_sensitive=False))
+def harbor_export_batch_cmd(
+    tasks_dir: str, instances_dir: str, levels: str,
+    wheel: str, output_dir: str, skip_unsupported: bool,
+    judge_api_key_env: str, judge_api_base: str | None,
+    judge_api_protocol: str | None,
+) -> None:
+    """Export all compatible materialized tasks and levels into one dataset."""
+    from ai4sci_bench.harbor_export import HarborExportError, export_harbor_dataset
+
+    try:
+        report = export_harbor_dataset(
+            tasks_dir=tasks_dir,
+            instances_dir=instances_dir,
+            levels=_harbor_levels(levels),
+            wheel=wheel,
+            output_dir=output_dir,
+            skip_unsupported=skip_unsupported,
+            judge_api_key_env=judge_api_key_env,
+            judge_api_base=judge_api_base,
+            judge_api_protocol=judge_api_protocol,
+        )
+    except HarborExportError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        f"Exported {report['exported_count']} task-level cells to {output_dir}; "
+        f"skipped {report['skipped_count']} blocked cells."
+    )
+    click.echo(f"Compatibility report: {Path(output_dir) / 'compatibility_report.json'}")
+
+
+@harbor_group.command("aggregate")
+@click.option("--details-dir", required=True, type=click.Path(file_okay=False, exists=True))
+@click.option("--out", required=True, type=click.Path(dir_okay=False))
+def harbor_aggregate_cmd(details_dir: str, out: str) -> None:
+    """Aggregate verifier details while excluding evaluator failures."""
+    from ai4sci_bench.harbor_aggregate import (
+        HarborAggregateError,
+        aggregate_harbor_score_details,
+        find_harbor_score_details,
+    )
+
+    try:
+        report = aggregate_harbor_score_details(find_harbor_score_details(details_dir))
+    except HarborAggregateError as exc:
+        raise click.ClickException(str(exc)) from exc
+    Path(out).write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if report["valid_count"]:
+        click.echo(
+            f"Total: {report['total_score']:.2f} / {report['total_max_score']:.2f} "
+            f"({report['mean_percent']:.2f}%)"
+        )
+    else:
+        click.echo("Total: no valid scores")
+    click.echo(f"Included {report['valid_count']} / {report['trial_count']} trials; "
+               f"evaluator errors: {report['scorer_error_count']}")
+    click.echo(f"Report: {out}")
+    if report["scorer_error_count"]:
+        raise click.ClickException("Some evaluator-invalid trials were excluded from the aggregate")
 
 
 @cli.command("harbor-verify")
