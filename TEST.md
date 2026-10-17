@@ -406,6 +406,56 @@ must synchronize workers through persistent handshake files and use generous
 timeouts only as a safety net: a fresh scoring worker's cold start (including
 the litellm import) can exceed 3 s on CI.
 
+`harbor-verify` takes one public seed31415 task bundle and materialized instance.
+Its tests compare the same nonempty prediction with `asibench score`, verify an
+empty submission is a valid zero, and check evaluator failures, unsafe artifact
+merges, stale reward removal (including invalid Judge selectors), and seed42
+rejection:
+
+```bash
+uv run pytest -q tests/test_harbor_verify.py
+```
+
+`harbor export` tests its seed31415 boundary, safe output paths, separation
+of agent input from verifier reference, and the dedicated verifier image for
+`evaluation.runtime: task`. The `harbor-verify` tests cover the preinstalled
+runtime path and reject its use outside the dedicated image:
+
+```bash
+uv run pytest -q tests/test_harbor_export.py
+```
+
+The batch exporter tests strict rejection of blocked cells, partial exports
+with a compatibility report, unsupported Python runtime constraints, and the
+empty-dataset boundary. Solver/CMOS export tests check the isolated executor
+service, internal network, and verifier environment wiring. Executor server
+tests cover process-result and artifact transport plus path traversal rejection.
+Aggregation tests ensure completed zero scores count while evaluator-invalid
+results are excluded:
+
+```bash
+uv run pytest -q tests/test_harbor_export.py tests/test_harbor_verify.py \
+  tests/test_harbor_aggregate.py tests/test_harbor_executor_server.py
+```
+
+For a materialized public seed31415 tree, audit all 60 tasks across B1-B4 with
+`asibench harbor audit`, then use `asibench harbor export-batch --skip-unsupported`
+to produce the compatible subset. TSP, Max3SAT, and CMOS op-amp use a constrained
+Compose executor sidecar and require Harbor support for
+`tests/docker-compose.yaml`. TSP and Max3SAT passed local Harbor Oracle smoke
+runs with their solver-validity gates passing; CMOS requires a configured Judge
+API for an end-to-end candidate evaluation. The audit's ready count is an exporter compatibility result, not
+agent performance validation. Harbor `score_detail.json` files can be summarized with
+`asibench harbor aggregate --details-dir <jobs> --out <report.json>`.
+
+For a Docker smoke, export one public B1 task, run `harbor run -p <task> -a nop`
+and check one completed trial with reward 0. Add a local oracle solution that
+copies a known nonempty prediction into `/workspace`, then compare its Harbor
+`verifier/score_detail.json` with `asibench score` on the exact persisted
+`artifacts/workspace` bytes. Assert final/max score, gates, scorer details,
+and artifact SHA-256 match. A reference-backed oracle fixture verifies artifact
+transport and scoring, not agent solving quality.
+
 ```bash
 uv run pytest -q \
   tests/test_retired_features.py \

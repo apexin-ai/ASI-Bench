@@ -66,6 +66,10 @@ def _load_task_metadata_for_scoring() -> Dict[str, Any]:
 
 
 def _run_ngspice_in_task_image(work_dir: Path, netlist_name: str, timeout_s: int) -> subprocess.CompletedProcess[str]:
+    if os.environ.get("ASIBENCH_HARBOR_EXECUTOR_URL"):
+        from ai4sci_bench.runner.harbor_executor import run_ngspice
+
+        return run_ngspice(work_dir, netlist_name, timeout_s)
     metadata = _load_task_metadata_for_scoring()
     builder = TaskImageBuilder(_repo_root())
     image = builder.ensure_image(metadata)

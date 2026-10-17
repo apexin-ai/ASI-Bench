@@ -66,6 +66,21 @@
   目录和 task bundle。`benchflow-score` 不得接受 seed 生成请求、调用
   `generate_gt.py` 或评分 seed42。输出必须包含固定 schema 的 ScoreDetail、
   artifact SHA-256、scorer/task revision 和 harness/model/effort provenance。
+- Harbor `harbor-verify` 只评分已物化的公开 seed31415 task/instance 与恢复的 agent
+  产物，复用本地评分的隔离合并、task runtime 和错误分类。成功时仅写归一化
+  `reward.json` 及完整 `score_detail.json`；评估器故障必须删除旧 reward、写诊断并
+  非零退出。缺产物仍是有效零分；`--out` 与全部输入目录分离，seed42 拒绝。
+- Harbor `harbor export` 当前只导出单个已物化的 seed31415 task/level；需要当前
+  框架 wheel，输出含独立 verifier、最小 registry 和 wheel SHA-256。reference 与
+  scorer 只进入 verifier 镜像，导出目录含公开 prompt/reference，不入本仓库。
+  `evaluation.runtime: task` 使用专用 verifier 镜像，在构建时安装并检查 task
+  依赖与 Python 约束，评分时复用镜像依赖且保持 fresh worker 隔离。
+  verifier 基础依赖含 NumPy；agent/verifier 镜像标识绑定 task、instance，verifier
+  另绑定 wheel SHA-256。
+- TSP、Max3SAT、CMOS op-amp 的 Harbor scorer 通过 `tests/docker-compose.yaml`
+  中受限、内部网络 executor sidecar 执行 solver/ngspice；不得挂载宿主 Docker
+  socket。该路径要求 Harbor Docker Compose provider，并且不等同完整 agent
+  评测验证。
 - BenchFlow 运行 `asibench run` 必须启用 `--fail-on-agent-error`，且不得只信任
   进程退出码；manifest schema v2 必须提供对应 run result JSON，并将
   `prediction_dir` 绑定到其 persisted outputs，分别报告 attempt 与 evaluation 状态。

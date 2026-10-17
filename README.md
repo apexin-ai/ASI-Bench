@@ -217,13 +217,113 @@ See the **[BenchFlow integration guide](docs/guide/benchflow.md)** for the
 end-to-end run, schema-v2 manifest, scoring command, status fields, retries,
 and Judge API configuration.
 
+#### Harbor verifier
+
+Build a wheel from the current branch, pull a public instance, and export one
+level as a local Harbor dataset:
+
+```bash
+uv build --wheel --out-dir /tmp/asibench-wheel
+asibench task pull --repo seed31415 --tasks robotics.particle_filter \
+  --output-dir /tmp/asi-seed31415
+asibench harbor export \
+  --task-dir tasks/robotics/particle_filter \
+  --instance-dir /tmp/asi-seed31415/robotics.particle_filter__seed31415 \
+  --level b1 --wheel /tmp/asibench-wheel/asibench-0.1.6-py3-none-any.whl \
+  --output-dir /tmp/asi-harbor-b1
+harbor run -p /tmp/asi-harbor-b1/tasks/robotics-particle-filter-b1 -a nop
+```
+
+The export includes a minimal `registry.json`, a separate verifier image, and
+the wheel SHA-256. It accepts only a matching materialized seed31415 instance;
+its public reference and scorer bundle stay in `tests/`, outside the agent image.
+Generated datasets contain public prompts and references and must be kept out of
+the ASI-Bench Git repository. The generated Dockerfiles install dependencies
+from PyPI at build time; for an offline Docker host, prepare an equivalent local
+dependency image. For `evaluation.runtime: task`, the exporter builds a
+task-specific verifier image with the declared packages and checks its Python
+version at build time. Verifier images also include NumPy for the framework's
+base scorers, even when the task declares no runtime packages. The verifier
+reuses those installed packages in an isolated scoring worker, so scoring does
+not install packages at runtime.
+
+To audit and export a complete materialized seed31415 tree across multiple
+levels, use the batch commands. The audit is static: `ready` means the task fits
+this exporter profile, not that an agent has solved or passed the task.
+
+```bash
+asibench harbor audit \
+  --tasks-dir /path/to/ASI-Bench/tasks \
+  --instances-dir /tmp/asi-seed31415 \
+  --out /tmp/asi-harbor-audit.json
+asibench harbor export-batch \
+  --tasks-dir /path/to/ASI-Bench/tasks \
+  --instances-dir /tmp/asi-seed31415 \
+  --wheel /tmp/asibench-wheel/asibench-0.1.6-py3-none-any.whl \
+  --output-dir /tmp/asi-harbor-seed31415 \
+  --skip-unsupported
+harbor run -p /tmp/asi-harbor-seed31415 --agent nop
+asibench harbor aggregate \
+  --details-dir /tmp/harbor-jobs --out /tmp/asi-harbor-scores.json
+```
+
+Batch export writes one registry, an `export_manifest.json`, and a per-cell
+`compatibility_report.json`. Without `--skip-unsupported`, any blocked cell
+stops the export. With it, only ready cells are exported and every omitted cell
+is recorded. TSP, Max3SAT, and CMOS op-amp scorer reruns use a constrained
+Harbor Compose executor on a private internal network; the verifier sends only
+the submission and required simulation inputs, while references and Judge
+credentials remain in the verifier. Harbor deployments must support the task's
+`tests/docker-compose.yaml`. The 60-task seed31415 audit found 240 of 240
+task-level cells statically exportable. TSP and Max3SAT passed Docker Oracle
+smokes with their solver-validity gates passing and 0 exceptions; this validates
+execution and scoring transport, not solver quality. CMOS export and
+Judge/executor configuration are covered
+by tests, but a real CMOS Judge evaluation still requires the configured Judge
+API and a candidate submission. These results do not establish a full-60-task
+agent run.
+
+For Judge-scored tasks, the exporter writes a Harbor verifier environment
+reference such as `${OPENAI_API_KEY}`; the secret itself is never written to
+the task package. Set the named variable in the environment where Harbor runs,
+and use `--judge-api-key-env` to choose another variable name. Optional
+`--judge-api-base` and `--judge-api-protocol` must be provided together. The
+verifier container needs network access to the Judge API.
+
+The aggregate command reads Harbor `score_detail.json` files, includes completed
+zero scores, and excludes evaluator-invalid trials. Its summary is non-official
+and reports both included and excluded trial counts. It does not establish
+agent quality or solve missing-task compatibility.
+
+`asibench harbor-verify` scores one already-materialized seed31415 instance in a
+Harbor verifier container. The task bundle must contain the public
+`task_meta.yaml` and `task_eval.yaml`, and the instance must contain its public
+`reference/`. Point `--outputs-dir` at the artifact root restored by Harbor:
+
+```bash
+asibench harbor-verify \
+  --task-dir /tests/task_bundle \
+  --instance-dir /tests/instance/physics.example__seed31415 \
+  --outputs-dir /workspace \
+  --prompt-level b1 \
+  --out /logs/verifier
+```
+
+The command writes only `reward.json` (`reward = final_score / 100`) and
+`score_detail.json` under `--out`. The score is non-official. Missing agent
+artifacts are a valid zero-score submission; evaluator failures write diagnostics,
+remove any stale reward, and exit non-zero. It stages immutable instance `data/`
+and restored artifacts with the same safety checks and scorer logic as
+`asibench score`. `--out` must be separate from all input directories. This
+entry point does not generate instances or support seed42.
+
 #### Configure an LLM/VLM Judge API
 
 Some seed31415 scoring contracts use an LLM or VLM Judge. Judge credentials and
 transport overrides are runtime operator settings: keep the secret in an
 ignored `.env` file or process environment, never in `task_eval.yaml` or a
-command-line argument. `score`, `run-score`, and `benchflow-score` expose the
-same options:
+command-line argument. `score`, `run-score`, `benchflow-score`, and
+`harbor-verify` expose the same options:
 
 | Option | Environment equivalent | Meaning |
 |---|---|---|
