@@ -1,5 +1,12 @@
 # Testing
 
+Integration handoff documents live in `docs/handoff/benchflow.md` and
+`docs/handoff/harbor.md`. When updating them, verify branch/module availability
+and command options against the named source revision; distinguish historical
+server experiments from tests rerun during the handoff. The original server
+and its runtime resources are retired. The Harbor-specific tests exist on
+`feat/harbor-verify`, not on the current main branch.
+
 Install development dependencies and run the default offline-safe suite. Tests
 marked `integration` or `e2e` are excluded so a configured API key or installed
 agent CLI cannot trigger paid/external execution unexpectedly:
@@ -219,6 +226,18 @@ agent homes together with ngspice, the task Python environment, and the pi CLI:
 ```bash
 uv run pytest -m integration -q \
   tests/test_os_sandbox_p1p2p3.py::TestTaskDockerfileAgentOverlayIntegration
+```
+
+Task-declared `runtime.services` are opt-in and covered by mocked Docker tests:
+strict service schema validation, internal per-instance networking, service
+health readiness before agent start, inherited agent egress policy, and cleanup
+of service containers/networks. Existing tasks without services must continue
+using the one-shot `docker run --rm` path. Run the focused suite with:
+
+```bash
+uv run --frozen pytest -q tests/test_os_sandbox_p1p2p3.py::TestTaskServices \
+  tests/test_os_sandbox_p1p2p3.py::TestSecurityAdversarial \
+  tests/test_os_sandbox_adapters.py
 ```
 
 ## Per-run harness home isolation (claude_code / kimi_code / codex)
@@ -563,7 +582,9 @@ distribution is `asibench`, the preferred and compatibility CLI entry points
 both target `ai4sci_bench.cli:main`, and the import package remains
 `ai4sci_bench`.
 
-Before a release, build and inspect both artifacts:
+Before a release, keep `pyproject.toml`, `ai4sci_bench.__version__`, `uv.lock`,
+and the version assertion in `tests/test_parallel.py` synchronized (0.2.0 for
+this release). Run `uv run --frozen pytest -q`, then build and inspect both artifacts:
 
 ```bash
 uv build

@@ -1296,29 +1296,6 @@ Lessons — process:
 - AWS 2026-10-07: Claude Code and Codex B1–B4 each 4 × 100 (400/400), verifier 4/4.
 - Commit: `e7a8ab3`.
 
-## 2026-10-10: Harbor seed31415 verifier entry point
-
-- A Harbor verifier needs a single materialized task/instance/artifact entry
-  point, without an `asibench run` result JSON. `harbor-verify` constructs one
-  local-scoring job and reuses its staging, scorer, runtime, and failure paths.
-  A missing artifact stays a valid zero; a missing reference, unsafe merge, or
-  broken evaluator leaves no reward and writes `evaluation_invalid` details.
-- The verifier must delete a stale reward before scoring, keep `--out` separate
-  from all read-only inputs (including symlink aliases), and retain task bundle
-  and artifact hashes when a copied bundle has no Git metadata. Future Harbor
-  export work should restore only declared artifacts into the verifier.
-- Tests: 13 Harbor-specific cases passed; affected scoring/CLI suite 217 passed;
-  full offline suite 3782 passed, 7 skipped, 26 deselected (24 default
-  integration/E2E exclusions plus 2 pre-existing macOS-only failures). Wheel
-  and sdist built with the new module included.
-- Commit: `545f7c193365243b85b6ccd2feb97fdf8f31a6a8`.
-- Follow-up: CLI Judge selector validation originally ran before stale reward
-  removal, so an invalid key setting could leave a previous score visible.
-  Shared `prepare_harbor_output` now checks directory separation and clears
-  reward/diagnostics before selector validation; keep a regression case for
-  every new pre-evaluation failure path. 14 Harbor cases and 218 affected
-  tests passed; wheel/sdist rebuilt. Commit: `c311c2530e6762d3872a2eb99747c3cac6c84456`.
-
 ## 2026-10-07: atomictoolkit smoke (L1)
 
 - One manifest id (`atomictoolkit`, catalog `ase`) for the catalog's `ase` and
@@ -1395,39 +1372,39 @@ Lessons — process:
   each 4 × 100 (400/400), verifier 4/4.
 - Commits: L1 `c396ccc`, `24fa71c`; L2 `54bf973`, `key=value` fix `5e4ef51`.
 
-## 2026-10-10: Harbor B1 export and local Docker smoke
+## 2026-10-14: Prepare PyPI 0.2.0 release
 
-- Exporting from public task metadata plus a materialized seed31415 instance kept
-  prompt/data in the agent image and reference/scorer only in the separate
-  verifier. The first Docker run failed because the host's Docker proxy could
-  not reach PyPI; a host-prepared Linux ARM64 dependency image let the local
-  smoke proceed without changing Harbor.
-- The first verifier run exposed an undeclared practical dependency: importing
-  scoring needs `litellm`. Add it to the generated verifier Dockerfile. Nop then
-  completed with reward 0; a local reference-backed artifact replay completed
-  with reward 0.55. The replay verifies transport and scoring, not agent solving.
-- Re-scoring Harbor's six persisted artifact files with `asibench score` gave
-  55/100 and identical gate/scorer details and artifact SHA-256. Keep this
-  same-file comparison for future real agent trials. Related tests: 71 passed.
-- Commit: `acd2f46`.
+- Problem: PyPI 0.1.6 predates 55 repository commits, including parallel local
+  scoring, evaluator/runtime fixes, model-call evidence, Responses protocol
+  repairs, and task-level Docker services.
+- Resolution: prepare a minor release with package metadata, runtime version,
+  lockfile, and version assertion synchronized at 0.2.0; document upgrading and
+  the version synchronization checklist. Publish through the existing GitHub
+  Release workflow after required CI passes.
+- Verification: baseline Python 3.12 and updated Python 3.11 locked offline
+  suites each passed 3784 tests, with 8 skipped and 24 deselected. Wheel and
+  sdist passed strict Twine validation and public-boundary inspection. A clean
+  Python 3.11 wheel installation passed both CLI help/version checks and matched
+  package metadata with runtime version 0.2.0.
+- Prevention: validate runtime and distribution versions together, inspect both
+  public artifacts, and wait for required CI before creating the release tag.
+- Version bump commit: `679f91663f1ed6ab059a24bf00bfcbb8188919a9`.
 
-## 2026-10-10: Harbor P1 five-task offline export and parity
+## 2026-10-14 — BenchFlow / Harbor handoff after server retirement
 
-- The MPSC task declares `evaluation.runtime: task`; Harbor needs a dedicated
-  verifier image with task packages installed at build time and a Python-version
-  check. Keep scoring in a fresh worker while reusing those installed packages.
-  The generic verifier also needs NumPy even when task metadata omits it.
-- Five public seed31415 B1 tasks passed Harbor `nop` (valid zero), missing-reference
-  failure cleanup, and byte-for-byte replay of historical predictions. Independent
-  `asibench score` matched each replay's artifact hashes, total, gates, and scorer
-  details. Replays establish scoring parity, not new agent capability.
-- A particle replay once ran a stale homotopy `test.sh` from the verifier image;
-  preserve the failed job, inspect image labels and script, then force a rebuild
-  and recheck the same-file comparison. Record wheel and Dockerfile hashes so
-  image reuse can be diagnosed without exposing predictions.
-- Focused tests: 29 passed. Full suite under restricted network: 3759 passed,
-  9 skipped, 24 deselected, 26 failed, 5 errors; the first failure tried to
-  fetch PyPI while constructing an unrelated task sandbox. Do not report it as
-  a green full-suite run.
-- Commit: `61bdfb4`.
-
+- Problem: integration knowledge lived in ignored local stage notes that still
+  referred to a retired personal server, credentials, images, and job artifacts.
+- Resolution: add standalone Chinese handoffs in `docs/handoff/benchflow.md`
+  and `docs/handoff/harbor.md`, with branch identities, historical evidence
+  limits, rebuilding steps, outstanding work, and explicit resource retirement.
+- Findings: Harbor modules remain on `feat/harbor-verify`, absent from main;
+  BenchFlow native integration is in the personal fork branch `feat/asi-bench`.
+  Its parity CLI remains a stub despite historical manual comparisons.
+- Verification: before/after focused tests passed: BenchFlow adapter 67, ASI
+  manifest bridge 14, Harbor branch 20. Markdown fences, local links, retirement
+  notices, and whitespace checks passed. No live model, Docker, or full suite
+  validation was performed for this documentation-only change.
+- Prevention: preserve integration code in team-controlled repositories; treat
+  historical summaries as context and rebuild evidence on team infrastructure.
+  Do not merge feature implementation merely to publish handoff documents.
+- Handoff documentation commit: `1a8ca3f`.

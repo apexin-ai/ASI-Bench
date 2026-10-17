@@ -457,3 +457,20 @@ class TestSequentialRunnerFaultIsolation:
         assert len(failed_results) == 1
         assert failed_results[0].instance_id == "inst_1"
         assert failed_results[0].final_score == 0.0
+
+
+def test_task_services_reject_non_os_execution_before_calling_agent(tmp_path):
+    from types import SimpleNamespace
+    from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator
+
+    instance = _make_instance(tmp_path=tmp_path)
+    instance.metadata["runtime"] = {"services": [{"name": "scheduler"}]}
+    orchestrator = BenchmarkOrchestrator.__new__(BenchmarkOrchestrator)
+    orchestrator.config = SimpleNamespace(sandbox="none")
+    orchestrator.agent = MagicMock()
+
+    result = orchestrator._run_agent(instance)
+
+    assert result.status == RunStatus.FAILED
+    assert "runtime.services require --sandbox os" in result.error_message
+    orchestrator.agent.solve.assert_not_called()

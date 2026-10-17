@@ -53,6 +53,12 @@ PROXY_ENV_KEYS = (
     "NO_PROXY",
 )
 
+_SERVICE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
+_SERVICE_ENV_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+_SERVICE_KEYS = {
+    "name", "image", "port", "command", "startup_timeout_seconds", "environment",
+}
+
 
 class OSSandbox:
     """Run code or agent commands inside a Docker container with task-scoped images.
@@ -118,6 +124,7 @@ class OSSandbox:
         allow_external_tools: bool = False,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         """Execute one Python file in the task image."""
+        services = self._task_services(task_metadata)
         image = self.image_builder.ensure_image(task_metadata)
         image_identity = self.image_builder.get_image_identity(image)
         container_name = f"ai4sci-os-{uuid.uuid4().hex[:12]}"
@@ -135,48 +142,28 @@ class OSSandbox:
         # Workspace audit: snapshot before
         pre_snapshot = self._snapshot_workspace(workspace) if self.enable_workspace_audit else None
 
-        cmd = self._build_docker_cmd(
-            container_name=container_name,
+        requires_network = bool(task_metadata.get("difficulty", {}).get("requires_network"))
+        requires_gpu = bool(task_metadata.get("difficulty", {}).get("requires_gpu"))
+        outcome = self._run_task_container(
+            task_metadata,
+            services=services,
             image=image,
+            image_identity=image_identity,
+            container_name=container_name,
             workspace=workspace,
             exec_args=["python", f"/workspace/{Path(code_file).name}"],
-            requires_network=bool(task_metadata.get("difficulty", {}).get("requires_network")),
-            requires_gpu=bool(task_metadata.get("difficulty", {}).get("requires_gpu")),
+            timeout=timeout,
+            requires_network=requires_network,
+            requires_gpu=requires_gpu,
             allow_external_tools=allow_external_tools,
+            agent_type=None,
+            timeout_label="OS sandbox execution",
         )
-
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout + 30,
-            )
-            log = result.stdout + ("\n" + result.stderr if result.stderr else "")
-
-            # Workspace audit: diff after
-            if pre_snapshot is not None:
-                audit = self._diff_workspace(pre_snapshot, workspace)
-                if audit:
-                    logger.info("Workspace audit: %s", audit)
-
-            return (
-                result.returncode == 0,
-                log,
-                result.stdout,
-                result.stderr,
-                image_identity,
-            )
-        except subprocess.TimeoutExpired as exc:
-            self._stop_container(container_name)
-            return False, f"OS sandbox execution timed out ({timeout}s)", exc.stdout or "", exc.stderr or "", image_identity
-        except Exception as exc:
-            self._kill_container(container_name)
-            return False, f"OS sandbox execution error: {exc}", None, None, image_identity
-        finally:
-            self._remove_container(container_name)
+        if pre_snapshot is not None:
+            audit = self._diff_workspace(pre_snapshot, workspace)
+            if audit:
+                logger.info("Workspace audit: %s", audit)
+        return outcome
 
     def run_agent(
         self,
@@ -210,6 +197,7 @@ class OSSandbox:
         Returns:
             Tuple of (success, log, stdout, stderr, image_identity).
         """
+        services = self._task_services(task_metadata)
         image = self.image_builder.ensure_image(task_metadata, agent_type=agent_type)
         image_identity = self.image_builder.get_image_identity(image)
         container_name = f"ai4sci-agent-{uuid.uuid4().hex[:12]}"
@@ -229,22 +217,100 @@ class OSSandbox:
 
         requires_network = bool(task_metadata.get("difficulty", {}).get("requires_network"))
         requires_gpu = bool(task_metadata.get("difficulty", {}).get("requires_gpu"))
-
-        cmd = self._build_docker_cmd(
-            container_name=container_name,
+        outcome = self._run_task_container(
+            task_metadata,
+            services=services,
             image=image,
+            image_identity=image_identity,
+            container_name=container_name,
             workspace=workspace,
             exec_args=agent_cmd,
+            timeout=timeout,
             requires_network=requires_network,
             requires_gpu=requires_gpu,
+            allow_external_tools=allow_external_tools,
             agent_type=agent_type,
             extra_env=extra_env,
-            allow_external_tools=allow_external_tools,
             extra_mounts=extra_mounts,
-            stdin_open=stdin_input is not None,
+            stdin_input=stdin_input,
+            timeout_label="OS sandbox agent execution",
         )
+        if pre_snapshot is not None:
+            audit = self._diff_workspace(pre_snapshot, workspace)
+            if audit:
+                logger.info("Workspace audit: %s", audit)
+        return outcome
 
+    def _run_task_container(
+        self,
+        task_metadata: dict[str, Any],
+        *,
+        services: list[dict[str, Any]],
+        image: str,
+        image_identity: str,
+        container_name: str,
+        workspace: Path,
+        exec_args: list[str],
+        timeout: int,
+        requires_network: bool,
+        requires_gpu: bool,
+        allow_external_tools: bool,
+        agent_type: str | None,
+        extra_env: dict[str, str] | None = None,
+        extra_mounts: list[str] | None = None,
+        stdin_input: str | None = None,
+        timeout_label: str,
+    ) -> tuple[bool, str, str | None, str | None, str | None]:
+        service_network: str | None = None
+        service_containers: list[str] = []
         try:
+            service_env = dict(extra_env or {})
+            if services:
+                service_network = self._create_task_service_network()
+                service_env.update(
+                    self._start_task_services(services, service_network, service_containers)
+                )
+            external_network = (
+                self._agent_external_network(
+                    agent_type=agent_type,
+                    requires_network=requires_network,
+                    allow_external_tools=allow_external_tools,
+                )
+                if services else None
+            )
+            cmd = self._build_docker_cmd(
+                container_name=container_name,
+                image=image,
+                workspace=workspace,
+                exec_args=exec_args,
+                requires_network=requires_network,
+                requires_gpu=requires_gpu,
+                agent_type=agent_type,
+                extra_env=service_env,
+                allow_external_tools=allow_external_tools,
+                extra_mounts=extra_mounts,
+                stdin_open=stdin_input is not None,
+                docker_action="create" if services else "run",
+                docker_network_override=service_network,
+            )
+            if services:
+                created = subprocess.run(
+                    cmd, capture_output=True, text=True, encoding="utf-8",
+                    errors="replace", timeout=30,
+                )
+                if created.returncode != 0:
+                    raise RuntimeError(
+                        f"Could not create agent container: {(created.stderr or created.stdout).strip()}"
+                    )
+                if external_network:
+                    self._docker_control(
+                        ["docker", "network", "connect", external_network, container_name],
+                        timeout=20,
+                    )
+                cmd = ["docker", "start", "--attach"]
+                if stdin_input is not None:
+                    cmd.append("--interactive")
+                cmd.append(container_name)
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -255,28 +321,190 @@ class OSSandbox:
                 timeout=timeout + 30,
             )
             log = result.stdout + ("\n" + result.stderr if result.stderr else "")
-
-            # Workspace audit: diff after
-            if pre_snapshot is not None:
-                audit = self._diff_workspace(pre_snapshot, workspace)
-                if audit:
-                    logger.info("Workspace audit: %s", audit)
-
-            return (
-                result.returncode == 0,
-                log,
-                result.stdout,
-                result.stderr,
-                image_identity,
-            )
+            return result.returncode == 0, log, result.stdout, result.stderr, image_identity
         except subprocess.TimeoutExpired as exc:
             self._stop_container(container_name)
-            return False, f"OS sandbox agent execution timed out ({timeout}s)", exc.stdout or "", exc.stderr or "", image_identity
+            return False, f"{timeout_label} timed out ({timeout}s)", exc.stdout or "", exc.stderr or "", image_identity
         except Exception as exc:
             self._kill_container(container_name)
-            return False, f"OS sandbox agent execution error: {exc}", None, None, image_identity
+            return False, f"{timeout_label} error: {exc}", None, None, image_identity
         finally:
             self._remove_container(container_name)
+            for service_container in reversed(service_containers):
+                self._remove_container(service_container)
+            if service_network:
+                self._remove_task_service_network(service_network)
+
+    @staticmethod
+    def _task_services(task_metadata: dict[str, Any]) -> list[dict[str, Any]]:
+        runtime = task_metadata.get("runtime", {})
+        services = runtime.get("services", []) if isinstance(runtime, dict) else []
+        if not isinstance(services, list):
+            raise ValueError("runtime.services must be a list")
+        if len(services) > 2:
+            raise ValueError("runtime.services supports at most 2 services")
+
+        parsed: list[dict[str, Any]] = []
+        names: set[str] = set()
+        for index, service in enumerate(services):
+            if not isinstance(service, dict):
+                raise ValueError(f"runtime.services[{index}] must be a mapping")
+            unknown = set(service) - _SERVICE_KEYS
+            if unknown:
+                raise ValueError(
+                    f"runtime.services[{index}] has unsupported fields: {', '.join(sorted(unknown))}"
+                )
+            name, image, port = service.get("name"), service.get("image"), service.get("port")
+            if not isinstance(name, str) or not _SERVICE_NAME_RE.fullmatch(name):
+                raise ValueError(f"runtime.services[{index}].name must be a DNS-safe lowercase name")
+            if name in names:
+                raise ValueError(f"runtime.services contains duplicate name {name!r}")
+            names.add(name)
+            if not isinstance(image, str) or not image.strip() or any(c.isspace() for c in image):
+                raise ValueError(f"runtime.services[{index}].image must be a non-empty image reference")
+            if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+                raise ValueError(f"runtime.services[{index}].port must be an integer from 1 to 65535")
+            command = service.get("command")
+            if command is not None and (
+                not isinstance(command, list)
+                or not command
+                or any(not isinstance(arg, str) or "\0" in arg for arg in command)
+            ):
+                raise ValueError(f"runtime.services[{index}].command must be a non-empty string list")
+            startup_timeout = service.get("startup_timeout_seconds", 60)
+            if isinstance(startup_timeout, bool) or not isinstance(startup_timeout, int) or not 1 <= startup_timeout <= 300:
+                raise ValueError(
+                    f"runtime.services[{index}].startup_timeout_seconds must be from 1 to 300"
+                )
+            environment = service.get("environment", {})
+            if not isinstance(environment, dict) or any(
+                not isinstance(key, str)
+                or not _SERVICE_ENV_RE.fullmatch(key)
+                or key.startswith("ASIBENCH_SERVICE_")
+                or not isinstance(value, str)
+                or "\0" in value
+                for key, value in environment.items()
+            ):
+                raise ValueError(
+                    f"runtime.services[{index}].environment must map non-reserved variable names to strings"
+                )
+            parsed.append({
+                "name": name,
+                "image": image.strip(),
+                "port": port,
+                "command": command,
+                "startup_timeout_seconds": startup_timeout,
+                "environment": environment,
+            })
+        return parsed
+
+    def _create_task_service_network(self) -> str:
+        network = f"ai4sci-task-{uuid.uuid4().hex[:12]}"
+        self._docker_control(
+            ["docker", "network", "create", "--driver", "bridge", "--internal", network],
+            timeout=30,
+        )
+        return network
+
+    @staticmethod
+    def _agent_external_network(
+        *, agent_type: str | None, requires_network: bool, allow_external_tools: bool,
+    ) -> str | None:
+        needs_api_network = agent_type in {
+            "claude_code", "codex", "mimo_code", "kimi_code", "agy", "openhands",
+            "pi", "opencode",
+        }
+        if needs_api_network:
+            configured = os.environ.get("AI4SCI_DOCKER_NETWORK", "").strip()
+            if configured in {"host", "none"}:
+                raise ValueError(
+                    "runtime.services cannot be combined with AI4SCI_DOCKER_NETWORK="
+                    f"{configured}; use a connectable bridge network"
+                )
+            return configured or "bridge"
+        if requires_network and allow_external_tools:
+            return "bridge"
+        return None
+
+    def _start_task_services(
+        self,
+        services: list[dict[str, Any]],
+        network: str,
+        containers: list[str],
+    ) -> dict[str, str]:
+        environment: dict[str, str] = {}
+        for service in services:
+            name = service["name"]
+            container = f"ai4sci-svc-{uuid.uuid4().hex[:12]}"
+            cmd = [
+                "docker", "run", "--detach", "--name", container,
+                "--network", network, "--network-alias", name,
+                "--memory", "1g", "--cpus", "1.0", "--pids-limit", "512",
+            ]
+            for key, value in service["environment"].items():
+                cmd += ["-e", f"{key}={value}"]
+            cmd.append(service["image"])
+            if service["command"] is not None:
+                cmd.extend(service["command"])
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=60,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"Could not start task service {name!r}: {(result.stderr or result.stdout).strip()}"
+                )
+            containers.append(container)
+            self._wait_for_task_service(service, container)
+            environment[f"ASIBENCH_SERVICE_{name.upper().replace('-', '_')}_URL"] = (
+                f"http://{name}:{service['port']}"
+            )
+        return environment
+
+    def _wait_for_task_service(self, service: dict[str, Any], container: str) -> None:
+        deadline = time.monotonic() + service["startup_timeout_seconds"]
+        while time.monotonic() < deadline:
+            result = subprocess.run(
+                ["docker", "inspect", "--format", "{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}", container],
+                capture_output=True, text=True, timeout=10,
+            )
+            status = result.stdout.strip() if result.returncode == 0 else ""
+            if status == "healthy":
+                return
+            if status == "missing":
+                raise RuntimeError(
+                    f"Task service {service['name']!r} image must declare a Docker HEALTHCHECK"
+                )
+            if status == "unhealthy":
+                raise RuntimeError(f"Task service {service['name']!r} failed its Docker HEALTHCHECK")
+            running = subprocess.run(
+                ["docker", "inspect", "--format", "{{.State.Running}}", container],
+                capture_output=True, text=True, timeout=10,
+            )
+            if running.returncode == 0 and running.stdout.strip() == "false":
+                raise RuntimeError(f"Task service {service['name']!r} exited during startup")
+            time.sleep(0.5)
+        raise RuntimeError(
+            f"Task service {service['name']!r} did not become healthy within "
+            f"{service['startup_timeout_seconds']}s"
+        )
+
+    @staticmethod
+    def _docker_control(command: list[str], *, timeout: int) -> None:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+        if result.returncode != 0:
+            details = (result.stderr or result.stdout).strip()
+            raise RuntimeError(details or f"Docker command failed: {command[1:3]}")
+
+    @staticmethod
+    def _remove_task_service_network(network: str) -> None:
+        try:
+            subprocess.run(
+                ["docker", "network", "rm", network],
+                capture_output=True, text=True, timeout=20,
+            )
+        except Exception:
+            logger.warning("Could not remove task service network %s", network)
 
     # ------------------------------------------------------------------
     # Auth mount helpers
@@ -526,18 +754,21 @@ class OSSandbox:
         allow_external_tools: bool = False,
         extra_mounts: list[str] | None = None,
         stdin_open: bool = False,
+        docker_action: str = "run",
+        docker_network_override: str | None = None,
     ) -> list[str]:
         cmd = [
             "docker",
-            "run",
+            docker_action,
         ]
         if stdin_open:
             cmd.append("-i")
         cmd += [
             "--name",
             container_name,
-            "--rm",
         ]
+        if docker_action == "run":
+            cmd.append("--rm")
 
         # Fine-grained read-only mounts: data/, prompt.md, task_info.json as :ro
         # Output directory stays :rw.  When readonly_data is False (default),
@@ -620,6 +851,9 @@ class OSSandbox:
         if needs_api_network:
             for key, value in self._host_proxy_env().items():
                 cmd += ["-e", f"{key}={value}"]
+        if docker_network_override:
+            cmd += ["--network", docker_network_override]
+        elif needs_api_network:
             docker_network = os.environ.get("AI4SCI_DOCKER_NETWORK", "").strip()
             if docker_network:
                 cmd += ["--network", docker_network]
