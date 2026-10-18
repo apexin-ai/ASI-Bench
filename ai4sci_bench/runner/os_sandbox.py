@@ -177,6 +177,8 @@ class OSSandbox:
         allow_external_tools: bool = False,
         extra_mounts: list[str] | None = None,
         stdin_input: str | None = None,
+        mcp_servers: dict | None = None,
+        mcp_runtime: dict | None = None,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         """Run an arbitrary agent command inside the task container.
 
@@ -198,9 +200,15 @@ class OSSandbox:
             Tuple of (success, log, stdout, stderr, image_identity).
         """
         services = self._task_services(task_metadata)
+        if mcp_servers:
+            from ai4sci_bench.runner.mcp_sandbox import validate_os_mcp
+            validate_os_mcp(mcp_servers, task_metadata)
         image = self.image_builder.ensure_image(task_metadata, agent_type=agent_type)
         image_identity = self.image_builder.get_image_identity(image)
         container_name = f"ai4sci-agent-{uuid.uuid4().hex[:12]}"
+        if mcp_servers and mcp_runtime is not None:
+            from ai4sci_bench.runner.mcp_sandbox import mcp_provenance
+            mcp_runtime.update(servers=mcp_provenance(mcp_servers), instance_image=image_identity)
 
         # Report daemon-down failures directly for long-running containers.
         if timeout >= 3600:
@@ -217,24 +225,28 @@ class OSSandbox:
 
         requires_network = bool(task_metadata.get("difficulty", {}).get("requires_network"))
         requires_gpu = bool(task_metadata.get("difficulty", {}).get("requires_gpu"))
-        outcome = self._run_task_container(
-            task_metadata,
-            services=services,
-            image=image,
-            image_identity=image_identity,
-            container_name=container_name,
-            workspace=workspace,
-            exec_args=agent_cmd,
-            timeout=timeout,
-            requires_network=requires_network,
-            requires_gpu=requires_gpu,
-            allow_external_tools=allow_external_tools,
-            agent_type=agent_type,
-            extra_env=extra_env,
-            extra_mounts=extra_mounts,
-            stdin_input=stdin_input,
-            timeout_label="OS sandbox agent execution",
-        )
+        from ai4sci_bench.runner.mcp_sandbox import stage_os_mcp
+        with stage_os_mcp(mcp_servers or {}, task_metadata, agent_type, agent_cmd, extra_env) as (staged_cmd, staged_env, mcp_mounts):
+            outcome = self._run_task_container(
+                task_metadata,
+                services=services,
+                image=image,
+                image_identity=image_identity,
+                container_name=container_name,
+                workspace=workspace,
+                exec_args=staged_cmd,
+                timeout=timeout,
+                requires_network=requires_network,
+                requires_gpu=requires_gpu,
+                allow_external_tools=allow_external_tools,
+                agent_type=agent_type,
+                extra_env=staged_env,
+                extra_mounts=[*(extra_mounts or []), *mcp_mounts],
+                stdin_input=stdin_input,
+                timeout_label="OS sandbox agent execution",
+                isolate_mcp=bool(mcp_servers),
+                mcp_runtime=mcp_runtime,
+            )
         if pre_snapshot is not None:
             audit = self._diff_workspace(pre_snapshot, workspace)
             if audit:
@@ -260,6 +272,8 @@ class OSSandbox:
         extra_mounts: list[str] | None = None,
         stdin_input: str | None = None,
         timeout_label: str,
+        isolate_mcp: bool = False,
+        mcp_runtime: dict | None = None,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         service_network: str | None = None
         service_containers: list[str] = []
@@ -270,6 +284,18 @@ class OSSandbox:
                 service_env.update(
                     self._start_task_services(services, service_network, service_containers)
                 )
+                if isolate_mcp and mcp_runtime is not None:
+                    identities = {}
+                    for service, container in zip(services, service_containers):
+                        result = subprocess.run(
+                            ["docker", "inspect", "--format", "{{.Image}}", container],
+                            capture_output=True, text=True, timeout=10,
+                        )
+                        identity = result.stdout.strip()
+                        if result.returncode != 0 or not re.fullmatch(r"sha256:[0-9a-f]{64}", identity):
+                            raise RuntimeError("Cannot determine MCP service image identity")
+                        identities[service["name"]] = {"image": service["image"], "image_identity": identity}
+                    mcp_runtime["services"] = identities
             external_network = (
                 self._agent_external_network(
                     agent_type=agent_type,
@@ -292,6 +318,7 @@ class OSSandbox:
                 stdin_open=stdin_input is not None,
                 docker_action="create" if services else "run",
                 docker_network_override=service_network,
+                isolate_mcp=isolate_mcp,
             )
             if services:
                 created = subprocess.run(
@@ -756,6 +783,7 @@ class OSSandbox:
         stdin_open: bool = False,
         docker_action: str = "run",
         docker_network_override: str | None = None,
+        isolate_mcp: bool = False,
     ) -> list[str]:
         cmd = [
             "docker",
@@ -832,7 +860,15 @@ class OSSandbox:
                 cmd += ["-e", f"{key}={value}"]
 
         # Auth credential mounts (read-only, specific files only)
-        cmd += self._prepare_auth_mounts(agent_type)
+        auth_mounts = self._prepare_auth_mounts(agent_type)
+        if isolate_mcp and agent_type == "claude_code":
+            # Host settings may contain hooks/plugins; only login credentials
+            # belong in an explicitly isolated MCP run.
+            auth_mounts = [arg for i, arg in enumerate(auth_mounts)
+                           if not (arg.endswith("/settings.json:ro")
+                                   or (arg == "-v" and i + 1 < len(auth_mounts)
+                                       and auth_mounts[i + 1].endswith("/settings.json:ro")))]
+        cmd += auth_mounts
 
         # Adapter-specific extra mounts (e.g. Kimi config dir)
         if extra_mounts:

@@ -9,7 +9,7 @@ from typing import Any
 
 
 _SERVER_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-_SERVER_FIELDS = frozenset({"type", "command", "args", "env", "cwd", "url", "headers"})
+_SERVER_FIELDS = frozenset({"type", "command", "args", "env", "cwd", "url", "headers", "sandbox"})
 _STRING_MAP_FIELDS = ("env", "headers")
 
 
@@ -47,6 +47,8 @@ def load_mcp_config(path: str | Path) -> dict[str, dict[str, Any]]:
             raise ValueError(
                 f"MCP server '{name}' must define exactly one of 'command' or 'url'"
             )
+        if "sandbox" in raw and raw.get("type") == "sse":
+            raise ValueError(f"MCP server '{name}': OS sandbox supports streamable HTTP, not legacy SSE")
         entry = dict(raw)
         if has_command:
             if "type" in entry and entry["type"] not in ("stdio", None):
@@ -67,11 +69,18 @@ def load_mcp_config(path: str | Path) -> dict[str, dict[str, Any]]:
                 raise ValueError(f"MCP server '{name}' URL transport cannot define args/cwd")
         for field in _STRING_MAP_FIELDS:
             value = entry.get(field)
+            if value is None:
+                entry.pop(field, None)
             if value is not None and (
                 not isinstance(value, dict)
                 or not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items())
             ):
                 raise ValueError(f"MCP server '{name}' {field} must map strings to strings")
+        if entry.get("cwd", False) is None:
+            entry.pop("cwd", None)
+        if "sandbox" in entry:
+            from ai4sci_bench.runner.mcp_sandbox import validate_os_mcp
+            validate_os_mcp({name: entry})
         normalized[name] = entry
     return normalized
 

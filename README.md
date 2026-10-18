@@ -423,14 +423,13 @@ asibench run --agent codex_cli \
   --sandbox none --output-dir out_with_mcp/
 ```
 
-`--mcp-config` implies `--tool-mode search`, accepts the portable
-`{"mcpServers": {...}}` format, and is limited to `claude_code_cli` and
-`codex_cli`. It loads only the named servers into each run's isolated harness
-home; ambient user MCP configuration remains excluded. It is intentionally
-rejected with `--sandbox os`: GUI applications, licensed host binaries, local
-sockets, and Docker-based MCP servers need deployment-specific mounts/network
-policy that the benchmark cannot infer safely. MCP-enabled runs have external
-tool authority and are not equivalent to the default restricted baseline.
+`--mcp-config` accepts portable `{"mcpServers": {...}}` JSON for
+`claude_code_cli` and `codex_cli`. It loads only the named servers and does
+not automatically enable web search: use `--tool-mode search` if needed.
+For `--sandbox os`, explicitly declare either instance-local stdio or a
+private `runtime.services` MCP sidecar. Host-only configurations fail closed.
+See [MCP OS sandbox setup](docs/mcp/os-sandbox.md) for image preparation,
+configuration examples, credentials, network boundaries and difficulty-check.
 
 ### External simulation benchmark integrations
 

@@ -145,6 +145,7 @@ class AgentOutput:
     # preserves that distinction instead of inferring zero calls.
     model_call_records: list[dict[str, Any]] = field(default_factory=list)
     model_call_observability: dict[str, Any] | None = None
+    mcp_runtime: dict[str, Any] | None = None
 
 
 @dataclass

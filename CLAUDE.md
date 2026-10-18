@@ -133,9 +133,12 @@
   instance run 隔离；execution 结束必须 teardown 清理。目录键须包含原始
   run key 哈希，Kimi 临时根初始化须支持并发。
 - 科学 MCP 只通过显式 `--mcp-config` 注入 Claude/Codex 的隔离 home；默认
-  restricted 运行不得继承 ambient MCP。配置必须严格校验，启用时固定为
-  search mode；当前 `--sandbox os` 因宿主 GUI/许可证/二进制映射不明确而须
-  fail-fast。catalog 只保存上游来源、前置条件和可编辑模板，不捆绑第三方软件。
+  restricted 运行不得继承 ambient MCP。MCP 与 web search 独立；OS 模式必须显式
+  声明 sandbox.deployment=instance（镜像内 stdio）或 service（runtime.services 内网
+  streamable HTTP）；不推断宿主挂载。容器内 preflight 必须先 initialize/tools/list，失败
+  不运行 agent；生命周期和 service 清理复用 OSSandbox。stdio 只净化继承环境，仍与 agent
+  共享容器信任边界和网络；独立隔离用 sidecar。详见 docs/mcp/os-sandbox.md。
+  catalog 只保存来源和模板，不捆绑第三方软件。
 - CAD MCP 上游兼容补丁仅存于 `scripts/mcp/cad-repairs/`，绑定源 revision 和
   SHA-256；只对显式指定的干净副本应用，不捆绑 CAD 软件、不自动更改本机凭据配置。
   patched stdio 冒烟通过不得升级为真实 CAD 业务认证；复测需临时 HOME 与端口保护。
@@ -190,8 +193,9 @@
   `image_media_types`。Codex 证据是 `exec --json` 的 `mcp_tool_call` item，无 server/tool
   列表事件，`mcp_connected` 只能由必需工具的成功返回证明，其内置 `list_mcp_resources*`
   不算必需工具。
-- `--mcp-config` 强制 search mode（Claude WebSearch/WebFetch、Codex web_search），
-  `--sandbox none` 下 shell 也能联网；fake task 必须把这些工具纳入 bypass 检查。
+- `--mcp-config` 不自动打开 web search；restricted 保留 MCP/ToolSearch，search 额外
+  开放 Claude WebSearch/WebFetch 或 Codex web_search。shell/MCP 自身仍可能联网，
+  fake task 的 bypass 检查须覆盖实际开放能力。
 - `tests/mcp_e2e/golden.json` 锁定每个 `verify_one` 的 verdict/各项检查/per-call 状态：
   纯重构必须逐字节不变，有意改变判定用 `MCP_E2E_GOLDEN=update` 整文件重生成并审 diff，
   `importorskip` 之后的测试不得喂 golden。离线测试全部在 `tests/mcp_e2e/`，共享构件只在

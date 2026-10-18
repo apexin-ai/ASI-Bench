@@ -58,7 +58,7 @@ branch-protection check.
 Scientific MCP coverage is offline and never starts a third-party server. It
 validates strict JSON parsing, catalog completeness, CLI generation/checking,
 Claude allowlisting, Codex TOML conversion, per-run home isolation, and the
-Docker fail-fast boundary:
+explicit OS deployment boundary:
 
 ```bash
 uv run pytest -q tests/test_mcp_config.py tests/test_tool_isolation.py \
@@ -1165,3 +1165,28 @@ Produce-only retries:
 `tests/test_retry.py::TestRetryStrategyAll::test_produce_only_run_keeps_every_attempt`
 checks that `asibench run --retries N` (score=False) saves N result files with
 attempts 1..N instead of overwriting attempt 1.
+
+
+## MCP OS sandbox compatibility
+
+Offline readiness, deployment, credential reference, concurrent staging and
+web-tool policy tests (no model API or third-party MCP):
+
+```sh
+uv run --frozen pytest -q tests/test_mcp_os_sandbox.py tests/test_mcp_config.py \
+  tests/test_os_sandbox_adapters.py tests/test_tool_isolation.py tests/test_difficulty_check.py
+```
+
+Opt-in real Docker protocol integration (stdio and sidecar with both adapter
+configuration formats, actual tools/call, startup failure and timeout cleanup):
+
+```sh
+ASIBENCH_MCP_DOCKER_IMAGE=<task-image-with-/opt/venv/bin/python> \
+  uv run --frozen pytest -q tests/test_mcp_os_docker.py
+```
+
+These Docker tests build a temporary image with a deterministic MCP server and
+protocol client stand-in, mount no login credentials, call no model API, and
+remove the test image. They do not certify live Claude/Codex model behavior or
+any of the 13 scientific upstream servers. See docs/mcp/os-sandbox.md for
+manual OS deployment and formal difficulty-check commands.

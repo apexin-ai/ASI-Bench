@@ -317,6 +317,9 @@ def mcp_check(config_path: str):
         raise click.ClickException(str(exc)) from exc
     failures = 0
     for name, server in servers.items():
+        if "sandbox" in server:
+            click.echo(f"OK   {name}: explicit {server['sandbox']['deployment']} deployment (image readiness checked at run startup)")
+            continue
         if "url" in server:
             click.echo(f"OK   {name}: HTTP {server['url']} (connectivity not attempted)")
             continue
@@ -1015,7 +1018,7 @@ def harbor_verify_cmd(task_dir: str, instance_dir: str, outputs_dir: str,
 @click.option("--agent-cmd", default=None, help="Agent command template.")
 @click.option("--agent-config", default="{}", show_default=True)
 @click.option("--mcp-config", default=None, type=click.Path(exists=True, dir_okay=False),
-              help="Explicit mcpServers JSON for Claude/Codex; implies tool mode search.")
+              help="Explicit mcpServers JSON for Claude/Codex; web search is controlled by --tool-mode.")
 @click.option("--prompt-levels", default="b1,b2,b3,b4", show_default=True)
 @click.option("--parallel", default=1, type=click.IntRange(min=1), show_default=True)
 @click.option("--repetitions", default=1, type=click.IntRange(min=1), show_default=True,
@@ -1665,7 +1668,7 @@ def _ensure_run_sandbox_available(sandbox: str) -> None:
 @click.option("--agent", help="Built-in agent name (direct_llm, claude_code_cli, codex_cli, kimi_code_cli, mimo_code_cli, antigravity_cli, openhands, hermes, codewhale, pi_cli, opencode_cli)")
 @click.option("--agent-config", default="{}", help="Agent config JSON")
 @click.option("--mcp-config", default=None, type=click.Path(exists=True, dir_okay=False),
-              help="Explicit mcpServers JSON for Claude/Codex; implies tool mode search.")
+              help="Explicit mcpServers JSON for Claude/Codex; web search is controlled by --tool-mode.")
 @click.option("--output-dir", default="results/", help="Output directory")
 @click.option("--parallel", default=1, type=int, help="Parallel workers")
 @click.option("--timeout", default=DEFAULT_TIMEOUT_SECONDS, show_default=True, type=int,
@@ -1747,11 +1750,14 @@ def run(
         )
     if mcp_config and agent not in ("claude_code_cli", "codex_cli"):
         raise click.ClickException("--mcp-config requires --agent claude_code_cli or codex_cli")
-    if mcp_config and tool_mode not in (None, "search"):
-        raise click.ClickException("--mcp-config requires --tool-mode search")
     if mcp_config and sandbox == "os":
-        raise click.ClickException("--mcp-config is not supported with --sandbox os")
-    resolved_tool_mode = "search" if mcp_config else _resolve_tool_mode(tool_mode, allow_external_tools)
+        from ai4sci_bench.mcp_config import load_mcp_config
+        from ai4sci_bench.runner.mcp_sandbox import validate_os_mcp
+        try:
+            validate_os_mcp(load_mcp_config(mcp_config))
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+    resolved_tool_mode = _resolve_tool_mode(tool_mode, allow_external_tools)
 
     print_sandbox_banner(sandbox)
     _ensure_run_sandbox_available(sandbox)
@@ -4278,6 +4284,8 @@ class _DifficultyProgress:
               help="Agent(s) to use for difficulty evaluation (required; repeatable).")
 @click.option("--agent-config", "agent_configs", multiple=True,
               help="Required agent config JSON with model, one per --agent (matched by position).")
+@click.option("--mcp-config", default=None, type=click.Path(exists=True, dir_okay=False),
+              help="Explicit OS MCP config for Claude/Codex difficulty evidence; web search remains disabled.")
 @click.option("--prompt-levels", default="b1,b2,b3,b4", show_default=True,
               help="Prompt levels to evaluate.")
 @click.option("--threshold", default=40, show_default=True,
@@ -4312,7 +4320,7 @@ def difficulty_check(
     task_id, status_filter, agents, agent_configs, prompt_levels, threshold,
     instances_per_task, seed, sandbox, timeout, tasks_dir, output_path,
     markdown_path, csv_path, save_scores, scores_dir, trigger, trigger_ref,
-    no_color,
+    no_color, mcp_config,
 ):
     """Check whether a task is hard enough for the benchmark.
 
@@ -4381,6 +4389,19 @@ def difficulty_check(
             raise click.ClickException(
                 f"Agent '{name}' requires an explicit model in --agent-config."
             )
+        if mcp_config:
+            if name not in ("claude_code_cli", "codex_cli"):
+                raise click.ClickException("--mcp-config requires only Claude/Codex agents")
+            parsed["mcp_config"] = str(Path(mcp_config).resolve())
+        if parsed.get("mcp_config"):
+            if name not in ("claude_code_cli", "codex_cli"):
+                raise click.ClickException("MCP difficulty evidence requires Claude/Codex")
+            from ai4sci_bench.mcp_config import load_mcp_config
+            from ai4sci_bench.runner.mcp_sandbox import validate_os_mcp
+            try:
+                validate_os_mcp(load_mcp_config(parsed["mcp_config"]))
+            except ValueError as exc:
+                raise click.ClickException(str(exc)) from exc
         parsed_configs.append(parsed)
 
     if not any(name in DIFFICULTY_AGENTIC_AGENTS for name in agents):

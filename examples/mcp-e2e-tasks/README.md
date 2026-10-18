@@ -121,8 +121,11 @@ agent's environment, so use `auth.json` or name the variable something else in
 
 Host runs have no filesystem isolation, so use a dedicated unprivileged user.
 The agent can still find the backend library elsewhere on the host; catching
-that is what `no_bypass` is for. `--mcp-config` also turns on web search
-(Claude: WebSearch/WebFetch, Codex: web_search).
+that is what `no_bypass` is for. `--mcp-config` no longer turns on web search:
+use `--tool-mode search` explicitly to reproduce historical search-enabled
+runs (Claude: WebSearch/WebFetch, Codex: web_search). Current OS deployments
+require explicit container configuration; see
+[OS MCP setup](../../docs/mcp/os-sandbox.md).
 
 `gpaw_mos2_bandgap` is the slow one: a correct chain is about 430 s of
 single-threaded plane-wave DFT (the hard-coded convergence sweep alone is

@@ -112,8 +112,6 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         self.anthropic_via_responses = anthropic_via_responses
         self.mcp_config = str(Path(mcp_config).expanduser().resolve()) if mcp_config else None
         self.mcp_servers = load_mcp_config(self.mcp_config) if self.mcp_config else {}
-        if self.mcp_servers and self.tool_mode != ToolMode.SEARCH:
-            raise ValueError("mcp_config requires tool_mode='search'")
         if self.api_base is not None and api_protocol is None:
             raise ValueError(
                 "api_protocol is required when api_base is set. "
@@ -292,7 +290,10 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         super().setup(config)
         self.permission_mode = config.get("permission_mode", self.permission_mode)
         if self.mcp_servers and self.sandbox == "os":
-            raise ValueError("Explicit MCP config is not supported with --sandbox os")
+            from ai4sci_bench.runner.mcp_sandbox import validate_os_mcp
+            validate_os_mcp(self.mcp_servers)
+        if self.sandbox != "os" and any("sandbox" in e for e in self.mcp_servers.values()):
+            raise ValueError("MCP sandbox deployment requires --sandbox os")
         if self.sandbox == "os":
             self._os_sandbox = OSSandbox(self.repo_root)
 
@@ -401,6 +402,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         if self._uses_proxy or self._uses_anthropic_rewrite_proxy or self._uses_tokenrouter_openai_chat_proxy:
             os.environ.setdefault("AI4SCI_DOCKER_NETWORK", "host")
 
+        mcp_runtime: dict = {}
         t0 = time.time()
         assert self._os_sandbox is not None
         success, log, raw_stdout, raw_stderr, image_identity = (
@@ -412,6 +414,8 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
                 agent_type="claude_code",
                 allow_external_tools=self.allow_external_tools,
                 extra_env=extra_env,
+                mcp_servers=self.mcp_servers or None,
+                mcp_runtime=mcp_runtime,
             )
         )
         elapsed = time.time() - t0
@@ -432,6 +436,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
 
         return AgentOutput(
             instance_id=task_instance.instance_id,
+            mcp_runtime=mcp_runtime or None,
             output_dir=workspace,
             code_files=[f for f in produced_files if f.endswith(".py")],
             data_files=[f for f in produced_files if not f.endswith(".py")],
@@ -449,9 +454,9 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
 
     def _apply_tool_isolation(self, cmd: list[str]) -> None:
         """Append tool-isolation flags based on the resolved ToolMode."""
-        if self.tool_mode == ToolMode.UNRESTRICTED:
+        if self.tool_mode == ToolMode.UNRESTRICTED and not self.mcp_servers:
             return
-        tools = CLAUDE_SEARCH_TOOLS if self.tool_mode == ToolMode.SEARCH else CLAUDE_CORE_TOOLS
+        tools = CLAUDE_CORE_TOOLS if self.tool_mode == ToolMode.RESTRICTED else CLAUDE_SEARCH_TOOLS
         if self.mcp_servers:
             tools += "," + claude_mcp_tool_patterns(self.mcp_servers)
         cmd += [
