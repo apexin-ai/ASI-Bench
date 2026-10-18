@@ -1408,3 +1408,27 @@ Lessons — process:
   historical summaries as context and rebuild evidence on team infrastructure.
   Do not merge feature implementation merely to publish handoff documents.
 - Handoff documentation commit: `1a8ca3f`.
+
+## 2026-10-18 — Explicit MCP in OS sandbox
+
+- Code commit: `6c52f6e` (task branch `task-mcp-os-20261018`).
+- Problem: explicit MCP was globally rejected by OS execution and implicitly
+  enabled built-in web tools, blocking restricted formal author verification.
+- Resolution: explicit image-local stdio or internal task-service MCP,
+  container-local initialize/tools/list preflight, private per-run configuration
+  staging and credential env references, independent web-tool policy,
+  difficulty-check support, and per-result instance/service image provenance.
+  Lifecycle cleanup reuses OSSandbox rather than a second Docker controller.
+- Verification: full offline suite 3,848 passed, 15 skipped, 24 deselected;
+  final MCP boundary suite 30 passed; opt-in Docker protocol suite 7 passed
+  (stdio/HTTP in both adapter formats, failure/timeout cleanup, actual Codex
+  CLI configuration parsing). Wheel and sdist build succeeded.
+- Limits: Docker clients use a deterministic protocol stand-in, not live model
+  calls; none of the 13 scientific backends were installed or recertified.
+  Remote authenticated MCP, external sidecar egress allowlists and GUI/licensed
+  deployment remain unsupported. Same-instance stdio shares the agent trust
+  boundary; a clean environment must never be described as independent network
+  or filesystem isolation.
+- Prevention: keep explicit deployment capability checks, preserve host-only
+  rejection, and run Docker protocol integration in CI. The worktree is retained
+  for user review; main integration requires explicit user confirmation.
