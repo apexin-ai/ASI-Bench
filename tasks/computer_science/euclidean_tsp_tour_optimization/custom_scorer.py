@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import math
+import os
 import threading
 from concurrent.futures import Future
 from pathlib import Path
@@ -48,7 +49,10 @@ EXPECTED_REFERENCE_REVISION = (
 )
 SIGNED_INT64_MAX = (1 << 63) - 1
 TASK_DIR = Path(__file__).resolve().parent
-REPO_ROOT = TASK_DIR.parents[2]
+REPO_ROOT = next(
+    (parent for parent in TASK_DIR.parents if (parent / "tasks").is_dir()),
+    TASK_DIR.parent,
+)
 
 REQUIRED_METRIC_KEYS = {
     "n_cities",
@@ -469,8 +473,8 @@ def _run_submission_once(
     solver_seed, time_limit, cpu_limit, memory_limit, pids_limit, grace = (
         _runtime_values(config)
     )
-    metadata = TaskLoader(REPO_ROOT / "tasks").load_task_metadata(
-        TASK_DIR / "task.yaml"
+    metadata = TaskLoader(TASK_DIR.parent).load_task_metadata(
+        TASK_DIR / "task_meta.yaml"
     )
     spec = SubmissionRunSpec(
         task_metadata=metadata,
@@ -497,6 +501,15 @@ def _run_submission_once(
         memory_limit=memory_limit,
         pids_limit=pids_limit,
     )
+    if os.environ.get("ASIBENCH_HARBOR_EXECUTOR_URL"):
+        from ai4sci_bench.runner.harbor_executor import run_solver
+
+        return run_solver(
+            spec,
+            input_name="instance.tsp",
+            seed=solver_seed,
+            task_kind="tsp",
+        )
     return SandboxedSubmissionRunner(REPO_ROOT).run(spec)
 
 

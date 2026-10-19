@@ -317,6 +317,9 @@ def mcp_check(config_path: str):
         raise click.ClickException(str(exc)) from exc
     failures = 0
     for name, server in servers.items():
+        if "sandbox" in server:
+            click.echo(f"OK   {name}: explicit {server['sandbox']['deployment']} deployment (image readiness checked at run startup)")
+            continue
         if "url" in server:
             click.echo(f"OK   {name}: HTTP {server['url']} (connectivity not attempted)")
             continue
@@ -805,6 +808,207 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
         )
 
 
+@cli.group("harbor")
+def harbor_group() -> None:
+    """Export public seed31415 tasks for Harbor."""
+
+
+@harbor_group.command("export")
+@click.option("--task-dir", required=True, type=click.Path(file_okay=False))
+@click.option("--instance-dir", required=True, type=click.Path(file_okay=False))
+@click.option("--level", required=True, type=click.Choice(["b1", "b2", "b3", "b4"]))
+@click.option("--wheel", required=True, type=click.Path(dir_okay=False),
+              help="Wheel built from the current asibench revision")
+@click.option("--output-dir", required=True, type=click.Path(file_okay=False))
+@click.option("--judge-api-key-env", default="OPENAI_API_KEY", show_default=True,
+              help="Host environment variable forwarded to verifier for Judge tasks")
+@click.option("--judge-api-base", default=None, help="Optional Judge API endpoint")
+@click.option("--judge-api-protocol", default=None,
+              type=click.Choice(["native", "openai"], case_sensitive=False))
+def harbor_export_cmd(task_dir: str, instance_dir: str, level: str,
+                      wheel: str, output_dir: str, judge_api_key_env: str,
+                      judge_api_base: str | None, judge_api_protocol: str | None) -> None:
+    """Export one materialized public task and a minimal registry.json."""
+    from ai4sci_bench.harbor_export import HarborExportError, export_harbor_task
+
+    try:
+        exported = export_harbor_task(
+            task_dir=task_dir, instance_dir=instance_dir, level=level,
+            wheel=wheel, output_dir=output_dir,
+            judge_api_key_env=judge_api_key_env,
+            judge_api_base=judge_api_base,
+            judge_api_protocol=judge_api_protocol,
+        )
+    except HarborExportError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Harbor task: {exported}")
+
+
+def _harbor_levels(value: str) -> tuple[str, ...]:
+    levels = tuple(part.strip().lower() for part in value.split(",") if part.strip())
+    if not levels or len(levels) != len(set(levels)):
+        raise click.BadParameter("provide one or more unique levels")
+    invalid = set(levels) - {"b1", "b2", "b3", "b4"}
+    if invalid:
+        raise click.BadParameter(f"unsupported level(s): {', '.join(sorted(invalid))}")
+    return levels
+
+
+@harbor_group.command("audit")
+@click.option("--tasks-dir", required=True, type=click.Path(file_okay=False, exists=True))
+@click.option("--instances-dir", type=click.Path(file_okay=False, exists=True))
+@click.option("--levels", default="b1,b2,b3,b4", show_default=True)
+@click.option("--out", type=click.Path(dir_okay=False), help="Optional JSON report path")
+def harbor_audit_cmd(tasks_dir: str, instances_dir: str | None, levels: str, out: str | None) -> None:
+    """Audit task-level Harbor compatibility without exporting task data."""
+    from ai4sci_bench.harbor_export import HarborExportError, audit_harbor_tasks
+
+    try:
+        report = audit_harbor_tasks(
+            tasks_dir=tasks_dir,
+            instances_dir=instances_dir,
+            levels=_harbor_levels(levels),
+        )
+    except HarborExportError as exc:
+        raise click.ClickException(str(exc)) from exc
+    rendered = json.dumps(report, indent=2, ensure_ascii=False)
+    if out:
+        Path(out).write_text(rendered + "\n", encoding="utf-8")
+        click.echo(f"Compatibility report: {out}")
+    else:
+        click.echo(rendered)
+    click.echo(
+        f"Ready: {report['ready_count']} / {report['cell_count']} cells; "
+        f"blocked: {report['blocked_count']}"
+    )
+    if report["blocked_count"]:
+        raise click.ClickException("Some task-level cells are not compatible with this Harbor export profile")
+
+
+@harbor_group.command("export-batch")
+@click.option("--tasks-dir", required=True, type=click.Path(file_okay=False, exists=True))
+@click.option("--instances-dir", required=True, type=click.Path(file_okay=False, exists=True))
+@click.option("--levels", default="b1,b2,b3,b4", show_default=True)
+@click.option("--wheel", required=True, type=click.Path(dir_okay=False, exists=True))
+@click.option("--output-dir", required=True, type=click.Path(file_okay=False))
+@click.option("--skip-unsupported", is_flag=True, help="Export ready cells and record blocked cells")
+@click.option("--judge-api-key-env", default="OPENAI_API_KEY", show_default=True,
+              help="Host environment variable forwarded to verifier for Judge tasks")
+@click.option("--judge-api-base", default=None, help="Optional Judge API endpoint")
+@click.option("--judge-api-protocol", default=None,
+              type=click.Choice(["native", "openai"], case_sensitive=False))
+def harbor_export_batch_cmd(
+    tasks_dir: str, instances_dir: str, levels: str,
+    wheel: str, output_dir: str, skip_unsupported: bool,
+    judge_api_key_env: str, judge_api_base: str | None,
+    judge_api_protocol: str | None,
+) -> None:
+    """Export all compatible materialized tasks and levels into one dataset."""
+    from ai4sci_bench.harbor_export import HarborExportError, export_harbor_dataset
+
+    try:
+        report = export_harbor_dataset(
+            tasks_dir=tasks_dir,
+            instances_dir=instances_dir,
+            levels=_harbor_levels(levels),
+            wheel=wheel,
+            output_dir=output_dir,
+            skip_unsupported=skip_unsupported,
+            judge_api_key_env=judge_api_key_env,
+            judge_api_base=judge_api_base,
+            judge_api_protocol=judge_api_protocol,
+        )
+    except HarborExportError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        f"Exported {report['exported_count']} task-level cells to {output_dir}; "
+        f"skipped {report['skipped_count']} blocked cells."
+    )
+    click.echo(f"Compatibility report: {Path(output_dir) / 'compatibility_report.json'}")
+
+
+@harbor_group.command("aggregate")
+@click.option("--details-dir", required=True, type=click.Path(file_okay=False, exists=True))
+@click.option("--out", required=True, type=click.Path(dir_okay=False))
+def harbor_aggregate_cmd(details_dir: str, out: str) -> None:
+    """Aggregate verifier details while excluding evaluator failures."""
+    from ai4sci_bench.harbor_aggregate import (
+        HarborAggregateError,
+        aggregate_harbor_score_details,
+        find_harbor_score_details,
+    )
+
+    try:
+        report = aggregate_harbor_score_details(find_harbor_score_details(details_dir))
+    except HarborAggregateError as exc:
+        raise click.ClickException(str(exc)) from exc
+    Path(out).write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if report["valid_count"]:
+        click.echo(
+            f"Total: {report['total_score']:.2f} / {report['total_max_score']:.2f} "
+            f"({report['mean_percent']:.2f}%)"
+        )
+    else:
+        click.echo("Total: no valid scores")
+    click.echo(f"Included {report['valid_count']} / {report['trial_count']} trials; "
+               f"evaluator errors: {report['scorer_error_count']}")
+    click.echo(f"Report: {out}")
+    if report["scorer_error_count"]:
+        raise click.ClickException("Some evaluator-invalid trials were excluded from the aggregate")
+
+
+@cli.command("harbor-verify")
+@click.option("--task-dir", required=True, type=click.Path(file_okay=False),
+              help="Public task bundle with task_meta.yaml and task_eval.yaml")
+@click.option("--instance-dir", required=True, type=click.Path(file_okay=False),
+              help="Materialized seed31415 instance with public reference/")
+@click.option("--outputs-dir", required=True, type=click.Path(file_okay=False),
+              help="Harbor-restored agent artifact root")
+@click.option("--prompt-level", required=True,
+              type=click.Choice(["b1", "b2", "b3", "b4"]))
+@click.option("--out", required=True, type=click.Path(file_okay=False),
+              help="Harbor verifier directory for reward.json and score_detail.json")
+@click.option("--task-runtime-preinstalled", is_flag=True, hidden=True)
+@click.option("--judge-api-base", default=None, envvar="ASIBENCH_JUDGE_API_BASE")
+@click.option("--judge-api-key-env", default=None, envvar="ASIBENCH_JUDGE_API_KEY_ENV",
+              metavar="ENV_VAR")
+@click.option("--judge-api-protocol", default=None,
+              type=click.Choice(["native", "openai"], case_sensitive=False),
+              envvar="ASIBENCH_JUDGE_API_PROTOCOL")
+def harbor_verify_cmd(task_dir: str, instance_dir: str, outputs_dir: str,
+                      prompt_level: str, out: str, task_runtime_preinstalled: bool,
+                      judge_api_base: str | None,
+                      judge_api_key_env: str | None,
+                      judge_api_protocol: str | None) -> None:
+    """Score one Harbor attempt with public seed31415 references (non-official)."""
+    from ai4sci_bench.core.judge_api import (
+        JudgeAPIConfigurationError,
+        resolve_judge_api_override,
+    )
+    from ai4sci_bench.harbor_verify import (
+        HarborScoringError,
+        prepare_harbor_output,
+        verify_harbor_task,
+    )
+
+    try:
+        prepare_harbor_output(task_dir, instance_dir, outputs_dir, out)
+        override = resolve_judge_api_override(
+            judge_api_base, judge_api_key_env, judge_api_protocol
+        )
+        detail = verify_harbor_task(
+            task_dir, instance_dir, outputs_dir, prompt_level, out,
+            judge_api_override=override,
+            task_runtime_preinstalled=task_runtime_preinstalled,
+        )
+    except (HarborScoringError, JudgeAPIConfigurationError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        f"Harbor seed31415 score (non-official): {detail['final_score']:.2f} / "
+        f"{detail['max_score']:.2f}"
+    )
+
+
 @cli.command("run-score")
 @click.option("--instances-dir", required=True, help="Pulled seed31415 instances directory.")
 @click.option("--tasks-dir", default="tasks/", show_default=True)
@@ -814,7 +1018,7 @@ def score_cmd(repo: str, results_dir: str, instances_dir: str,
 @click.option("--agent-cmd", default=None, help="Agent command template.")
 @click.option("--agent-config", default="{}", show_default=True)
 @click.option("--mcp-config", default=None, type=click.Path(exists=True, dir_okay=False),
-              help="Explicit mcpServers JSON for Claude/Codex; implies tool mode search.")
+              help="Explicit mcpServers JSON for Claude/Codex; web search is controlled by --tool-mode.")
 @click.option("--prompt-levels", default="b1,b2,b3,b4", show_default=True)
 @click.option("--parallel", default=1, type=click.IntRange(min=1), show_default=True)
 @click.option("--repetitions", default=1, type=click.IntRange(min=1), show_default=True,
@@ -1464,7 +1668,7 @@ def _ensure_run_sandbox_available(sandbox: str) -> None:
 @click.option("--agent", help="Built-in agent name (direct_llm, claude_code_cli, codex_cli, kimi_code_cli, mimo_code_cli, antigravity_cli, openhands, hermes, codewhale, pi_cli, opencode_cli)")
 @click.option("--agent-config", default="{}", help="Agent config JSON")
 @click.option("--mcp-config", default=None, type=click.Path(exists=True, dir_okay=False),
-              help="Explicit mcpServers JSON for Claude/Codex; implies tool mode search.")
+              help="Explicit mcpServers JSON for Claude/Codex; web search is controlled by --tool-mode.")
 @click.option("--output-dir", default="results/", help="Output directory")
 @click.option("--parallel", default=1, type=int, help="Parallel workers")
 @click.option("--timeout", default=DEFAULT_TIMEOUT_SECONDS, show_default=True, type=int,
@@ -1546,11 +1750,14 @@ def run(
         )
     if mcp_config and agent not in ("claude_code_cli", "codex_cli"):
         raise click.ClickException("--mcp-config requires --agent claude_code_cli or codex_cli")
-    if mcp_config and tool_mode not in (None, "search"):
-        raise click.ClickException("--mcp-config requires --tool-mode search")
     if mcp_config and sandbox == "os":
-        raise click.ClickException("--mcp-config is not supported with --sandbox os")
-    resolved_tool_mode = "search" if mcp_config else _resolve_tool_mode(tool_mode, allow_external_tools)
+        from ai4sci_bench.mcp_config import load_mcp_config
+        from ai4sci_bench.runner.mcp_sandbox import validate_os_mcp
+        try:
+            validate_os_mcp(load_mcp_config(mcp_config))
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+    resolved_tool_mode = _resolve_tool_mode(tool_mode, allow_external_tools)
 
     print_sandbox_banner(sandbox)
     _ensure_run_sandbox_available(sandbox)
@@ -4077,6 +4284,8 @@ class _DifficultyProgress:
               help="Agent(s) to use for difficulty evaluation (required; repeatable).")
 @click.option("--agent-config", "agent_configs", multiple=True,
               help="Required agent config JSON with model, one per --agent (matched by position).")
+@click.option("--mcp-config", default=None, type=click.Path(exists=True, dir_okay=False),
+              help="Explicit OS MCP config for Claude/Codex difficulty evidence; web search remains disabled.")
 @click.option("--prompt-levels", default="b1,b2,b3,b4", show_default=True,
               help="Prompt levels to evaluate.")
 @click.option("--threshold", default=40, show_default=True,
@@ -4111,7 +4320,7 @@ def difficulty_check(
     task_id, status_filter, agents, agent_configs, prompt_levels, threshold,
     instances_per_task, seed, sandbox, timeout, tasks_dir, output_path,
     markdown_path, csv_path, save_scores, scores_dir, trigger, trigger_ref,
-    no_color,
+    no_color, mcp_config,
 ):
     """Check whether a task is hard enough for the benchmark.
 
@@ -4180,6 +4389,19 @@ def difficulty_check(
             raise click.ClickException(
                 f"Agent '{name}' requires an explicit model in --agent-config."
             )
+        if mcp_config:
+            if name not in ("claude_code_cli", "codex_cli"):
+                raise click.ClickException("--mcp-config requires only Claude/Codex agents")
+            parsed["mcp_config"] = str(Path(mcp_config).resolve())
+        if parsed.get("mcp_config"):
+            if name not in ("claude_code_cli", "codex_cli"):
+                raise click.ClickException("MCP difficulty evidence requires Claude/Codex")
+            from ai4sci_bench.mcp_config import load_mcp_config
+            from ai4sci_bench.runner.mcp_sandbox import validate_os_mcp
+            try:
+                validate_os_mcp(load_mcp_config(parsed["mcp_config"]))
+            except ValueError as exc:
+                raise click.ClickException(str(exc)) from exc
         parsed_configs.append(parsed)
 
     if not any(name in DIFFICULTY_AGENTIC_AGENTS for name in agents):

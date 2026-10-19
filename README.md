@@ -217,13 +217,38 @@ See the **[BenchFlow integration guide](docs/guide/benchflow.md)** for the
 end-to-end run, schema-v2 manifest, scoring command, status fields, retries,
 and Judge API configuration.
 
+#### Harbor integration
+
+Harbor runs the agent and containers; ASI-Bench prepares the task package and
+performs the task-specific scoring. The integration targets already materialized
+public `seed31415` instances and produces local, non-official scores.
+
+Quick start for one task level:
+
+```bash
+uv build --wheel --out-dir /tmp/asibench-wheel
+export ASIBENCH_WHEEL="$(find /tmp/asibench-wheel -maxdepth 1 -name '*.whl' -print -quit)"
+asibench task pull --repo seed31415 --tasks robotics.particle_filter \
+  --output-dir /tmp/asi-seed31415
+asibench harbor export \
+  --task-dir tasks/robotics/particle_filter \
+  --instance-dir /tmp/asi-seed31415/robotics.particle_filter__seed31415 \
+  --level b1 --wheel "$ASIBENCH_WHEEL" \
+  --output-dir /tmp/asi-harbor-b1
+harbor run -p /tmp/asi-harbor-b1/tasks/robotics-particle-filter-b1 -a nop
+```
+
+Use a Harbor agent such as `codex` in place of `nop` when running a real
+attempt. For batch audit, export, scoring, Judge configuration, and verifier
+behavior, see the **[Harbor integration guide](docs/guide/harbor.md)**.
+
 #### Configure an LLM/VLM Judge API
 
 Some seed31415 scoring contracts use an LLM or VLM Judge. Judge credentials and
 transport overrides are runtime operator settings: keep the secret in an
 ignored `.env` file or process environment, never in `task_eval.yaml` or a
-command-line argument. `score`, `run-score`, and `benchflow-score` expose the
-same options:
+command-line argument. `score`, `run-score`, `benchflow-score`, and
+`harbor-verify` expose the same options:
 
 | Option | Environment equivalent | Meaning |
 |---|---|---|
@@ -398,14 +423,13 @@ asibench run --agent codex_cli \
   --sandbox none --output-dir out_with_mcp/
 ```
 
-`--mcp-config` implies `--tool-mode search`, accepts the portable
-`{"mcpServers": {...}}` format, and is limited to `claude_code_cli` and
-`codex_cli`. It loads only the named servers into each run's isolated harness
-home; ambient user MCP configuration remains excluded. It is intentionally
-rejected with `--sandbox os`: GUI applications, licensed host binaries, local
-sockets, and Docker-based MCP servers need deployment-specific mounts/network
-policy that the benchmark cannot infer safely. MCP-enabled runs have external
-tool authority and are not equivalent to the default restricted baseline.
+`--mcp-config` accepts portable `{"mcpServers": {...}}` JSON for
+`claude_code_cli` and `codex_cli`. It loads only the named servers and does
+not automatically enable web search: use `--tool-mode search` if needed.
+For `--sandbox os`, explicitly declare either instance-local stdio or a
+private `runtime.services` MCP sidecar. Host-only configurations fail closed.
+See [MCP OS sandbox setup](docs/mcp/os-sandbox.md) for image preparation,
+configuration examples, credentials, network boundaries and difficulty-check.
 
 ### External simulation benchmark integrations
 
@@ -747,6 +771,12 @@ BenchFlow attempt.
   prerequisites produce a non-zero CLI exit.
 
 ## Documentation
+
+Maintainer handoffs for the integration work are available in Chinese:
+[BenchFlow](docs/handoff/benchflow.md) and [Harbor](docs/handoff/harbor.md).
+They record the code branches, verified scope, remaining work, and rebuilding
+steps after retirement of the original personal server. Harbor functionality
+remains on `feat/harbor-verify`; these documents do not merge it into main.
 
 Installation, execution, submission, task contribution, catalog, and
 leaderboard documentation are available on the

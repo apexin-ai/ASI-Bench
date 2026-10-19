@@ -110,8 +110,6 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         self.supports_image_input = supports_image_input
         self.mcp_config = str(Path(mcp_config).expanduser().resolve()) if mcp_config else None
         self.mcp_servers = load_mcp_config(self.mcp_config) if self.mcp_config else {}
-        if self.mcp_servers and self.tool_mode != ToolMode.SEARCH:
-            raise ValueError("mcp_config requires tool_mode='search'")
         self._uses_native_provider = (
             provider is not None and api_key is not None and api_base is not None
         )
@@ -218,7 +216,10 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
     def setup(self, config: dict) -> None:
         super().setup(config)
         if self.mcp_servers and self.sandbox == "os":
-            raise ValueError("Explicit MCP config is not supported with --sandbox os")
+            from ai4sci_bench.runner.mcp_sandbox import validate_os_mcp
+            validate_os_mcp(self.mcp_servers)
+        if self.sandbox != "os" and any("sandbox" in e for e in self.mcp_servers.values()):
+            raise ValueError("MCP sandbox deployment requires --sandbox os")
         if self.sandbox == "os":
             self._os_sandbox = OSSandbox(self.repo_root)
 
@@ -259,6 +260,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
 
         extra_env: dict[str, str] | None = self._build_api_env() or None
 
+        mcp_runtime: dict = {}
         t0 = time.time()
         assert self._os_sandbox is not None
         success, log, raw_stdout, raw_stderr, image_identity = (
@@ -270,6 +272,8 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
                 agent_type="codex",
                 allow_external_tools=self.allow_external_tools,
                 extra_env=extra_env,
+                mcp_servers=self.mcp_servers or None,
+                mcp_runtime=mcp_runtime,
             )
         )
         elapsed = time.time() - t0
@@ -287,6 +291,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
 
         return AgentOutput(
             instance_id=task_instance.instance_id,
+            mcp_runtime=mcp_runtime or None,
             output_dir=workspace,
             code_files=[f for f in produced_files if f.endswith(".py")],
             data_files=[f for f in produced_files if not f.endswith(".py")],
@@ -420,7 +425,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
 
     def _apply_tool_isolation(self, cmd: list[str]) -> None:
         """Append tool-isolation flags based on the resolved ToolMode."""
-        if self.tool_mode == ToolMode.UNRESTRICTED:
+        if self.tool_mode == ToolMode.UNRESTRICTED and not self.mcp_servers:
             return
         # --ignore-user-config prevents user-configured MCP servers from
         # being discovered and connected; --disable plugins alone is NOT

@@ -66,6 +66,21 @@
   目录和 task bundle。`benchflow-score` 不得接受 seed 生成请求、调用
   `generate_gt.py` 或评分 seed42。输出必须包含固定 schema 的 ScoreDetail、
   artifact SHA-256、scorer/task revision 和 harness/model/effort provenance。
+- Harbor `harbor-verify` 只评分已物化的公开 seed31415 task/instance 与恢复的 agent
+  产物，复用本地评分的隔离合并、task runtime 和错误分类。成功时仅写归一化
+  `reward.json` 及完整 `score_detail.json`；评估器故障必须删除旧 reward、写诊断并
+  非零退出。缺产物仍是有效零分；`--out` 与全部输入目录分离，seed42 拒绝。
+- Harbor `harbor export` 当前只导出单个已物化的 seed31415 task/level；需要当前
+  框架 wheel，输出含独立 verifier、最小 registry 和 wheel SHA-256。reference 与
+  scorer 只进入 verifier 镜像，导出目录含公开 prompt/reference，不入本仓库。
+  `evaluation.runtime: task` 使用专用 verifier 镜像，在构建时安装并检查 task
+  依赖与 Python 约束，评分时复用镜像依赖且保持 fresh worker 隔离。
+  verifier 基础依赖含 NumPy；agent/verifier 镜像标识绑定 task、instance，verifier
+  另绑定 wheel SHA-256。
+- TSP、Max3SAT、CMOS op-amp 的 Harbor scorer 通过 `tests/docker-compose.yaml`
+  中受限、内部网络 executor sidecar 执行 solver/ngspice；不得挂载宿主 Docker
+  socket。该路径要求 Harbor Docker Compose provider，并且不等同完整 agent
+  评测验证。
 - BenchFlow 运行 `asibench run` 必须启用 `--fail-on-agent-error`，且不得只信任
   进程退出码；manifest schema v2 必须提供对应 run result JSON，并将
   `prediction_dir` 绑定到其 persisted outputs，分别报告 attempt 与 evaluation 状态。
@@ -118,9 +133,12 @@
   instance run 隔离；execution 结束必须 teardown 清理。目录键须包含原始
   run key 哈希，Kimi 临时根初始化须支持并发。
 - 科学 MCP 只通过显式 `--mcp-config` 注入 Claude/Codex 的隔离 home；默认
-  restricted 运行不得继承 ambient MCP。配置必须严格校验，启用时固定为
-  search mode；当前 `--sandbox os` 因宿主 GUI/许可证/二进制映射不明确而须
-  fail-fast。catalog 只保存上游来源、前置条件和可编辑模板，不捆绑第三方软件。
+  restricted 运行不得继承 ambient MCP。MCP 与 web search 独立；OS 模式必须显式
+  声明 sandbox.deployment=instance（镜像内 stdio）或 service（runtime.services 内网
+  streamable HTTP）；不推断宿主挂载。容器内 preflight 必须先 initialize/tools/list，失败
+  不运行 agent；生命周期和 service 清理复用 OSSandbox。stdio 只净化继承环境，仍与 agent
+  共享容器信任边界和网络；独立隔离用 sidecar。详见 docs/mcp/os-sandbox.md。
+  catalog 只保存来源和模板，不捆绑第三方软件。
 - CAD MCP 上游兼容补丁仅存于 `scripts/mcp/cad-repairs/`，绑定源 revision 和
   SHA-256；只对显式指定的干净副本应用，不捆绑 CAD 软件、不自动更改本机凭据配置。
   patched stdio 冒烟通过不得升级为真实 CAD 业务认证；复测需临时 HOME 与端口保护。
@@ -175,8 +193,9 @@
   `image_media_types`。Codex 证据是 `exec --json` 的 `mcp_tool_call` item，无 server/tool
   列表事件，`mcp_connected` 只能由必需工具的成功返回证明，其内置 `list_mcp_resources*`
   不算必需工具。
-- `--mcp-config` 强制 search mode（Claude WebSearch/WebFetch、Codex web_search），
-  `--sandbox none` 下 shell 也能联网；fake task 必须把这些工具纳入 bypass 检查。
+- `--mcp-config` 不自动打开 web search；restricted 保留 MCP/ToolSearch，search 额外
+  开放 Claude WebSearch/WebFetch 或 Codex web_search。shell/MCP 自身仍可能联网，
+  fake task 的 bypass 检查须覆盖实际开放能力。
 - `tests/mcp_e2e/golden.json` 锁定每个 `verify_one` 的 verdict/各项检查/per-call 状态：
   纯重构必须逐字节不变，有意改变判定用 `MCP_E2E_GOLDEN=update` 整文件重生成并审 diff，
   `importorskip` 之后的测试不得喂 golden。离线测试全部在 `tests/mcp_e2e/`，共享构件只在

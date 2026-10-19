@@ -80,6 +80,13 @@ jobs:
         run: >-
           uv run --frozen pytest -q -m integration
           tests/test_os_sandbox_p1p2p3.py::TestTaskDockerfileAgentOverlayIntegration
+      - name: Run MCP Docker protocol integration
+        run: |
+          docker build -t asibench-mcp-ci-base - <<'DOCKERFILE'
+          FROM python:3.11-slim
+          RUN python -m venv /opt/venv
+          DOCKERFILE
+          ASIBENCH_MCP_DOCKER_IMAGE=asibench-mcp-ci-base uv run --frozen pytest -q tests/test_mcp_os_docker.py
 
   required:
     name: CI required

@@ -82,7 +82,7 @@ def test_codex_explicit_mcp_config_is_written_to_isolated_home(
 @pytest.mark.parametrize("adapter_cls", [ClaudeCodeCLIAdapter, CodexCLIAdapter])
 def test_explicit_mcp_rejected_in_os_sandbox(adapter_cls, mcp_config: Path):
     adapter = adapter_cls(tool_mode="search", mcp_config=str(mcp_config))
-    with pytest.raises(ValueError, match="not supported with --sandbox os"):
+    with pytest.raises(ValueError, match="requires explicit sandbox.deployment"):
         adapter.setup({"sandbox": "os"})
 
 
@@ -106,7 +106,7 @@ def test_run_rejects_mcp_os_before_docker_probe(mcp_config: Path):
         "--sandbox", "os",
     ])
     assert result.exit_code != 0
-    assert "not supported with --sandbox os" in result.output
+    assert "requires explicit sandbox.deployment" in result.output
 
 
 def test_mcp_catalog_and_init_commands(tmp_path: Path):

@@ -1,5 +1,12 @@
 # Testing
 
+Integration handoff documents live in `docs/handoff/benchflow.md` and
+`docs/handoff/harbor.md`. When updating them, verify branch/module availability
+and command options against the named source revision; distinguish historical
+server experiments from tests rerun during the handoff. The original server
+and its runtime resources are retired. The Harbor-specific tests exist on
+`feat/harbor-verify`, not on the current main branch.
+
 Install development dependencies and run the default offline-safe suite. Tests
 marked `integration` or `e2e` are excluded so a configured API key or installed
 agent CLI cannot trigger paid/external execution unexpectedly:
@@ -51,7 +58,7 @@ branch-protection check.
 Scientific MCP coverage is offline and never starts a third-party server. It
 validates strict JSON parsing, catalog completeness, CLI generation/checking,
 Claude allowlisting, Codex TOML conversion, per-run home isolation, and the
-Docker fail-fast boundary:
+explicit OS deployment boundary:
 
 ```bash
 uv run pytest -q tests/test_mcp_config.py tests/test_tool_isolation.py \
@@ -398,6 +405,56 @@ creation remains protected by a tag-keyed cross-process lock. Concurrency tests
 must synchronize workers through persistent handshake files and use generous
 timeouts only as a safety net: a fresh scoring worker's cold start (including
 the litellm import) can exceed 3 s on CI.
+
+`harbor-verify` takes one public seed31415 task bundle and materialized instance.
+Its tests compare the same nonempty prediction with `asibench score`, verify an
+empty submission is a valid zero, and check evaluator failures, unsafe artifact
+merges, stale reward removal (including invalid Judge selectors), and seed42
+rejection:
+
+```bash
+uv run pytest -q tests/test_harbor_verify.py
+```
+
+`harbor export` tests its seed31415 boundary, safe output paths, separation
+of agent input from verifier reference, and the dedicated verifier image for
+`evaluation.runtime: task`. The `harbor-verify` tests cover the preinstalled
+runtime path and reject its use outside the dedicated image:
+
+```bash
+uv run pytest -q tests/test_harbor_export.py
+```
+
+The batch exporter tests strict rejection of blocked cells, partial exports
+with a compatibility report, unsupported Python runtime constraints, and the
+empty-dataset boundary. Solver/CMOS export tests check the isolated executor
+service, internal network, and verifier environment wiring. Executor server
+tests cover process-result and artifact transport plus path traversal rejection.
+Aggregation tests ensure completed zero scores count while evaluator-invalid
+results are excluded:
+
+```bash
+uv run pytest -q tests/test_harbor_export.py tests/test_harbor_verify.py \
+  tests/test_harbor_aggregate.py tests/test_harbor_executor_server.py
+```
+
+For a materialized public seed31415 tree, audit all 60 tasks across B1-B4 with
+`asibench harbor audit`, then use `asibench harbor export-batch --skip-unsupported`
+to produce the compatible subset. TSP, Max3SAT, and CMOS op-amp use a constrained
+Compose executor sidecar and require Harbor support for
+`tests/docker-compose.yaml`. TSP and Max3SAT passed local Harbor Oracle smoke
+runs with their solver-validity gates passing; CMOS requires a configured Judge
+API for an end-to-end candidate evaluation. The audit's ready count is an exporter compatibility result, not
+agent performance validation. Harbor `score_detail.json` files can be summarized with
+`asibench harbor aggregate --details-dir <jobs> --out <report.json>`.
+
+For a Docker smoke, export one public B1 task, run `harbor run -p <task> -a nop`
+and check one completed trial with reward 0. Add a local oracle solution that
+copies a known nonempty prediction into `/workspace`, then compare its Harbor
+`verifier/score_detail.json` with `asibench score` on the exact persisted
+`artifacts/workspace` bytes. Assert final/max score, gates, scorer details,
+and artifact SHA-256 match. A reference-backed oracle fixture verifies artifact
+transport and scoring, not agent solving quality.
 
 ```bash
 uv run pytest -q \
@@ -1108,3 +1165,28 @@ Produce-only retries:
 `tests/test_retry.py::TestRetryStrategyAll::test_produce_only_run_keeps_every_attempt`
 checks that `asibench run --retries N` (score=False) saves N result files with
 attempts 1..N instead of overwriting attempt 1.
+
+
+## MCP OS sandbox compatibility
+
+Offline readiness, deployment, credential reference, concurrent staging and
+web-tool policy tests (no model API or third-party MCP):
+
+```sh
+uv run --frozen pytest -q tests/test_mcp_os_sandbox.py tests/test_mcp_config.py \
+  tests/test_os_sandbox_adapters.py tests/test_tool_isolation.py tests/test_difficulty_check.py
+```
+
+Opt-in real Docker protocol integration (stdio and sidecar with both adapter
+configuration formats, actual tools/call, startup failure and timeout cleanup):
+
+```sh
+ASIBENCH_MCP_DOCKER_IMAGE=<task-image-with-/opt/venv/bin/python> \
+  uv run --frozen pytest -q tests/test_mcp_os_docker.py
+```
+
+These Docker tests build a temporary image with a deterministic MCP server and
+protocol client stand-in, mount no login credentials, call no model API, and
+remove the test image. They do not certify live Claude/Codex model behavior or
+any of the 13 scientific upstream servers. See docs/mcp/os-sandbox.md for
+manual OS deployment and formal difficulty-check commands.

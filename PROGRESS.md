@@ -1389,3 +1389,46 @@ Lessons — process:
 - Prevention: validate runtime and distribution versions together, inspect both
   public artifacts, and wait for required CI before creating the release tag.
 - Version bump commit: `679f91663f1ed6ab059a24bf00bfcbb8188919a9`.
+
+## 2026-10-14 — BenchFlow / Harbor handoff after server retirement
+
+- Problem: integration knowledge lived in ignored local stage notes that still
+  referred to a retired personal server, credentials, images, and job artifacts.
+- Resolution: add standalone Chinese handoffs in `docs/handoff/benchflow.md`
+  and `docs/handoff/harbor.md`, with branch identities, historical evidence
+  limits, rebuilding steps, outstanding work, and explicit resource retirement.
+- Findings: Harbor modules remain on `feat/harbor-verify`, absent from main;
+  BenchFlow native integration is in the personal fork branch `feat/asi-bench`.
+  Its parity CLI remains a stub despite historical manual comparisons.
+- Verification: before/after focused tests passed: BenchFlow adapter 67, ASI
+  manifest bridge 14, Harbor branch 20. Markdown fences, local links, retirement
+  notices, and whitespace checks passed. No live model, Docker, or full suite
+  validation was performed for this documentation-only change.
+- Prevention: preserve integration code in team-controlled repositories; treat
+  historical summaries as context and rebuild evidence on team infrastructure.
+  Do not merge feature implementation merely to publish handoff documents.
+- Handoff documentation commit: `1a8ca3f`.
+
+## 2026-10-18 — Explicit MCP in OS sandbox
+
+- Code commit: `6c52f6e` (task branch `task-mcp-os-20261018`).
+- Problem: explicit MCP was globally rejected by OS execution and implicitly
+  enabled built-in web tools, blocking restricted formal author verification.
+- Resolution: explicit image-local stdio or internal task-service MCP,
+  container-local initialize/tools/list preflight, private per-run configuration
+  staging and credential env references, independent web-tool policy,
+  difficulty-check support, and per-result instance/service image provenance.
+  Lifecycle cleanup reuses OSSandbox rather than a second Docker controller.
+- Verification: full offline suite 3,848 passed, 15 skipped, 24 deselected;
+  final MCP boundary suite 30 passed; opt-in Docker protocol suite 7 passed
+  (stdio/HTTP in both adapter formats, failure/timeout cleanup, actual Codex
+  CLI configuration parsing). Wheel and sdist build succeeded.
+- Limits: Docker clients use a deterministic protocol stand-in, not live model
+  calls; none of the 13 scientific backends were installed or recertified.
+  Remote authenticated MCP, external sidecar egress allowlists and GUI/licensed
+  deployment remain unsupported. Same-instance stdio shares the agent trust
+  boundary; a clean environment must never be described as independent network
+  or filesystem isolation.
+- Prevention: keep explicit deployment capability checks, preserve host-only
+  rejection, and run Docker protocol integration in CI. The worktree is retained
+  for user review; main integration requires explicit user confirmation.
