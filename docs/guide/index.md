@@ -18,3 +18,5 @@ These guides are the source of truth for the docs; the website renders them.
   seed31415 attempts through the schema-v2 BenchFlow boundary.
 - **[Contribute a task](authoring-a-task.md)** — propose a new task: what a good task
   is, the files it needs, local self-check, and submitting through the portal.
+- **[Design a task that uses MCP](authoring-mcp-task.md)** — prepare the MCP runtime,
+  write the task contract, run it in the OS sandbox, and optionally verify tool use.
