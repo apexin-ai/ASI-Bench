@@ -240,6 +240,67 @@
         ],
         "cwd": "/path/to/gns3-mcp-server"
       }
+    },
+    "chgnet_atomisticskills": {
+      "category": "materials-mlip",
+      "source": "https://github.com/learningmatter-mit/AtomisticSkills",
+      "server": {
+        "command": "/path/to/AtomisticSkills/venv/mlip/.venv/bin/python",
+        "args": ["-m", "src.mcp_server.matgl_server"],
+        "cwd": "/path/to/AtomisticSkills",
+        "env": {
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "PYTHONWARNINGS": "ignore"
+        }
+      },
+      "model": "CHGNet-PES-MatPES-PBE-1M-2026.9",
+      "notes": "MatGL CHGNet-family PES; this is not the original chgnet package checkpoint."
+    },
+    "mace_atomisticskills": {
+      "category": "materials-mlip",
+      "source": "https://github.com/learningmatter-mit/AtomisticSkills",
+      "server": {
+        "command": "/path/to/AtomisticSkills/venv/mlip/.venv/bin/python",
+        "args": ["-m", "src.mcp_server.mace_server"],
+        "cwd": "/path/to/AtomisticSkills",
+        "env": {
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "PYTHONWARNINGS": "ignore"
+        }
+      },
+      "model": "MACE-OMAT-0-small",
+      "notes": "The model is selected explicitly with load_model; do not treat MACE model families as interchangeable."
+    },
+    "mattergen_atomisticskills": {
+      "category": "materials-generation",
+      "source": "https://github.com/learningmatter-mit/AtomisticSkills",
+      "server": {
+        "command": "/path/to/AtomisticSkills/venv/mattergen/.venv/bin/python",
+        "args": ["-m", "src.mcp_server.mattergen_server"],
+        "cwd": "/path/to/AtomisticSkills",
+        "env": {
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "PYTHONWARNINGS": "ignore"
+        }
+      },
+      "model": "mattergen_base",
+      "notes": "Generation is stochastic; validate composition/properties and metadata rather than byte equality."
+    },
+    "mattersim_atomisticskills_adapter": {
+      "category": "materials-mlip",
+      "source": "https://github.com/learningmatter-mit/AtomisticSkills",
+      "server": {
+        "command": "/path/to/AtomisticSkills/venv/mattergen/.venv/bin/python",
+        "args": ["/path/to/AtomisticSkills/mcp_mattersim_server.py"],
+        "cwd": "/path/to/AtomisticSkills",
+        "env": {
+          "MATTERSIM_DEVICE": "auto",
+          "MATTERSIM_MODEL": "MatterSim-v1.0.0-1M",
+          "PYTHONWARNINGS": "ignore"
+        }
+      },
+      "model": "MatterSim-v1.0.0-1M",
+      "notes": "ASI-Bench adapter over microsoft/mattersim; set MATTERSIM_LOAD_PATH to a pinned local checkpoint for offline runs."
     }
   }
 }

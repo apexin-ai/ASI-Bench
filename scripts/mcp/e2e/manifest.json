@@ -412,6 +412,115 @@
         "list_interactive_sessions", "list_report_images", "read_orfs_metrics",
         "read_report_image", "run_orfs_stage", "terminate_interactive_session"
       ]
+    },
+    {
+      "id": "chgnet",
+      "catalog_id": "chgnet_atomisticskills",
+      "checkout": "atomisticskills_mlip",
+      "repository": "https://github.com/learningmatter-mit/AtomisticSkills.git",
+      "revision": "6afdd465a35088136e4875d7d2fbaefc633f4adf",
+      "python": "3.12",
+      "install": "uv-sync-frozen",
+      "project": "venv/mlip",
+      "uv_sync_args": ["--no-dev"],
+      "launch": {
+        "command": "venv/mlip/.venv/bin/python",
+        "args": ["-m", "src.mcp_server.matgl_server"],
+        "env": {
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "MPLBACKEND": "Agg",
+          "PYTHONWARNINGS": "ignore"
+        }
+      },
+      "expected_tools": [
+        "get_info",
+        "load_model",
+        "predict_atomic_features",
+        "predict_bandgap",
+        "predict_structure",
+        "relax_structure",
+        "run_md"
+      ]
+    },
+    {
+      "id": "mace",
+      "catalog_id": "mace_atomisticskills",
+      "checkout": "atomisticskills_mlip",
+      "repository": "https://github.com/learningmatter-mit/AtomisticSkills.git",
+      "revision": "6afdd465a35088136e4875d7d2fbaefc633f4adf",
+      "python": "3.12",
+      "install": "uv-sync-frozen",
+      "project": "venv/mlip",
+      "uv_sync_args": ["--no-dev"],
+      "launch": {
+        "command": "venv/mlip/.venv/bin/python",
+        "args": ["-m", "src.mcp_server.mace_server"],
+        "env": {
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "MPLBACKEND": "Agg",
+          "PYTHONWARNINGS": "ignore"
+        }
+      },
+      "expected_tools": [
+        "get_info",
+        "load_model",
+        "predict_atomic_features",
+        "predict_structure",
+        "relax_structure",
+        "run_md"
+      ]
+    },
+    {
+      "id": "mattergen",
+      "catalog_id": "mattergen_atomisticskills",
+      "checkout": "atomisticskills_mattergen",
+      "repository": "https://github.com/learningmatter-mit/AtomisticSkills.git",
+      "revision": "6afdd465a35088136e4875d7d2fbaefc633f4adf",
+      "python": "3.10",
+      "install": "uv-sync-frozen",
+      "project": "venv/mattergen",
+      "uv_sync_args": ["--no-dev"],
+      "bundle": {
+        "source": "mattersim_server.py",
+        "destination": "mcp_mattersim_server.py"
+      },
+      "launch": {
+        "command": "venv/mattergen/.venv/bin/python",
+        "args": ["-m", "src.mcp_server.mattergen_server"],
+        "env": {
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "MPLBACKEND": "Agg",
+          "PYTHONWARNINGS": "ignore"
+        }
+      },
+      "expected_tools": ["generate_structures"]
+    },
+    {
+      "id": "mattersim",
+      "catalog_id": "mattersim_atomisticskills_adapter",
+      "checkout": "atomisticskills_mattergen",
+      "repository": "https://github.com/learningmatter-mit/AtomisticSkills.git",
+      "revision": "6afdd465a35088136e4875d7d2fbaefc633f4adf",
+      "python": "3.10",
+      "install": "uv-sync-frozen",
+      "project": "venv/mattergen",
+      "uv_sync_args": ["--no-dev"],
+      "bundle": {
+        "source": "mattersim_server.py",
+        "destination": "mcp_mattersim_server.py"
+      },
+      "launch": {
+        "command": "venv/mattergen/.venv/bin/python",
+        "args": ["{checkout}/mcp_mattersim_server.py"],
+        "env": {
+          "FASTMCP_CHECK_FOR_UPDATES": "off",
+          "MATTERSIM_DEVICE": "auto",
+          "MATTERSIM_MODEL": "MatterSim-v1.0.0-1M",
+          "MPLBACKEND": "Agg",
+          "PYTHONWARNINGS": "ignore"
+        }
+      },
+      "expected_tools": ["get_info", "predict_structure", "relax_structure"]
     }
   ]
 }

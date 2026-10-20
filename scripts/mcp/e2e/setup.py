@@ -157,16 +157,53 @@ def _check_uv_sync_args(sid: str, value, entry: dict) -> None:
         raise SetupError(f"{sid}: uv_sync_args must be extra --flags (not --python/--frozen)")
 
 
+def _check_relative_project(sid: str, value, entry: dict) -> None:
+    if value is None:
+        return
+    if _relative_parts(value) is None:
+        raise SetupError(f"{sid}: project must be a relative path inside the checkout")
+
+
+def _check_bundle(sid: str, value, entry: dict) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != {"source", "destination"}:
+        raise SetupError(f"{sid}: bundle must have exactly source and destination")
+    if _relative_parts(value["source"]) is None:
+        raise SetupError(f"{sid}: bundle.source must be a relative path in the E2E bundle")
+    if _relative_parts(value["destination"]) is None:
+        raise SetupError(f"{sid}: bundle.destination must be a relative path in the checkout")
+
+
 class UvSyncFrozen(Installer):
-    """Upstream ships pyproject.toml + uv.lock -> ``uv sync --frozen``."""
+    """Upstream ships pyproject.toml + uv.lock -> ``uv sync --frozen``.
+
+    ``project`` is useful for monorepos whose lockfile lives below the checkout
+    root (for example AtomisticSkills).  ``bundle`` is deliberately limited to
+    one checked-in adapter file; it is copied after checkout and before the
+    environment is built, without allowing arbitrary host paths into a config.
+    """
     mode = "uv-sync-frozen"
-    fields = {"uv_sync_args": _check_uv_sync_args}
+    fields = {"uv_sync_args": _check_uv_sync_args, "project": _check_relative_project,
+              "bundle": _check_bundle}
 
     def install(self, entry: dict, dest: Path) -> Path:
         _uv()
+        project = Path(entry.get("project", "."))
+        project_dir = dest / project
+        if not (project_dir / "pyproject.toml").is_file() or not (project_dir / "uv.lock").is_file():
+            raise SetupError(f"{entry['id']}: project {entry.get('project', '.')!r} needs pyproject.toml and uv.lock")
+        bundle = entry.get("bundle")
+        if bundle:
+            source = HERE / bundle["source"]
+            destination = dest / bundle["destination"]
+            if not source.is_file():
+                raise SetupError(f"{entry['id']}: bundle source does not exist: {source}")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
         run(["uv", "sync", "--frozen", *entry.get("uv_sync_args", []), "--python", entry["python"]],
-            cwd=dest, env=_installer_env())
-        return dest / ".venv" / "bin" / "python"
+            cwd=project_dir, env=_installer_env())
+        return project_dir / ".venv" / "bin" / "python"
 
 
 def _check_requirements(sid: str, value, entry: dict) -> None:
