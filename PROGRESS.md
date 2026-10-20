@@ -1472,3 +1472,24 @@ Lessons — process:
   is recorded separately in the companion artifact workspace.
 - Prevention: initialize/tools/list success alone does not validate scientific
   calls; allow actual CPU computation time and inspect returned payloads.
+
+### 2026-10-20 — Real Codex agents in Docker OS sandbox
+
+- Code commit: `96529d7`; regression evidence commit: `32ac542`.
+- Verified all four materials MCPs with actual Codex CLI 0.162.1,
+  gpt-6.1-sol (medium), CodexCLIAdapter.solve and OSSandbox. Image identity:
+  `sha256:f66d9cfdeaa473a8cd12673fd407694676446cc96b94344e6aefc088ed818635`.
+  CPU-only instance deployment, independent containers, restricted tool mode.
+- CHGNet, MACE and MatterSim predictions match independent official ASE
+  subprocess references for Si2: energy/force/stress max absolute error zero.
+  MatterSim uses default model/device. MatterGen completed one generation in
+  1002.3 seconds; tool arguments/results and generated files verified, and an
+  independent pymatgen process parsed its finite 12-site Li4Cl8 CIF.
+- Limits: Li-Zr-Cl conditioning did not yield Zr; no claim of exact condition
+  compliance or stability. This tests real adapter/sandbox execution, not full
+  generate/run/score CLI orchestration. No GPU or all-model certification.
+- Prevention: finish image export/unpack before launching parallel tests;
+  exclude interrupted infrastructure attempts from MCP business verdicts.
+  Keep credentials local and ignored, and inspect actual MCP business returns.
+  All test containers cleaned up. Evidence/report are in companion artifact
+  workspace materials-mcp-agent-os-20261020. Main remains unmodified; no push.
