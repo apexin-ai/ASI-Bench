@@ -422,14 +422,23 @@
       "python": "3.12",
       "install": "uv-sync-frozen",
       "project": "venv/mlip",
-      "uv_sync_args": ["--no-dev"],
+      "uv_sync_args": [
+        "--no-dev",
+        "--extra=cu126"
+      ],
       "launch": {
         "command": "venv/mlip/.venv/bin/python",
-        "args": ["-m", "src.mcp_server.matgl_server"],
+        "args": [
+          "-m",
+          "src.mcp_server.matgl_server"
+        ],
         "env": {
           "FASTMCP_CHECK_FOR_UPDATES": "off",
           "MPLBACKEND": "Agg",
-          "PYTHONWARNINGS": "ignore"
+          "PYTHONWARNINGS": "ignore",
+          "OMP_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1"
         }
       },
       "expected_tools": [
@@ -451,14 +460,23 @@
       "python": "3.12",
       "install": "uv-sync-frozen",
       "project": "venv/mlip",
-      "uv_sync_args": ["--no-dev"],
+      "uv_sync_args": [
+        "--no-dev",
+        "--extra=cu126"
+      ],
       "launch": {
         "command": "venv/mlip/.venv/bin/python",
-        "args": ["-m", "src.mcp_server.mace_server"],
+        "args": [
+          "-m",
+          "src.mcp_server.mace_server"
+        ],
         "env": {
           "FASTMCP_CHECK_FOR_UPDATES": "off",
           "MPLBACKEND": "Agg",
-          "PYTHONWARNINGS": "ignore"
+          "PYTHONWARNINGS": "ignore",
+          "OMP_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1"
         }
       },
       "expected_tools": [
@@ -479,21 +497,40 @@
       "python": "3.10",
       "install": "uv-sync-frozen",
       "project": "venv/mattergen",
-      "uv_sync_args": ["--no-dev"],
+      "uv_sync_args": [
+        "--no-dev",
+        "--extra=cu126"
+      ],
       "bundle": {
         "source": "mattersim_server.py",
         "destination": "mcp_mattersim_server.py"
       },
       "launch": {
         "command": "venv/mattergen/.venv/bin/python",
-        "args": ["-m", "src.mcp_server.mattergen_server"],
+        "args": [
+          "-m",
+          "src.mcp_server.mattergen_server"
+        ],
         "env": {
           "FASTMCP_CHECK_FOR_UPDATES": "off",
           "MPLBACKEND": "Agg",
-          "PYTHONWARNINGS": "ignore"
+          "PYTHONWARNINGS": "ignore",
+          "OMP_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MATTERGEN_REPO": "{checkout}/mattergen"
         }
       },
-      "expected_tools": ["generate_structures"]
+      "expected_tools": [
+        "generate_structures"
+      ],
+      "bootstrap": {
+        "script": "skills/ml-generative-mattergen/scripts/setup_mattergen.py",
+        "args": [
+          "--dir",
+          "{checkout}/mattergen"
+        ]
+      }
     },
     {
       "id": "mattersim",
@@ -504,23 +541,42 @@
       "python": "3.10",
       "install": "uv-sync-frozen",
       "project": "venv/mattergen",
-      "uv_sync_args": ["--no-dev"],
+      "uv_sync_args": [
+        "--no-dev",
+        "--extra=cu126"
+      ],
       "bundle": {
         "source": "mattersim_server.py",
         "destination": "mcp_mattersim_server.py"
       },
       "launch": {
         "command": "venv/mattergen/.venv/bin/python",
-        "args": ["{checkout}/mcp_mattersim_server.py"],
+        "args": [
+          "{checkout}/mcp_mattersim_server.py"
+        ],
         "env": {
           "FASTMCP_CHECK_FOR_UPDATES": "off",
           "MATTERSIM_DEVICE": "auto",
           "MATTERSIM_MODEL": "MatterSim-v1.0.0-1M",
           "MPLBACKEND": "Agg",
-          "PYTHONWARNINGS": "ignore"
+          "PYTHONWARNINGS": "ignore",
+          "OMP_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1"
         }
       },
-      "expected_tools": ["get_info", "predict_structure", "relax_structure"]
+      "expected_tools": [
+        "get_info",
+        "predict_structure",
+        "relax_structure"
+      ],
+      "bootstrap": {
+        "script": "skills/ml-generative-mattergen/scripts/setup_mattergen.py",
+        "args": [
+          "--dir",
+          "{checkout}/mattergen"
+        ]
+      }
     }
   ]
 }

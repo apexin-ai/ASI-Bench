@@ -66,8 +66,12 @@ def _calculator_for(model_name: str, device: str):
 
 
 def _settings(model_name: str | None, device: str | None) -> tuple[str, str]:
-    return (model_name or os.environ.get("MATTERSIM_MODEL", "MatterSim-v1.0.0-1M"),
-            device or os.environ.get("MATTERSIM_DEVICE", "auto"))
+    target = device or os.environ.get("MATTERSIM_DEVICE", "auto")
+    if target == "auto":
+        import torch
+
+        target = "cuda" if torch.cuda.is_available() else "cpu"
+    return model_name or os.environ.get("MATTERSIM_MODEL", "MatterSim-v1.0.0-1M"), target
 
 
 @mcp.tool()
@@ -140,4 +144,9 @@ def relax_structure(
 
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    # The pinned AtomisticSkills transport preserves a separate MCP pipe and
+    # sends both Python and native library stdout to stderr. MatterSim installs
+    # a Loguru stdout sink on first import, after the handshake has completed.
+    from src.utils.mcp_utils import run_fastmcp_server, setup_mcp_stdout
+
+    run_fastmcp_server(mcp, setup_mcp_stdout())
