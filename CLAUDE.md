@@ -138,7 +138,8 @@
   streamable HTTP）；不推断宿主挂载。容器内 preflight 必须先 initialize/tools/list，失败
   不运行 agent；生命周期和 service 清理复用 OSSandbox。stdio 只净化继承环境，仍与 agent
   共享容器信任边界和网络；独立隔离用 sidecar。详见 docs/mcp/os-sandbox.md。
-  catalog 只保存来源和模板，不捆绑第三方软件。
+  catalog 只保存来源和模板，不捆绑第三方软件。Codex 长工具调用可在 server 配置中设置
+  正整数 tool_timeout_sec（host/OS 均保留）；Claude 配置明确拒绝此专有字段。
 - CAD MCP 上游兼容补丁仅存于 `scripts/mcp/cad-repairs/`，绑定源 revision 和
   SHA-256；只对显式指定的干净副本应用，不捆绑 CAD 软件、不自动更改本机凭据配置。
   patched stdio 冒烟通过不得升级为真实 CAD 业务认证；复测需临时 HOME 与端口保护。

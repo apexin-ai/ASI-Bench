@@ -94,6 +94,12 @@ Keep the config as an operator/run artifact when it contains machine-specific
 paths or credentials. The task should name the expected server/tool behavior;
 the runner supplies the environment-specific config.
 
+For long Codex MCP calls, add `"tool_timeout_sec": 3600` inside the server
+entry. Codex otherwise defaults to 60 seconds per call, which is insufficient
+for CPU MatterGen generation. This optional field works in host and OS runs;
+omit it when using Claude. The overall task/agent timeout must also allow the
+computation to finish.
+
 ## Run and validate
 
 Check the config, then run the task with a supported CLI agent:

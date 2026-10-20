@@ -1208,3 +1208,8 @@ are compared to direct ASE calculators in a separate process; generated CIFs
 are independently parsed. Weights require network access on first use.
 MatterGen CPU generation can take tens of minutes. Direct MCP success does
 not certify an agent, a container image, MD, or every available checkpoint.
+
+`tests/test_mcp_config.py` also checks positive integer `tool_timeout_sec`
+validation, preservation in host Codex TOML and OS command overrides, and
+explicit rejection in Claude configs. Long CPU MCP calls need both this
+per-call setting and a sufficient overall task/agent timeout.

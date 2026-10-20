@@ -426,6 +426,8 @@ asibench run --agent codex_cli \
 `--mcp-config` accepts portable `{"mcpServers": {...}}` JSON for
 `claude_code_cli` and `codex_cli`. It loads only the named servers and does
 not automatically enable web search: use `--tool-mode search` if needed.
+Codex configs may set a positive integer `tool_timeout_sec` per server for long
+scientific calls (for example, `3600` for MatterGen); omit it for Claude configs.
 For `--sandbox os`, explicitly declare either instance-local stdio or a
 private `runtime.services` MCP sidecar. Host-only configurations fail closed.
 See [MCP OS sandbox setup](docs/mcp/os-sandbox.md) for image preparation,

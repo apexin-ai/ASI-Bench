@@ -9,7 +9,7 @@ from typing import Any
 
 
 _SERVER_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-_SERVER_FIELDS = frozenset({"type", "command", "args", "env", "cwd", "url", "headers", "sandbox"})
+_SERVER_FIELDS = frozenset({"type", "command", "args", "env", "cwd", "url", "headers", "sandbox", "tool_timeout_sec"})
 _STRING_MAP_FIELDS = ("env", "headers")
 
 
@@ -50,6 +50,10 @@ def load_mcp_config(path: str | Path) -> dict[str, dict[str, Any]]:
         if "sandbox" in raw and raw.get("type") == "sse":
             raise ValueError(f"MCP server '{name}': OS sandbox supports streamable HTTP, not legacy SSE")
         entry = dict(raw)
+        if "tool_timeout_sec" in entry and (
+            type(entry["tool_timeout_sec"]) is not int or entry["tool_timeout_sec"] <= 0
+        ):
+            raise ValueError(f"MCP server '{name}': tool_timeout_sec must be a positive integer")
         if has_command:
             if "type" in entry and entry["type"] not in ("stdio", None):
                 raise ValueError(f"MCP server '{name}' command transport must be 'stdio'")
@@ -95,6 +99,8 @@ def codex_mcp_toml(servers: dict[str, dict[str, Any]]) -> str:
     lines: list[str] = []
     for name, entry in servers.items():
         lines.append(f"[mcp_servers.{name}]")
+        if "tool_timeout_sec" in entry:
+            lines.append(f"tool_timeout_sec = {entry['tool_timeout_sec']}")
         if "command" in entry:
             lines.append(f"command = {_toml_string(entry['command'])}")
             lines.append("args = [" + ", ".join(_toml_string(x) for x in entry["args"]) + "]")

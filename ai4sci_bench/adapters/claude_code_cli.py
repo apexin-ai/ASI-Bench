@@ -112,6 +112,10 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         self.anthropic_via_responses = anthropic_via_responses
         self.mcp_config = str(Path(mcp_config).expanduser().resolve()) if mcp_config else None
         self.mcp_servers = load_mcp_config(self.mcp_config) if self.mcp_config else {}
+        if any("tool_timeout_sec" in entry for entry in self.mcp_servers.values()):
+            raise ValueError(
+                "tool_timeout_sec is supported only by Codex; remove it from Claude MCP configs"
+            )
         if self.api_base is not None and api_protocol is None:
             raise ValueError(
                 "api_protocol is required when api_base is set. "
