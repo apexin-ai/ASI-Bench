@@ -1432,3 +1432,28 @@ Lessons — process:
 - Prevention: keep explicit deployment capability checks, preserve host-only
   rejection, and run Docker protocol integration in CI. The worktree is retained
   for user review; main integration requires explicit user confirmation.
+
+## 2026-10-20 — Validate real material MCP deployments
+
+- Code commit: `de45456` (task branch `task-materials-mcp-integration`).
+- Problem: protocol-only responses hid failed model loads, missing MatterGen
+  source resources/PyG extensions, MatterSim's unsupported auto device, and
+  scientific-library stdout corrupting JSON-RPC.
+- Resolution: validate and execute pinned upstream source bootstrap, select
+  locked cu126 extras, resolve auto to CPU/CUDA, isolate native/Python stdout,
+  and reject business-error responses in smoke checks. Compare real potential
+  predictions against direct official ASE calculators in a separate process;
+  generate a single MatterGen batch and parse the resulting CIF.
+- Verification: offline MCP E2E suite 1268 passed, 6 skipped. Real CPU smoke:
+  CHGNet 16 PASS, MACE 15 PASS, MatterSim 10 PASS/2 WARN (invalid-input errors
+  in-band), MatterGen 9 PASS including full 1000-step generation using the final
+  installer config. Energy/force/stress maximum absolute errors were all zero
+  for the tested Si2 structure. Default MatterSim auto and two BFGS steps also
+  succeeded. All four services kept stdout pure JSON-RPC.
+- Limits: no agent L2, Docker OS image, GPU, all-checkpoint or general scientific
+  accuracy certification. MatterGen CIF parsing does not establish stability or
+  exact conditioning compliance. Evidence and Chinese report are retained in
+  the companion artifact workspace under materials-mcp-validation-20261020.
+- Prevention: require real checkpoint flags and inspect scientific payloads;
+  never label skipped generation or in-band model errors as working integration.
+  Task work remains unmerged and unpushed pending user authorization.
