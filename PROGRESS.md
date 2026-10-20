@@ -1457,3 +1457,18 @@ Lessons — process:
 - Prevention: require real checkpoint flags and inspect scientific payloads;
   never label skipped generation or in-band model errors as working integration.
   Task work remains unmerged and unpushed pending user authorization.
+
+
+### 2026-10-20 — Codex MCP long-call timeouts
+
+- Code commit: `96529d7`. Codex defaults to a 60-second MCP tool timeout,
+  which interrupts CPU MatterGen generation; the portable parser previously
+  rejected its native per-server setting.
+- Accept strictly positive integer `tool_timeout_sec`, retain it in host TOML
+  and OS overrides, and reject this Codex-specific setting for Claude configs.
+  Document both per-call and overall task/agent timeouts.
+- Verification: reproducer failed before the fix; MCP config, OS sandbox and
+  MCP E2E regressions passed: 1317 passed, 6 skipped. Live Docker/agent evidence
+  is recorded separately in the companion artifact workspace.
+- Prevention: initialize/tools/list success alone does not validate scientific
+  calls; allow actual CPU computation time and inspect returned payloads.
