@@ -27,7 +27,7 @@ Install modes:
 
 | Mode | Use when | Manifest fields |
 |---|---|---|
-| `uv-sync-frozen` | upstream has a `uv.lock` | optional `uv_sync_args` |
+| `uv-sync-frozen` | upstream has a `uv.lock` | optional `uv_sync_args`, `project` (lockfile subdirectory), `bundle` (adapter source/destination), `bootstrap` (pinned upstream Python script/args, after sync) |
 | `uv-pip-pinned` | no lockfile | `requirements` (exact `==` pins), `exclude_newer` |
 | `conda-explicit` | conda-only packages | `conda` (channel, exact specs); lock per platform in `locks/`, regenerate with `setup.py <id> --lock` |
 | `npm-ci` | Node server with an upstream `package-lock.json` | `npm` (`workdir` holding the lockfile, `scripts` run after `npm ci`, e.g. the TypeScript build); `launch.command` is the built `#!` script inside `workdir`, made executable by `setup.py`; `.venv` is an empty venv of `python` that only runs `smoke.py` |
@@ -93,6 +93,17 @@ revision, config equals what `setup.py` renders, handshake and `tools/list`,
 unknown tool is an error, server alive, stdout is pure JSON-RPC, cwd
 untouched); its own checks are in the `e2e_smoke/servers/<id>.py` docstring
 and messages.
+
+For material servers, the interpreter is in
+`atomisticskills_mlip/venv/mlip/.venv` (`chgnet`, `mace`) or
+`atomisticskills_mattergen/venv/mattergen/.venv` (`mattergen`, `mattersim`).
+Use `--load-model` to enable real potential-model predictions and independent
+ASE comparisons, or `--generate` for MatterGen generation and CIF validation.
+Without these flags, checkpoint execution is skipped with a warning. Setup
+selects the locked `cu126` extra (CPU also works), fetches pinned MatterGen
+source resources and sets `MATTERGEN_REPO`. Initial model downloads and CPU
+generation can be slow. See the [task author guide](../../../docs/guide/authoring-mcp-task.md#material-science-servers)
+for model semantics and OS deployment requirements.
 
 A new server's smoke is one `e2e_smoke/servers/<id>.py` defining
 `SMOKE = Smoke(server=…, run_l1=…)`, plus optional hooks (`prepare` for extra

@@ -1432,3 +1432,64 @@ Lessons — process:
 - Prevention: keep explicit deployment capability checks, preserve host-only
   rejection, and run Docker protocol integration in CI. The worktree is retained
   for user review; main integration requires explicit user confirmation.
+
+## 2026-10-20 — Validate real material MCP deployments
+
+- Code commit: `de45456` (task branch `task-materials-mcp-integration`).
+- Problem: protocol-only responses hid failed model loads, missing MatterGen
+  source resources/PyG extensions, MatterSim's unsupported auto device, and
+  scientific-library stdout corrupting JSON-RPC.
+- Resolution: validate and execute pinned upstream source bootstrap, select
+  locked cu126 extras, resolve auto to CPU/CUDA, isolate native/Python stdout,
+  and reject business-error responses in smoke checks. Compare real potential
+  predictions against direct official ASE calculators in a separate process;
+  generate a single MatterGen batch and parse the resulting CIF.
+- Verification: offline MCP E2E suite 1268 passed, 6 skipped. Real CPU smoke:
+  CHGNet 16 PASS, MACE 15 PASS, MatterSim 10 PASS/2 WARN (invalid-input errors
+  in-band), MatterGen 9 PASS including full 1000-step generation using the final
+  installer config. Energy/force/stress maximum absolute errors were all zero
+  for the tested Si2 structure. Default MatterSim auto and two BFGS steps also
+  succeeded. All four services kept stdout pure JSON-RPC.
+- Limits: no agent L2, Docker OS image, GPU, all-checkpoint or general scientific
+  accuracy certification. MatterGen CIF parsing does not establish stability or
+  exact conditioning compliance. Evidence and Chinese report are retained in
+  the companion artifact workspace under materials-mcp-validation-20261020.
+- Prevention: require real checkpoint flags and inspect scientific payloads;
+  never label skipped generation or in-band model errors as working integration.
+  Task work remains unmerged and unpushed pending user authorization.
+
+
+### 2026-10-20 — Codex MCP long-call timeouts
+
+- Code commit: `96529d7`. Codex defaults to a 60-second MCP tool timeout,
+  which interrupts CPU MatterGen generation; the portable parser previously
+  rejected its native per-server setting.
+- Accept strictly positive integer `tool_timeout_sec`, retain it in host TOML
+  and OS overrides, and reject this Codex-specific setting for Claude configs.
+  Document both per-call and overall task/agent timeouts.
+- Verification: reproducer failed before the fix; MCP config, OS sandbox and
+  MCP E2E regressions passed: 1317 passed, 6 skipped. Live Docker/agent evidence
+  is recorded separately in the companion artifact workspace.
+- Prevention: initialize/tools/list success alone does not validate scientific
+  calls; allow actual CPU computation time and inspect returned payloads.
+
+### 2026-10-20 — Real Codex agents in Docker OS sandbox
+
+- Code commit: `96529d7`; regression evidence commit: `32ac542`.
+- Verified all four materials MCPs with actual Codex CLI 0.162.1,
+  gpt-6.1-sol (medium), CodexCLIAdapter.solve and OSSandbox. Image identity:
+  `sha256:f66d9cfdeaa473a8cd12673fd407694676446cc96b94344e6aefc088ed818635`.
+  CPU-only instance deployment, independent containers, restricted tool mode.
+- CHGNet, MACE and MatterSim predictions match independent official ASE
+  subprocess references for Si2: energy/force/stress max absolute error zero.
+  MatterSim uses default model/device. MatterGen completed one generation in
+  1002.3 seconds; tool arguments/results and generated files verified, and an
+  independent pymatgen process parsed its finite 12-site Li4Cl8 CIF.
+- Limits: Li-Zr-Cl conditioning did not yield Zr; no claim of exact condition
+  compliance or stability. This tests real adapter/sandbox execution, not full
+  generate/run/score CLI orchestration. No GPU or all-model certification.
+- Prevention: finish image export/unpack before launching parallel tests;
+  exclude interrupted infrastructure attempts from MCP business verdicts.
+  Keep credentials local and ignored, and inspect actual MCP business returns.
+  All test containers cleaned up. Evidence/report are in companion artifact
+  workspace materials-mcp-agent-os-20261020. Main remains unmodified; no push.

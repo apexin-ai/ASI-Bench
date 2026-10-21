@@ -101,6 +101,8 @@ def stage_os_mcp(servers: dict, metadata: dict, agent_type: str, cmd: list[str],
                 rendered[name] = {"command": PYTHON, "args": [f"{CONTAINER_ROOT}/runtime.py", "server", name]}
             else:
                 rendered[name] = {k: v for k, v in entry.items() if k != "sandbox"}
+            if "tool_timeout_sec" in entry:
+                rendered[name]["tool_timeout_sec"] = entry["tool_timeout_sec"]
         (root / "mcp.json").write_text(json.dumps({"mcpServers": rendered}))
         env = dict(extra_env or {})
         command = list(cmd)

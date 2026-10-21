@@ -15,7 +15,9 @@ Stdlib only. For the server ``<id>`` listed in ``manifest.json`` this:
    shell are ignored on purpose):
 
    ``uv-sync-frozen``  ``uv sync --frozen`` against the upstream lockfile
-                       (optional extra ``uv_sync_args``);
+                       (optional extra ``uv_sync_args``, monorepo ``project``,
+                       adapter ``bundle``, and a pinned upstream Python
+                       ``bootstrap`` script with literal args, without a shell);
    ``uv-pip-pinned``   no upstream lockfile: fresh venv and ``uv pip install``
                        of exact ``requirements`` pins with ``exclude_newer``;
    ``conda-explicit``  conda-only packages (psi4): ``micromamba create`` from a
@@ -157,16 +159,73 @@ def _check_uv_sync_args(sid: str, value, entry: dict) -> None:
         raise SetupError(f"{sid}: uv_sync_args must be extra --flags (not --python/--frozen)")
 
 
+def _check_relative_project(sid: str, value, entry: dict) -> None:
+    if value is None:
+        return
+    if _relative_parts(value) is None:
+        raise SetupError(f"{sid}: project must be a relative path inside the checkout")
+
+
+def _check_bundle(sid: str, value, entry: dict) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != {"source", "destination"}:
+        raise SetupError(f"{sid}: bundle must have exactly source and destination")
+    if _relative_parts(value["source"]) is None:
+        raise SetupError(f"{sid}: bundle.source must be a relative path in the E2E bundle")
+    if _relative_parts(value["destination"]) is None:
+        raise SetupError(f"{sid}: bundle.destination must be a relative path in the checkout")
+
+
+def _check_bootstrap(sid: str, value, entry: dict) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != {"script", "args"} \
+            or _relative_parts(value.get("script")) is None:
+        raise SetupError(f"{sid}: bootstrap needs a relative script and args")
+    _check_launch(sid, {"command": value["script"], "args": value["args"]}, entry)
+
+
 class UvSyncFrozen(Installer):
-    """Upstream ships pyproject.toml + uv.lock -> ``uv sync --frozen``."""
+    """Upstream ships pyproject.toml + uv.lock -> ``uv sync --frozen``.
+
+    ``project`` is useful for monorepos whose lockfile lives below the checkout
+    root (for example AtomisticSkills).  ``bundle`` is deliberately limited to
+    one checked-in adapter file; it is copied after checkout and before the
+    environment is built, without allowing arbitrary host paths into a config.
+    ``bootstrap`` runs a script from that pinned checkout after sync (e.g. to
+    fetch MatterGen's pinned source resources, which its wheel does not ship).
+    """
     mode = "uv-sync-frozen"
-    fields = {"uv_sync_args": _check_uv_sync_args}
+    fields = {"uv_sync_args": _check_uv_sync_args, "project": _check_relative_project,
+              "bundle": _check_bundle, "bootstrap": _check_bootstrap}
 
     def install(self, entry: dict, dest: Path) -> Path:
         _uv()
+        project = Path(entry.get("project", "."))
+        project_dir = dest / project
+        if not (project_dir / "pyproject.toml").is_file() or not (project_dir / "uv.lock").is_file():
+            raise SetupError(f"{entry['id']}: project {entry.get('project', '.')!r} needs pyproject.toml and uv.lock")
+        bundle = entry.get("bundle")
+        if bundle:
+            source = HERE / bundle["source"]
+            destination = dest / bundle["destination"]
+            if not source.is_file():
+                raise SetupError(f"{entry['id']}: bundle source does not exist: {source}")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
         run(["uv", "sync", "--frozen", *entry.get("uv_sync_args", []), "--python", entry["python"]],
-            cwd=dest, env=_installer_env())
-        return dest / ".venv" / "bin" / "python"
+            cwd=project_dir, env=_installer_env())
+        python = project_dir / ".venv" / "bin" / "python"
+        bootstrap = entry.get("bootstrap")
+        if bootstrap:
+            script = dest / bootstrap["script"]
+            if not script.is_file() or not script.resolve().is_relative_to(dest.resolve()):
+                raise SetupError(f"{entry['id']}: bootstrap script must exist inside pinned checkout")
+            run([str(python), str(script),
+                 *(a.replace(CHECKOUT, str(dest)) for a in bootstrap["args"])],
+                cwd=dest, env=_installer_env())
+        return python
 
 
 def _check_requirements(sid: str, value, entry: dict) -> None:

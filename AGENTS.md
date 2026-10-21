@@ -138,7 +138,8 @@
   streamable HTTP）；不推断宿主挂载。容器内 preflight 必须先 initialize/tools/list，失败
   不运行 agent；生命周期和 service 清理复用 OSSandbox。stdio 只净化继承环境，仍与 agent
   共享容器信任边界和网络；独立隔离用 sidecar。详见 docs/mcp/os-sandbox.md。
-  catalog 只保存来源和模板，不捆绑第三方软件。
+  catalog 只保存来源和模板，不捆绑第三方软件。Codex 长工具调用可在 server 配置中设置
+  正整数 tool_timeout_sec（host/OS 均保留）；Claude 配置明确拒绝此专有字段。
 - CAD MCP 上游兼容补丁仅存于 `scripts/mcp/cad-repairs/`，绑定源 revision 和
   SHA-256；只对显式指定的干净副本应用，不捆绑 CAD 软件、不自动更改本机凭据配置。
   patched stdio 冒烟通过不得升级为真实 CAD 业务认证；复测需临时 HOME 与端口保护。
@@ -152,6 +153,10 @@
   方式字段。同一上游 repo 的多个 id 可用可选 `checkout` 键共用一份 checkout/.venv：组内
   repository/revision/python/install 及该安装方式的字段必须逐字相同，组名不得撞其他 id；
   `<id>.mcp.json` 与 MCP server 名仍按 id 一份（`mcp__<id>__<tool>` 不变）。
+- 材料 MCP 的 AtomisticSkills 子环境使用锁定的 `cu126` extra；MatterGen 还需执行
+  pinned checkout 内的 `bootstrap.script` 取得其源码资源，不能只安装 wheel。
+  smoke 不得把“有响应”当业务成功：须检查 in-band error、模型加载结果和实际产物；
+  势能预测用独立 ASE 进程对账，MatterGen 随机产物独立解析，不比较生成字节。
 - smoke（`smoke.py <id>`）必须用 server 自身 venv 在进程外独立计算参考值（非 Python server
   的 venv 为空，参考值用闭式解或由 smoke 直接 subprocess 调宿主后端二进制产生，不经 server），并覆盖
   manifest 列出的全部工具：数值错误 FAIL、上游缺陷 WARN、已探测的已知数值缺陷用三态

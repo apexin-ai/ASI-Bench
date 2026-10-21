@@ -1190,3 +1190,26 @@ protocol client stand-in, mount no login credentials, call no model API, and
 remove the test image. They do not certify live Claude/Codex model behavior or
 any of the 13 scientific upstream servers. See docs/mcp/os-sandbox.md for
 manual OS deployment and formal difficulty-check commands.
+
+## Material MCP deployment and real calls
+
+`tests/mcp_e2e/test_materials.py` covers automatic MatterSim CPU/CUDA selection,
+pinned MatterGen source bootstrap and PyG dependencies, bootstrap validation,
+and smoke failure on in-band model/generation errors. Run it with the other
+MCP E2E offline tests. No model downloads are needed for these regression tests.
+
+For live validation, run `scripts/mcp/e2e/setup.py <id> --root <deployment>` for
+`chgnet`, `mace`, `mattergen`, and `mattersim`. With each server's own Python,
+run `scripts/mcp/e2e/smoke.py <id> --config <deployment>/<id>.mcp.json --report
+<report.json>`. Add `--load-model` for the three potential models, or
+`--generate` for MatterGen. These flags enable actual scientific computation;
+omitting them only tests startup and error handling. Potential-model values
+are compared to direct ASE calculators in a separate process; generated CIFs
+are independently parsed. Weights require network access on first use.
+MatterGen CPU generation can take tens of minutes. Direct MCP success does
+not certify an agent, a container image, MD, or every available checkpoint.
+
+`tests/test_mcp_config.py` also checks positive integer `tool_timeout_sec`
+validation, preservation in host Codex TOML and OS command overrides, and
+explicit rejection in Claude configs. Long CPU MCP calls need both this
+per-call setting and a sufficient overall task/agent timeout.

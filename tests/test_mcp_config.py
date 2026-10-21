@@ -8,7 +8,40 @@ from click.testing import CliRunner
 from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
 from ai4sci_bench.adapters.codex_cli import CodexCLIAdapter
 from ai4sci_bench.cli import cli
-from ai4sci_bench.mcp_config import load_mcp_config, load_science_mcp_catalog
+from ai4sci_bench.mcp_config import codex_mcp_toml, load_mcp_config, load_science_mcp_catalog
+
+
+def test_codex_long_tool_timeout_survives_host_and_os_rendering(tmp_path):
+    from ai4sci_bench.runner.mcp_sandbox import stage_os_mcp
+
+    config = tmp_path / "long-tool.json"
+    config.write_text(json.dumps({"mcpServers": {"mattergen": {
+        "command": "/opt/mattergen/bin/python", "args": ["server.py"],
+        "tool_timeout_sec": 3600, "sandbox": {"deployment": "instance"},
+    }}}))
+    servers = load_mcp_config(config)
+    assert tomllib.loads(codex_mcp_toml(servers))["mcp_servers"]["mattergen"]["tool_timeout_sec"] == 3600
+    with stage_os_mcp(servers, {}, "codex", ["codex", "exec"], None) as (cmd, _, _):
+        assert "mcp_servers.mattergen.tool_timeout_sec=3600" in cmd
+
+
+@pytest.mark.parametrize("value", [True, 0, -1, "3600", 1.5])
+def test_mcp_tool_timeout_rejects_invalid_values(tmp_path, value):
+    config = tmp_path / "bad-timeout.json"
+    config.write_text(json.dumps({"mcpServers": {"science": {
+        "command": "/opt/python", "tool_timeout_sec": value,
+    }}}))
+    with pytest.raises(ValueError, match="tool_timeout_sec must be a positive integer"):
+        load_mcp_config(config)
+
+
+def test_claude_rejects_codex_specific_tool_timeout(tmp_path):
+    config = tmp_path / "codex-timeout.json"
+    config.write_text(json.dumps({"mcpServers": {"science": {
+        "command": "/opt/python", "tool_timeout_sec": 3600,
+    }}}))
+    with pytest.raises(ValueError, match="tool_timeout_sec is supported only by Codex"):
+        ClaudeCodeCLIAdapter(mcp_config=str(config))
 
 
 @pytest.fixture
