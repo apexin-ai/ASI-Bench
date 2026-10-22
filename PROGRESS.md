@@ -1496,7 +1496,7 @@ Lessons — process:
 
 ### 2026-10-22 — FEniCSx and Gmsh Python-library MCP adapters
 
-- Code commit: pending. Added a constrained Gmsh MCP adapter and manifest entry
+- Code commit: `5f96511`. Added a constrained Gmsh MCP adapter and manifest entry
   using `gmsh==4.15.2`, a pinned upstream checkout, workspace-only MSH output,
   and a dedicated L0/L1 smoke. Added a FEniCSx MCP entrypoint with bounded
   manufactured Poisson solving and a pinned DOLFINx image recipe.
