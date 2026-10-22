@@ -787,3 +787,11 @@ leaderboard documentation are available on the
 ## License
 
 See [LICENSE](LICENSE).
+
+### Experimental FEniCSx/Gmsh MCP adapters
+
+The MCP E2E catalog includes a constrained Gmsh adapter (`gmsh`) backed by the
+`gmsh==4.15.2` Python wheel and a pinned-image FEniCSx adapter entrypoint in
+`scripts/mcp/e2e/fenicsx_server.py`. Gmsh requires `libGLU.so.1` even in
+headless images. FEniCSx requires the pinned DOLFINx/PETSc/MPI image described
+by `scripts/mcp/e2e/fenicsx.Dockerfile`; it is not a PyPI-only installation.

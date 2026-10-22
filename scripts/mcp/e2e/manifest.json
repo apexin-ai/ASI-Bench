@@ -578,5 +578,19 @@
         ]
       }
     }
+    ,{
+      "id": "gmsh",
+      "catalog_id": "gmsh",
+      "repository": "https://github.com/OFFTECH/gmsh-mcp-server.git",
+      "revision": "8d0caf2f240f2c1d8ae6a3fcd3c997d835c7f629",
+      "python": "3.12",
+      "install": "uv-pip-pinned",
+      "requirements": ["gmsh==4.15.2", "mcp==1.30.0", "numpy==2.5.3", "pydantic==2.13.5"],
+      "exclude_newer": "2026-10-01T00:00:00Z",
+      "host_requirements": {"shared_libraries": ["libGLU.so.1"], "reason": "The gmsh 4.15.2 wheel loads the native library and requires GLU even for headless meshing; install libglu1-mesa in the runtime image."},
+      "bundle": {"source": "gmsh_server.py", "destination": "gmsh_server.py"},
+      "launch": {"command": ".venv/bin/python", "args": ["{checkout}/gmsh_server.py"], "env": {"GMSH_MCP_TRANSPORT": "stdio", "GMSH_MCP_WORKSPACE": "{checkout}"}},
+      "expected_tools": ["get_info", "inspect_mesh", "mesh_box"]
+    }
   ]
 }

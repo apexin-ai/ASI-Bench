@@ -1493,3 +1493,21 @@ Lessons — process:
   Keep credentials local and ignored, and inspect actual MCP business returns.
   All test containers cleaned up. Evidence/report are in companion artifact
   workspace materials-mcp-agent-os-20261020. Main remains unmodified; no push.
+
+### 2026-10-22 — FEniCSx and Gmsh Python-library MCP adapters
+
+- Code commit: pending. Added a constrained Gmsh MCP adapter and manifest entry
+  using `gmsh==4.15.2`, a pinned upstream checkout, workspace-only MSH output,
+  and a dedicated L0/L1 smoke. Added a FEniCSx MCP entrypoint with bounded
+  manufactured Poisson solving and a pinned DOLFINx image recipe.
+- Verification: focused offline checks passed (108 passed before final
+  documentation changes). Gmsh installer and protocol handshake worked; real
+  tool calls exposed missing `libGLU.so.1`, now an explicit host requirement
+  and image Dockerfile dependency. FEniCSx was not run because no DOLFINx/
+  PETSc/MPI image is installed locally.
+- Limits: FEniCSx is image-based rather than a normal PyPI install; its real
+  solve still requires a Docker build and agent/OS validation. The sample
+  images are pinned for linux/amd64 and need an arm64 variant if required.
+- Prevention: never call a Python scientific package integrated from a
+  successful pip install alone; run native imports and business calls, and
+  record system shared-library requirements.

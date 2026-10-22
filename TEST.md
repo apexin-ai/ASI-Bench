@@ -1213,3 +1213,13 @@ not certify an agent, a container image, MD, or every available checkpoint.
 validation, preservation in host Codex TOML and OS command overrides, and
 explicit rejection in Claude configs. Long CPU MCP calls need both this
 per-call setting and a sufficient overall task/agent timeout.
+
+## FEniCSx/Gmsh MCP adapter checks
+
+```bash
+uv run --frozen pytest -q tests/mcp_e2e/test_gmsh.py tests/mcp_e2e/test_fenicsx_adapter.py
+```
+
+The Gmsh real smoke requires `libGLU.so.1`; the FEniCSx real solve requires
+building `scripts/mcp/e2e/fenicsx.Dockerfile` with Docker and a compatible
+MPI/PETSc runtime.
