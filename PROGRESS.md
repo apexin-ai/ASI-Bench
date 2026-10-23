@@ -1511,3 +1511,28 @@ Lessons — process:
 - Prevention: never call a Python scientific package integrated from a
   successful pip install alone; run native imports and business calls, and
   record system shared-library requirements.
+
+### 2026-10-23 — Real FEniCSx/Gmsh Docker business validation
+
+- Code commit: `3849924`. Initial real stdio runs reproduced native-loader
+  failures in Gmsh and missing `dolfinx.fem.petsc` in FEniCSx; handshake success
+  had not established usability. Added all wheel-linked GL/X11/OpenMP libraries,
+  build-time Gmsh import, worker-safe serialized Gmsh initialization, quiet
+  native output, saved-file inventory, mesh budget and output suffix checks.
+- FEniCSx now imports LinearProblem explicitly, supplies the required DOLFINx
+  0.11 PETSc prefix/options, checks convergence and reports actual versions.
+  Degree-2 XDMF exports linear interpolation explicitly; sibling HDF5 paths
+  are checked before opening files.
+- Verification: red Docker regressions failed on original images. Final
+  opt-in tests: 4 passed. MCP suite: 1298 passed, 6 skipped. Independent MSH
+  parser verified 143 nodes, 387 tetrahedra, unit total volume; independently
+  assembled PETSc references matched all three solves (8/16 degree 1 and
+  8 degree 2), with residuals below 8e-15. XDMF/HDF5 datasets were read and
+  checked against the analytic nodal solution. Invalid inputs, symlink escape,
+  repeated calls and pure JSON-RPC stdout passed without network access.
+- Evidence: companion artifact repository `docs/fenicsx-gmsh-validation-20261023.md`
+  and `artifacts/fenicsx-gmsh-20261023/`. These are server-image protocol/business
+  tests, not full agent OS/run/score certification. Main unchanged; no push.
+- Prevention: always test native imports and real scientific outputs inside
+  the deployed image; keep opt-in tests separate from mock/offline checks,
+  and independently inspect exported data instead of trusting response flags.
