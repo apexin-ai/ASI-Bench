@@ -1,7 +1,7 @@
 """Minimal FEniCSx MCP entry point for a pinned DOLFINx image.
 
-FEniCSx is intentionally imported lazily: the server can complete MCP
-handshake diagnostics without loading PETSc, while scientific tools fail with
+FEniCSx is imported on the first tool call: protocol handshake can complete
+without loading PETSc, while runtime info and scientific tools fail with
 an explicit deployment error when the image is not a DOLFINx image.
 """
 from __future__ import annotations
@@ -39,8 +39,9 @@ def _output(name: str) -> Path:
 
 @mcp.tool()
 def get_info() -> dict[str, Any]:
-    """Report the required FEniCSx runtime without importing PETSc."""
-    return {"solver": "FEniCSx/DOLFINx", "workspace": str(WORKSPACE), "requires": ["MPI", "PETSc", "UFL"]}
+    """Load and report the actual FEniCSx runtime."""
+    dolfinx, _, _, PETSc = _dolfinx()
+    return {"dolfinx_version": dolfinx.__version__, "petsc_version": PETSc.Sys.getVersion(), "solver": "FEniCSx/DOLFINx", "workspace": str(WORKSPACE), "requires": ["MPI", "PETSc", "UFL"]}
 
 
 @mcp.tool()
@@ -53,8 +54,13 @@ def solve_poisson_manufactured(nx: int, ny: int, degree: int = 1, output_name: s
     if isinstance(degree, bool) or not isinstance(degree, int) or not 1 <= degree <= 2:
         raise ValueError("degree must be 1 or 2")
     path = _output(output_name)
+    if path.suffix.lower() != ".xdmf":
+        raise ValueError("output_name must end in .xdmf")
+    # XDMF writes a sibling HDF5 file as well. Validate it before opening either.
+    _output(path.with_suffix(".h5").name)
     dolfinx, ufl, MPI, PETSc = _dolfinx()
     from dolfinx import fem, mesh
+    from dolfinx.fem.petsc import LinearProblem
     from dolfinx.io import XDMFFile
     from petsc4py.PETSc import ScalarType
     import numpy as np
@@ -68,16 +74,26 @@ def solve_poisson_manufactured(nx: int, ny: int, degree: int = 1, output_name: s
     boundaries = mesh.locate_entities_boundary(domain, 1, lambda x: np.isclose(x[0], 0) | np.isclose(x[0], 1) | np.isclose(x[1], 0) | np.isclose(x[1], 1))
     dofs = fem.locate_dofs_topological(V, 1, boundaries)
     bc = fem.dirichletbc(ScalarType(0), dofs, V)
-    problem = fem.petsc.LinearProblem(ufl.inner(ufl.grad(u), ufl.grad(v)) * ufl.dx, source * v * ufl.dx, bcs=[bc])
+    problem = LinearProblem(ufl.inner(ufl.grad(u), ufl.grad(v)) * ufl.dx, source * v * ufl.dx, bcs=[bc],
+        petsc_options_prefix="asibench_poisson_",
+        petsc_options={"ksp_type": "preonly", "pc_type": "lu", "ksp_error_if_not_converged": True})
     uh = problem.solve()
+    reason = int(problem.solver.getConvergedReason())
+    if reason <= 0:
+        raise RuntimeError(f"PETSc solve failed: convergence reason {reason}")
     uh.x.scatter_forward()
     l2_error = math.sqrt(float(domain.comm.allreduce(
         fem.assemble_scalar(fem.form((uh - exact) ** 2 * ufl.dx)), op=MPI.SUM)))
     path.parent.mkdir(parents=True, exist_ok=True)
     with XDMFFile(MPI.COMM_SELF, str(path), "w") as file:
         file.write_mesh(domain)
-        file.write_function(uh)
-    return {"l2_error": l2_error, "mesh_cells": int(domain.topology.index_map(domain.topology.dim).size_local), "dofs": int(V.dofmap.index_map.size_local), "solution_path": str(path), "finite": bool(np.isfinite(uh.x.array).all())}
+        # XDMF requires function degree to match the linear mesh geometry.
+        exported = uh
+        if degree == 2:
+            exported = fem.Function(fem.functionspace(domain, ("Lagrange", 1)))
+            exported.interpolate(uh)
+        file.write_function(exported)
+    return {"convergence_reason": reason, "export_degree": 1, "l2_error": l2_error, "mesh_cells": int(domain.topology.index_map(domain.topology.dim).size_local), "dofs": int(V.dofmap.index_map.size_local), "solution_path": str(path), "finite": bool(np.isfinite(uh.x.array).all())}
 
 
 if __name__ == "__main__":

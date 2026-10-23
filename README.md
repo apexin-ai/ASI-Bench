@@ -792,6 +792,12 @@ See [LICENSE](LICENSE).
 
 The MCP E2E catalog includes a constrained Gmsh adapter (`gmsh`) backed by the
 `gmsh==4.15.2` Python wheel and a pinned-image FEniCSx adapter entrypoint in
-`scripts/mcp/e2e/fenicsx_server.py`. Gmsh requires `libGLU.so.1` even in
-headless images. FEniCSx requires the pinned DOLFINx/PETSc/MPI image described
+`scripts/mcp/e2e/fenicsx_server.py`. The Gmsh image supplies the wheel's OpenGL/X11/OpenMP runtime libraries even for headless use. FEniCSx requires the pinned DOLFINx/PETSc/MPI image described
 by `scripts/mcp/e2e/fenicsx.Dockerfile`; it is not a PyPI-only installation.
+
+Real Docker protocol/business checks and independent numerical references are
+opt-in; see [TEST.md](TEST.md#fenicsxgmsh-mcp-adapter-checks). FEniCSx returns
+full-space L2 error and PETSc convergence status. Its XDMF output uses linear
+nodal interpolation for degree-2 solutions (`export_degree: 1`). These are
+constrained adapters (box meshing / manufactured Poisson), not general CAD/PDE
+execution servers; server-image tests do not certify a full agent OS image.

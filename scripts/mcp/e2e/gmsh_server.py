@@ -6,13 +6,16 @@ Python/Gmsh execution.  All files are confined to the MCP workspace.
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import os
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+
+_LOCK = threading.Lock()
 
 mcp = FastMCP("ASI-Bench Gmsh")
 WORKSPACE = Path(os.environ.get("GMSH_MCP_WORKSPACE", "/workspace")).resolve()
@@ -41,6 +44,19 @@ def _gmsh():
     return gmsh
 
 
+@contextmanager
+def _session():
+    # Gmsh has process-global state; FastMCP executes sync tools in workers.
+    with _LOCK:
+        gmsh = _gmsh()
+        gmsh.initialize(["gmsh", "-v", "0"], interruptible=False)
+        try:
+            gmsh.option.setNumber("General.Terminal", 0)
+            yield gmsh
+        finally:
+            gmsh.finalize()
+
+
 def _inventory(gmsh) -> dict[str, Any]:
     nodes, coords, _ = gmsh.model.mesh.getNodes()
     element_types, element_tags, _ = gmsh.model.mesh.getElements()
@@ -59,7 +75,7 @@ def _inventory(gmsh) -> dict[str, Any]:
 def get_info() -> dict[str, Any]:
     """Return the Gmsh runtime and the constrained workspace."""
     gmsh = _gmsh()
-    return {"gmsh_version": gmsh.option.getString("General.Version"), "workspace": str(WORKSPACE)}
+    return {"gmsh_version": gmsh.__version__, "workspace": str(WORKSPACE)}
 
 
 @mcp.tool()
@@ -69,11 +85,13 @@ def mesh_box(length: float, width: float, height: float, element_size: float, ou
     size = _positive(element_size, "element_size")
     if any(x > 1e4 for x in dimensions) or size < 1e-6:
         raise ValueError("dimensions or element_size exceed safe limits")
+    if math.prod(max(1.0, x / size) for x in dimensions) > 250_000:
+        raise ValueError("requested mesh exceeds the cell budget")
     output = _safe_name(output_name)
+    if output.suffix.lower() != ".msh":
+        raise ValueError("output_name must end in .msh")
     output.parent.mkdir(parents=True, exist_ok=True)
-    gmsh = _gmsh()
-    gmsh.initialize()
-    try:
+    with _session() as gmsh:
         gmsh.model.add("box")
         volume = gmsh.model.occ.addBox(*([0.0, 0.0, 0.0] + dimensions))
         gmsh.model.occ.synchronize()
@@ -84,9 +102,10 @@ def mesh_box(length: float, width: float, height: float, element_size: float, ou
         gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
         gmsh.model.mesh.generate(3)
         gmsh.write(str(output))
+        # Describe the saved file, which contains only physical-group elements.
+        gmsh.clear()
+        gmsh.open(str(output))
         result = _inventory(gmsh)
-    finally:
-        gmsh.finalize()
     result.update({"mesh_path": str(output), "sha256": hashlib.sha256(output.read_bytes()).hexdigest()})
     return result
 
@@ -97,13 +116,9 @@ def inspect_mesh(mesh_name: str) -> dict[str, Any]:
     path = _safe_name(mesh_name)
     if path.suffix.lower() != ".msh" or not path.is_file():
         raise ValueError("mesh_name must identify an existing .msh workspace file")
-    gmsh = _gmsh()
-    gmsh.initialize()
-    try:
+    with _session() as gmsh:
         gmsh.open(str(path))
         result = _inventory(gmsh)
-    finally:
-        gmsh.finalize()
     result.update({"mesh_path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
     return result
 
