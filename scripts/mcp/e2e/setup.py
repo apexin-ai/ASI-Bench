@@ -198,7 +198,7 @@ class UvSyncFrozen(Installer):
     """
     mode = "uv-sync-frozen"
     fields = {"uv_sync_args": _check_uv_sync_args, "project": _check_relative_project,
-              "bundle": _check_bundle, "bootstrap": _check_bootstrap}
+              "bootstrap": _check_bootstrap}
 
     def install(self, entry: dict, dest: Path) -> Path:
         _uv()
@@ -247,6 +247,14 @@ class UvPipPinned(Installer):
     def install(self, entry: dict, dest: Path) -> Path:
         _uv()
         env = _installer_env()
+        bundle = entry.get("bundle")
+        if bundle:
+            source = HERE / bundle["source"]
+            destination = dest / bundle["destination"]
+            if not source.is_file():
+                raise SetupError(f"{entry['id']}: bundle source does not exist: {source}")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
         python = dest / ".venv" / "bin" / "python"
         # --clear: never mix a previous resolution into the pinned one.
         run(["uv", "venv", "--clear", "--python", entry["python"], str(dest / ".venv")], cwd=dest, env=env)
@@ -619,6 +627,7 @@ COMMON_KEYS: dict[str, Validator] = {
     "install": _check_install,
     "launch": _check_launch,
     "expected_tools": _check_expected_tools,
+    "bundle": _check_bundle,
     "host_requirements": _check_host_requirements,
 }
 

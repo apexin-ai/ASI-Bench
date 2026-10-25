@@ -1493,3 +1493,72 @@ Lessons — process:
   Keep credentials local and ignored, and inspect actual MCP business returns.
   All test containers cleaned up. Evidence/report are in companion artifact
   workspace materials-mcp-agent-os-20261020. Main remains unmodified; no push.
+
+### 2026-10-22 — FEniCSx and Gmsh Python-library MCP adapters
+
+- Code commit: `5f96511`. Added a constrained Gmsh MCP adapter and manifest entry
+  using `gmsh==4.15.2`, a pinned upstream checkout, workspace-only MSH output,
+  and a dedicated L0/L1 smoke. Added a FEniCSx MCP entrypoint with bounded
+  manufactured Poisson solving and a pinned DOLFINx image recipe.
+- Verification: focused offline checks passed (108 passed before final
+  documentation changes). Gmsh installer and protocol handshake worked; real
+  tool calls exposed missing `libGLU.so.1`, now an explicit host requirement
+  and image Dockerfile dependency. FEniCSx was not run because no DOLFINx/
+  PETSc/MPI image is installed locally.
+- Limits: FEniCSx is image-based rather than a normal PyPI install; its real
+  solve still requires a Docker build and agent/OS validation. The sample
+  images are pinned for linux/amd64 and need an arm64 variant if required.
+- Prevention: never call a Python scientific package integrated from a
+  successful pip install alone; run native imports and business calls, and
+  record system shared-library requirements.
+
+### 2026-10-23 — Real FEniCSx/Gmsh Docker business validation
+
+- Code commit: `3849924`. Initial real stdio runs reproduced native-loader
+  failures in Gmsh and missing `dolfinx.fem.petsc` in FEniCSx; handshake success
+  had not established usability. Added all wheel-linked GL/X11/OpenMP libraries,
+  build-time Gmsh import, worker-safe serialized Gmsh initialization, quiet
+  native output, saved-file inventory, mesh budget and output suffix checks.
+- FEniCSx now imports LinearProblem explicitly, supplies the required DOLFINx
+  0.11 PETSc prefix/options, checks convergence and reports actual versions.
+  Degree-2 XDMF exports linear interpolation explicitly; sibling HDF5 paths
+  are checked before opening files.
+- Verification: red Docker regressions failed on original images. Final
+  opt-in tests: 4 passed. MCP suite: 1298 passed, 6 skipped. Independent MSH
+  parser verified 143 nodes, 387 tetrahedra, unit total volume; independently
+  assembled PETSc references matched all three solves (8/16 degree 1 and
+  8 degree 2), with residuals below 8e-15. XDMF/HDF5 datasets were read and
+  checked against the analytic nodal solution. Invalid inputs, symlink escape,
+  repeated calls and pure JSON-RPC stdout passed without network access.
+- Evidence: companion artifact repository `docs/fenicsx-gmsh-validation-20261023.md`
+  and `artifacts/fenicsx-gmsh-20261023/`. These are server-image protocol/business
+  tests, not full agent OS/run/score certification. Main unchanged; no push.
+- Prevention: always test native imports and real scientific outputs inside
+  the deployed image; keep opt-in tests separate from mock/offline checks,
+  and independently inspect exported data instead of trusting response flags.
+
+### 2026-10-25 — Codex agent + OS sandbox science MCP validation
+
+- Deployment guidance commit: `3fdb103`. Ran actual CodexCLIAdapter.solve +
+  OSSandbox with Codex 0.162.1 / gpt-6.1-sol (medium), instance stdio MCP,
+  restricted tools, 4 CPU / 8 GiB and fresh per-server task workspaces.
+- Initial agent-image attempt failed because Docker created a missing
+  /home/agent/.codex mount parent owned by root. Pre-create and chown the
+  directory in the custom image; no framework permissions were relaxed.
+- Gmsh passed in run-02 (58.5 s). FEniCSx then exposed noexec /tmp: JIT
+  libraries in the launcher's temporary HOME could not be mapped. Explicit
+  XDG_CACHE_HOME=/home/agent/.cache fixed it; run-03 passed (164.8 s).
+  Explicitly supply pinned-image DOLFINx/PETSc library paths in server env,
+  because the MCP launcher intentionally clears inherited image environment.
+- Verified real mcp_tool_call events and exact arguments, unchanged saved
+  business results, MSH hash/positive cell volumes/unit total volume, and
+  three exported Poisson solutions against separately assembled PETSc
+  references. Reviewed shell calls: no scientific-backend/HTTP bypass.
+  Agent completed status alone would have missed the run-02 FEniCSx errors.
+- Evidence and executable reproduction scripts live in companion artifact
+  repository artifacts/fenicsx-gmsh-agent-os-20261025; report in
+  docs/fenicsx-gmsh-agent-os-validation-20261025.md. Credentials are runtime-only;
+  no key/config/auth files retained. Test containers and private staging cleaned.
+- Limits: direct adapter + OSSandbox execution, not complete generate/run/score,
+  HTTP sidecar, arbitrary CAD/PDE or scientific-model certification. Main
+  remains b100ade, unchanged; no merge or push.

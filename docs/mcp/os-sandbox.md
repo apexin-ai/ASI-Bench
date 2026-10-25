@@ -45,6 +45,15 @@ before execution. Supply appropriately scoped/short-lived credentials yourself;
 the framework does not issue or renew tokens. Keep ordinary `env` for
 non-secret settings. No credential values enter command-line flags or provenance.
 
+Scientific backends that JIT-compile shared libraries need an executable cache
+outside `/tmp` (the OS sandbox mounts `/tmp` with `noexec`). For the pinned
+FEniCSx image, explicitly set `XDG_CACHE_HOME=/home/agent/.cache` in the MCP
+server's `env`, plus the image's DOLFINx `PYTHONPATH`, `LD_LIBRARY_PATH`,
+`PETSC_DIR`/`PETSC_ARCH` and `SLEPC_DIR`; Dockerfile `ENV` alone is not
+inherited by the stdio launcher. Ensure the cache is writable by the runtime
+UID. A custom Codex image must also pre-create `/home/agent/.codex` owned by
+that UID, so mounting a read-only config does not create a root-owned parent.
+
 **Trust boundary:** instance-local servers share the agent's container, user,
 filesystem and network policy. A clean environment is not a separate security
 boundary: the server can access files available to that container user, including

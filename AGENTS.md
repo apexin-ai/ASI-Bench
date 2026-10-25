@@ -157,6 +157,10 @@
   pinned checkout 内的 `bootstrap.script` 取得其源码资源，不能只安装 wheel。
   smoke 不得把“有响应”当业务成功：须检查 in-band error、模型加载结果和实际产物；
   势能预测用独立 ASE 进程对账，MatterGen 随机产物独立解析，不比较生成字节。
+- FEniCSx/Gmsh 镜像业务回归用 `ASIBENCH_SCIENCE_IMAGES=1` 启用
+  `tests/mcp_e2e/test_science_images.py`；独立参考不导入 MCP adapter。
+  Gmsh worker 禁用 signal handler 并串行管理全局状态；stdout 只允许 JSON-RPC。
+  FEniCSx 必须检查 PETSc 收敛；二阶解写 XDMF 时显式标记线性插值。
 - smoke（`smoke.py <id>`）必须用 server 自身 venv 在进程外独立计算参考值（非 Python server
   的 venv 为空，参考值用闭式解或由 smoke 直接 subprocess 调宿主后端二进制产生，不经 server），并覆盖
   manifest 列出的全部工具：数值错误 FAIL、上游缺陷 WARN、已探测的已知数值缺陷用三态

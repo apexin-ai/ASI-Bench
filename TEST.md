@@ -1213,3 +1213,29 @@ not certify an agent, a container image, MD, or every available checkpoint.
 validation, preservation in host Codex TOML and OS command overrides, and
 explicit rejection in Claude configs. Long CPU MCP calls need both this
 per-call setting and a sufficient overall task/agent timeout.
+
+## FEniCSx/Gmsh MCP adapter checks
+
+```bash
+uv run --frozen pytest -q tests/mcp_e2e/test_gmsh.py tests/mcp_e2e/test_fenicsx_adapter.py
+```
+
+Build both linux/amd64 server images, then explicitly enable the Docker tests:
+
+```bash
+docker build -t asibench-gmsh:test -f scripts/mcp/e2e/gmsh.Dockerfile scripts/mcp/e2e
+docker build -t asibench-fenicsx:test -f scripts/mcp/e2e/fenicsx.Dockerfile scripts/mcp/e2e
+ASIBENCH_SCIENCE_IMAGES=1 uv run --frozen pytest -q tests/mcp_e2e/test_science_images.py
+```
+
+The four opt-in cases test MCP initialize/stable tool lists, real imports,
+box meshing/export/reload, first/second-order Poisson solves, convergence,
+invalid inputs, path/sibling-HDF5 symlink escape, and clean JSON-RPC stdout.
+Independent subprocesses parse tetrahedra and check unit volume, assemble a
+PETSc reference without the MCP adapter or `LinearProblem`, and read every
+XDMF-referenced HDF5 dataset using the base image's `h5dump`. The server is
+run without network access. No host scientific library installation is needed.
+Without the environment flag these four tests skip rather than passing as
+mocked business checks. They validate server images, not Codex/Claude agent
+or full ASI-Bench run/score orchestration. Degree-2 solves export linear
+interpolation to XDMF, while the reported error uses the degree-2 solution.
