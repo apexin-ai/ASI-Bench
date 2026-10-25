@@ -1536,3 +1536,29 @@ Lessons — process:
 - Prevention: always test native imports and real scientific outputs inside
   the deployed image; keep opt-in tests separate from mock/offline checks,
   and independently inspect exported data instead of trusting response flags.
+
+### 2026-10-25 — Codex agent + OS sandbox science MCP validation
+
+- Deployment guidance commit: `3fdb103`. Ran actual CodexCLIAdapter.solve +
+  OSSandbox with Codex 0.162.1 / gpt-6.1-sol (medium), instance stdio MCP,
+  restricted tools, 4 CPU / 8 GiB and fresh per-server task workspaces.
+- Initial agent-image attempt failed because Docker created a missing
+  /home/agent/.codex mount parent owned by root. Pre-create and chown the
+  directory in the custom image; no framework permissions were relaxed.
+- Gmsh passed in run-02 (58.5 s). FEniCSx then exposed noexec /tmp: JIT
+  libraries in the launcher's temporary HOME could not be mapped. Explicit
+  XDG_CACHE_HOME=/home/agent/.cache fixed it; run-03 passed (164.8 s).
+  Explicitly supply pinned-image DOLFINx/PETSc library paths in server env,
+  because the MCP launcher intentionally clears inherited image environment.
+- Verified real mcp_tool_call events and exact arguments, unchanged saved
+  business results, MSH hash/positive cell volumes/unit total volume, and
+  three exported Poisson solutions against separately assembled PETSc
+  references. Reviewed shell calls: no scientific-backend/HTTP bypass.
+  Agent completed status alone would have missed the run-02 FEniCSx errors.
+- Evidence and executable reproduction scripts live in companion artifact
+  repository artifacts/fenicsx-gmsh-agent-os-20261025; report in
+  docs/fenicsx-gmsh-agent-os-validation-20261025.md. Credentials are runtime-only;
+  no key/config/auth files retained. Test containers and private staging cleaned.
+- Limits: direct adapter + OSSandbox execution, not complete generate/run/score,
+  HTTP sidecar, arbitrary CAD/PDE or scientific-model certification. Main
+  remains b100ade, unchanged; no merge or push.
