@@ -1,0 +1,4 @@
+# Built-in, bounded adapters; no external calculators or OVITO Pro plugins.
+ase==3.29.0
+ovito==3.17.1
+mcp==1.30.0

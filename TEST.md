@@ -1239,3 +1239,21 @@ Without the environment flag these four tests skip rather than passing as
 mocked business checks. They validate server images, not Codex/Claude agent
 or full ASI-Bench run/score orchestration. Degree-2 solves export linear
 interpolation to XDMF, while the reported error uses the degree-2 solution.
+
+
+## Repository-owned ASE/OVITO MCP checks
+
+```sh
+docker build -t asibench-ase-ovito:test scripts/mcp/atomistic
+ASIBENCH_ATOMISTIC_DOCKER=1 uv run --frozen pytest -q tests/mcp_e2e/test_atomistic_adapters.py
+```
+
+Two real, network-disabled Docker cases cover every ASE/OVITO tool, protocol
+stability/purity, structure round trips, a separate ASE energy/force and BFGS
+reference, independently normalized RDF pair counts, perfect-FCC PTM/DXA,
+PNG decoding/hash, explicit non-convergence and rejected inputs/path escapes.
+Five offline checks cover the catalog, OS config and common path/numeric
+contracts. Scientific checks skip unless explicitly enabled. The optional
+Codex image and author-facing contract are in [docs/mcp/ase-ovito.md](docs/mcp/ase-ovito.md).
+These local adapters use their committed Python hash lock and source revision,
+not the third-party clone manifest.
