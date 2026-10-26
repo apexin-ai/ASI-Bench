@@ -125,3 +125,11 @@ RDF with an independent periodic pair histogram, check perfect FCC PTM/DXA,
 and parse the rendered PNG. Without the flag, scientific tests skip explicitly;
 offline configuration/path checks still run. Direct tests do not by themselves
 prove an agent used MCP; retain trajectory evidence for agent validation.
+
+Validation on 2026-10-26 also exercised all twelve tools through an actual
+CodexCLIAdapter + OSSandbox run (gpt-6.1-sol, Codex 0.162.1), with independently
+checked numerical results and files. This validates that deployment chain,
+not full generate/run/score CLI orchestration or arbitrary scientific inputs.
+For large structures, prefer retaining scientific files rather than copying
+entire tool envelopes into shell command arguments; those arguments have
+OS size limits.

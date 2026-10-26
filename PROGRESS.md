@@ -1562,3 +1562,38 @@ Lessons — process:
 - Limits: direct adapter + OSSandbox execution, not complete generate/run/score,
   HTTP sidecar, arbitrary CAD/PDE or scientific-model certification. Main
   remains b100ade, unchanged; no merge or push.
+
+### 2026-10-26 — Repository-owned ASE / OVITO MCP tools
+
+- Implementation commit: `f2c3a33`. Added scripts/mcp/atomistic with ordinary
+  MCP tools/call (6 ASE + 6 OVITO tools), shared bounded workspace I/O,
+  a complete exact/hash-checked Python lock, scientific and optional pinned
+  Codex Dockerfiles, OS configuration and author documentation. New catalog
+  keys ase_native/ovito preserve the pre-existing ase/AtomicToolkit contract.
+  Local adapters do not masquerade as third-party clone-manifest entries.
+- Scope: cubic fcc/bcc/diamond building and repetition, EMT/LJ energy/forces,
+  fixed-cell BFGS; OVITO inspection, PTM, total RDF, DXA and Tachyon PNG.
+  First-frame XYZ/extxyz/CIF only. External engines and arbitrary Python
+  modifiers are deliberately outside this interface. Non-convergence is
+  explicit; CPU runtime and file/atom/input limits are documented.
+- Native failure/reproducer: render regression failed with generic Qt
+  offscreen and missing Vulkan driver. Installing Mesa software Vulkan and
+  using OVITO's ovitoheadless plugin fixed it without a GPU or Xvfb.
+  Final Docker tests: 7 passed (all tools, negative/path cases and independent
+  references). Related suite: 1400 passed, 10 skipped. Pure JSON-RPC stdout.
+- Actual CodexCLIAdapter + OSSandbox run with gpt-6.1-sol medium / CLI 0.162.1
+  called all 12 tools successfully in 111.3 s. Exact returned business objects
+  matched saved JSON. Independent ASE EMT/optimization reference matched;
+  RDF pair-histogram max discrepancy 9.95e-14; perfect Cu108 identified FCC,
+  DXA zero segments, decoded 320x240 PNG with matching hash. Reviewed shell
+  commands only serialized responses; no scientific-backend bypass.
+- The agent recovered from a shell argument-length failure while saving a
+  large complete response envelope by writing smaller chunks. All tool
+  calls and final scientific artifacts passed independently; do not equate
+  normal process exit with tool/business success.
+- Evidence/reproduction in companion artifact repo artifacts/ase-ovito-20261026
+  and docs/ase-ovito-mcp-integration-20261026.md. No credentials/private config
+  files retained; test containers cleaned. Main unchanged; no merge/push.
+- Prevention: verify native imports, renderer platform and actual results
+  inside the deployment image. Keep direct, agent and full CLI verification
+  boundaries explicit; never infer VASP/LAMMPS support from ASE installation.
