@@ -1,0 +1,38 @@
+{
+  "mcpServers": {
+    "ase": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/atomistic-mcp/ase_server.py"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ATOMISTIC_MCP_WORKSPACE": "/workspace",
+        "QT_QPA_PLATFORM": "ovitoheadless",
+        "OVITO_GUI_MODE": "0",
+        "OMP_NUM_THREADS": "1"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    },
+    "ovito": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/atomistic-mcp/ovito_server.py"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ATOMISTIC_MCP_WORKSPACE": "/workspace",
+        "QT_QPA_PLATFORM": "ovitoheadless",
+        "OVITO_GUI_MODE": "0",
+        "OMP_NUM_THREADS": "1"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

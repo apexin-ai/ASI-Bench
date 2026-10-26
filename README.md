@@ -801,3 +801,13 @@ full-space L2 error and PETSc convergence status. Its XDMF output uses linear
 nodal interpolation for degree-2 solutions (`export_degree: 1`). These are
 constrained adapters (box meshing / manufactured Poisson), not general CAD/PDE
 execution servers; server-image tests do not certify a full agent OS image.
+
+### ASE and OVITO MCP adapters
+
+Repository-owned adapters support ASE bulk/supercell construction, EMT/LJ
+energy/forces and BFGS relaxation, plus OVITO PTM, RDF, DXA and CPU PNG
+rendering. See [installation and task configuration](docs/mcp/ase-ovito.md).
+Pinned scientific and optional Codex images are in `scripts/mcp/atomistic/`;
+these tools use ordinary MCP calls and share workspace structure files.
+Catalog ids are `ase_native` and `ovito`; the existing `ase` entry retains its
+third-party AtomicToolkit contract.

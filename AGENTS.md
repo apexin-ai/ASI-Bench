@@ -157,6 +157,11 @@
   pinned checkout 内的 `bootstrap.script` 取得其源码资源，不能只安装 wheel。
   smoke 不得把“有响应”当业务成功：须检查 in-band error、模型加载结果和实际产物；
   势能预测用独立 ASE 进程对账，MatterGen 随机产物独立解析，不比较生成字节。
+- 自有 ASE/OVITO MCP 放在 `scripts/mcp/atomistic/`，依赖用完整 SHA-256 lock
+  安装，不为本仓库 adapter 伪造上游 clone manifest。目录 id 为 `ase_native`、`ovito`；
+  原 `ase`/AtomicToolkit 合同保留。实例配置显式设置 `QT_QPA_PLATFORM=ovitoheadless`，
+  OVITO 3.17 的 CPU 渲染也需要 Mesa Vulkan 软件驱动。真实回归通过
+  `ASIBENCH_ATOMISTIC_DOCKER=1` 启用，RDF 用独立配对直方图核验。
 - FEniCSx/Gmsh 镜像业务回归用 `ASIBENCH_SCIENCE_IMAGES=1` 启用
   `tests/mcp_e2e/test_science_images.py`；独立参考不导入 MCP adapter。
   Gmsh worker 禁用 signal handler 并串行管理全局状态；stdout 只允许 JSON-RPC。
