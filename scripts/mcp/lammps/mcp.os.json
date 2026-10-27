@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "lammps": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/lammps-mcp/server.py"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "LAMMPS_MCP_WORKSPACE": "/workspace",
+        "LAMMPS_BINARY": "/opt/venv/bin/lmp",
+        "OMP_NUM_THREADS": "1",
+        "LD_LIBRARY_PATH": "/opt/venv/lib"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "lammps_distribution": "2025.7.22.4.0",
+  "notes": "Files ship in the locked LAMMPS wheel, not vendored here. Original file headers and distribution licenses apply.",
+  "high_level_potentials": [
+    {
+      "name": "Cu_u3.eam",
+      "sha256": "3436c491a4c75ea8b7141adbc6ee382a118f5fdb47f609c2a660fc1eb772599f",
+      "source": "https://github.com/lammps/lammps/blob/stable_22Jul2025_update4/potentials/Cu_u3.eam",
+      "header": [
+        "DATE: 2007-06-11 UNITS: metal CONTRIBUTOR: Stephen Foiles, foiles@sandia.gov CITATION: Foiles et al, Phys Rev B, 33, 7983 (1986) COMMENT: Cu functions (universal 3), SM Foiles et al, PRB, 33, 7983 (1986)",
+        "   29     63.550         3.6150    FCC",
+        "  500  5.0100200400801306e-04  500  1.0000000000000009e-02  4.9499999999999886e+00",
+        "  0.                     -3.1561636903424350e-01 -5.2324876182494506e-01 -6.9740831416804383e-01 -8.5202525457518519e-01",
+        " -9.9329216586042435e-01 -1.1246331970890324e+00 -1.2481882647347859e+00 -1.3654054700363645e+00 -1.4773214276236644e+00"
+      ]
+    },
+    {
+      "name": "Si.tersoff",
+      "sha256": "5b55dc7be1569193f468b9f56128a36e67feedd8e145561f61aec4b49a33d723",
+      "source": "https://github.com/lammps/lammps/blob/stable_22Jul2025_update4/potentials/Si.tersoff",
+      "header": [
+        "# DATE: 2007-10-25 UNITS: metal CONTRIBUTOR: Aidan Thompson, athomps@sandia.gov CITATION: Tersoff, Phys Rev B, 37, 6991 (1988) ",
+        "",
+        "# Tersoff parameters for various elements and mixtures",
+        "# multiple entries can be added to this file, LAMMPS reads the ones it needs",
+        "# these entries are in LAMMPS \"metal\" units:"
+      ]
+    }
+  ]
+}

@@ -1257,3 +1257,21 @@ contracts. Scientific checks skip unless explicitly enabled. The optional
 Codex image and author-facing contract are in [docs/mcp/ase-ovito.md](docs/mcp/ase-ovito.md).
 These local adapters use their committed Python hash lock and source revision,
 not the third-party clone manifest.
+
+## Repository-owned LAMMPS MCP checks
+
+```sh
+docker build -t asibench-lammps:test scripts/mcp/lammps
+ASIBENCH_LAMMPS_DOCKER=1 uv run --frozen pytest -q tests/mcp_e2e/test_lammps_adapter.py
+```
+
+Four opt-in Docker scenarios cover all 18 tools: native scripts and artifact
+lifecycle; high-level LJ/EAM/Tersoff physics, minimization and MD; failure,
+timeout, cancellation, output budgets and invalid requests; and HTTP
+upload/compute/binary transfer between containers without shared workspace.
+References use analytic LJ, a separate ASE process and independently prepared
+native-library EAM/Tersoff cells. Serial/two-rank MPI, all restart operations,
+convergence/step exhaustion, NVE drift and JSON-RPC stdout are checked.
+Three offline tests cover thermo parsing, interrupted-job recovery and both
+OS configuration contracts. Docker tests skip unless explicitly enabled.
+See [the author guide](docs/mcp/lammps.md) for image configuration and limits.

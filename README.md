@@ -811,3 +811,13 @@ Pinned scientific and optional Codex images are in `scripts/mcp/atomistic/`;
 these tools use ordinary MCP calls and share workspace structure files.
 Catalog ids are `ase_native` and `ovito`; the existing `ase` entry retains its
 third-party AtomicToolkit contract.
+
+### LAMMPS MCP adapter
+
+The repository-owned `lammps` server supports native input scripts, explicit
+MPI, asynchronous jobs/cancellation, logs, trajectories and binary restart,
+plus LJ/EAM/Tersoff single-point, minimization and NVE/NVT/NPT helpers.
+Use either instance-local stdio or an internal HTTP sidecar with input upload
+and artifact download. See [deployment, tool contracts and tested scope](docs/mcp/lammps.md).
+Scientific dependencies are installed in a pinned CPU image at build time;
+native script capabilities share the server container trust boundary.

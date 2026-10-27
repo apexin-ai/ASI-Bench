@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "lammps": {
+      "url": "http://lammps:8765/mcp",
+      "sandbox": {
+        "deployment": "service",
+        "service": "lammps",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}
