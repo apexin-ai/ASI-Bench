@@ -1597,3 +1597,40 @@ Lessons — process:
 - Prevention: verify native imports, renderer platform and actual results
   inside the deployment image. Keep direct, agent and full CLI verification
   boundaries explicit; never infer VASP/LAMMPS support from ASE installation.
+
+### 2026-10-27 — Native LAMMPS MCP, stdio and HTTP
+
+- Implementation commit: `ae7b96e`. Repository-owned scripts/mcp/lammps adds
+  18 ordinary MCP tools: native scripts, staged/uploaded inputs, asynchronous
+  jobs/status/wait/cancel, bounded log/trajectory/file and binary transfers,
+  restart inspect/data/dump/continue, and LJ/Cu-EAM/Si-Tersoff single-point,
+  CG minimization and NVE/NVT/NPT. Native scripts retain compiled engine
+  capability; this is not a universal GPU/HPC or force-field certification.
+- Runtime: LAMMPS 2025.7.22.4.0 + MPICH 4.3.2, complete Python hash lock,
+  pinned scientific/Codex images, instance and service configs, real HTTP MCP
+  healthcheck, catalog and author guide. No third-party clone-manifest fiction.
+- Reproducer/fix: wheel initially fails on missing libmpi.so.12. Adding pinned
+  MPICH makes lmp work; Python CDLL still requires LD_LIBRARY_PATH=/opt/venv/lib.
+  Build checks both the executable and shared-library initialization. Child
+  stdin is detached from MCP; stdout is captured separately from JSON-RPC.
+- Resource lifecycle: explicit rank/thread counts, concurrent/time/file budgets,
+  process-group cancellation and shutdown; interrupted records are never
+  certified complete after restart. Native scripts have container privileges;
+  path APIs are not a script sandbox. HTTP sidecars require explicit upload
+  and download, since they have no agent workspace mount.
+- Real tests: 7 passed (4 Docker scenarios, 3 offline). All 18 tools; analytic
+  and independent ASE LJ references, independently built native-library
+  EAM/Tersoff references, convergence and exhaustion, NVE drift, NVT/NPT,
+  two-rank MPI, all restart actions, errors/timeouts/cancel/output budget,
+  protocol purity and separate-container HTTP binary transfer.
+- Related regression: 1558 passed, 11 skipped, 2 deselected. Actual
+  gpt-6.1-sol medium / Codex 0.162.1 through CodexCLIAdapter + OSSandbox:
+  instance 140.3s and internal service 150.9s; each 24 successful MCP calls
+  covering all 18 tools. Exact saved result objects match observed calls;
+  energy/forces match independent reference, NVE drift 3.17e-9 eV, downloaded
+  restart bytes match. AST/manual shell review: serialization/base64 save only.
+- Evidence/controllers in companion artifact repo artifacts/lammps-20261027;
+  report docs/lammps-mcp-integration-20261027.md. Test containers/networks and
+  private staging cleaned; runtime-only credentials not retained in evidence.
+  No full generate/run/score or broad arbitrary-material certification.
+  Main remains 62763e4; no merge/push under this implementation authorization.

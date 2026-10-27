@@ -213,3 +213,10 @@ stdout, and HTTP upload/compute/binary download without a shared workspace.
 Offline tests cover catalog/config, thermo parsing and interrupted-job recovery.
 Without the opt-in flag, Docker tests explicitly skip. Protocol success alone
 is not scientific validation, and direct tests do not prove agent tool use.
+
+Validation on 2026-10-27 also ran gpt-6.1-sol / Codex 0.162.1 through
+`CodexCLIAdapter` + `OSSandbox` in both instance stdio (140.3 s) and actual
+framework-managed HTTP service (150.9 s) deployments. Each used all 18 tools;
+saved scientific objects and downloaded restart bytes matched MCP returns,
+and independent numerical references passed. This validates the adapter and
+sandbox chain, not a full `generate/run/score` benchmark or arbitrary materials.
