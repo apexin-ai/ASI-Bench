@@ -157,6 +157,12 @@
   pinned checkout 内的 `bootstrap.script` 取得其源码资源，不能只安装 wheel。
   smoke 不得把“有响应”当业务成功：须检查 in-band error、模型加载结果和实际产物；
   势能预测用独立 ASE 进程对账，MatterGen 随机产物独立解析，不比较生成字节。
+- 自有 LAMMPS MCP 位于 `scripts/mcp/lammps/`，固定引擎 wheel、MPICH 和完整哈希依赖锁。
+  `LD_LIBRARY_PATH=/opt/venv/lib` 对原生 Python 动态加载同样必需；不能只检查 `lmp -h`。
+  原生脚本具有 server 容器权限，不得把文件 API 的路径校验描述为脚本沙箱。
+  数值输出区分 native 自选 units/norm 和 convenience metal/norm-no；converged 按实际
+  minimizer stop reason，不能从 exit 0 推断。直接镜像/HTTP 测试用 `ASIBENCH_LAMMPS_DOCKER=1`。
+  sidecar 没有 agent workspace，必须用 MCP 上传/下载并在 teardown 前保存产物。
 - 自有 ASE/OVITO MCP 放在 `scripts/mcp/atomistic/`，依赖用完整 SHA-256 lock
   安装，不为本仓库 adapter 伪造上游 clone manifest。目录 id 为 `ase_native`、`ovito`；
   原 `ase`/AtomicToolkit 合同保留。实例配置显式设置 `QT_QPA_PLATFORM=ovitoheadless`，
