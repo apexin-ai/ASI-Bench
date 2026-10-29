@@ -1,5 +1,19 @@
 # Progress
 
+## 2026-10-29: Prepare the 0.3.0 package release
+
+- Problem: PyPI still served 0.2.0 while main included Harbor integration,
+  OS-sandbox MCP deployments and the BenchFlow scoring-input fix.
+- Resolution: bump project, runtime and lockfile versions together to 0.3.0,
+  document release contents and upgrade commands, and validate wheel/sdist
+  installation in clean Python 3.11 environments. Keep scientific MCP scripts,
+  task bundles and Docker resources in the repository rather than PyPI artifacts.
+- Prevention: release checks compare both CLI aliases, distribution metadata
+  and runtime version, and inspect artifact contents. The full suite exposed a
+  metadata test hard-coded to 0.2.0; compare the reported version to the package
+  version instead so future releases do not fail on a stale test literal.
+- Release preparation commit: `bd47058`.
+
 ## 2026-10-29: BenchFlow immutable scoring inputs and runtime parity
 
 - Problem: `benchflow-score` passed persisted model outputs directly to the
