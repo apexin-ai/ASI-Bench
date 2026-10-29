@@ -1,5 +1,21 @@
 # Progress
 
+## 2026-10-29: Add CITATION.cff and README BibTeX for the paper
+
+- Problem: the repository linked arXiv:2608.17271 but had no citation
+  metadata, so GitHub showed no "Cite this repository" entry and users had to
+  build their own BibTeX.
+- Resolution: add `CITATION.cff` (CFF 1.2.0, validated with cffconvert 2.0.0)
+  whose `preferred-citation` is the arXiv article, and a README `## Citation`
+  section. The BibTeX entry uses the Google Scholar form (`zhou2026asi`,
+  `@article`, `journal={arXiv preprint arXiv:2608.17271}`, `year={2026}`) with
+  the full 42-author list from arXiv; Scholar's own export truncates after 10
+  authors with `others`. The arXiv DOI is `10.48550/arXiv.2608.17271`.
+- Prevention: `test_citation_metadata_matches_readme_and_paper` checks that
+  `CITATION.cff`, the BibTeX entry and the README author header keep the same
+  authors in the same order. If the author list changes, update all three.
+- Commit: `d960dec`.
+
 ## 2026-10-29: Prepare the 0.3.0 package release
 
 - Problem: PyPI still served 0.2.0 while main included Harbor integration,
