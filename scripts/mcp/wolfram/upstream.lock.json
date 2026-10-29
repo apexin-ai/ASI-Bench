@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "image": "ghcr.io/wolframresearch/mcpserver@sha256:22a0894758f5653737ef3355558fab0524e6801c36c95e7cbb0583afc3f3960f",
+  "platform": "linux/amd64",
+  "repository": "https://github.com/WolframResearch/AgentTools",
+  "revision": "72691d40d35f861cb3694a8e7224b41f8d128d23",
+  "paclet": "Wolfram/AgentTools",
+  "paclet_version": "2.2.0",
+  "engine_version": "14.3",
+  "license": "MIT applies to AgentTools only; Wolfram Engine/Mathematica require separate valid authorization",
+  "note": "Pinned published image, not the newer source-only 2.2.21/15.0 combination. All preinstalled dependencies/data are frozen by the image digest."
+}

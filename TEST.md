@@ -1280,3 +1280,24 @@ convergence/step exhaustion, NVE drift and JSON-RPC stdout are checked.
 Three offline tests cover thermo parsing, interrupted-job recovery and both
 OS configuration contracts. Docker tests skip unless explicitly enabled.
 See [the author guide](docs/mcp/lammps.md) for image configuration and limits.
+
+## Wolfram MCP checks
+
+Use a Python 3.12 test venv with `scripts/mcp/wolfram/requirements.lock` and the
+framework test dependencies. Run the following for protocol/lifecycle, exact content
+forwarding, HTTP transport, process-tree cancellation, timeout recovery, and
+service credential/resource boundaries. Fixtures are explicitly protocol-only.
+
+```sh
+pytest -q tests/mcp_e2e/test_wolfram_adapter.py tests/test_service_runtime_credentials.py
+```
+
+Build `asibench-wolfram:test` using `scripts/mcp/wolfram/Dockerfile`, then set
+`ASIBENCH_WOLFRAM_IMAGE_TEST=1` to additionally check fresh-HOME OS preflight and
+missing-license failure in the real image. Set `ASIBENCH_WOLFRAM_DOCKER=1` only
+with a valid runtime license to enable exact integration, persistent sessions,
+independent mathematical references, native CSV/PNG/WXF artifacts, failure and
+timeout checks, plus framework HTTP sidecar transfer. HTTP requires an
+**offline-valid** `WOLFRAM_LICENSE_B64`. Explicit opt-in with invalid licensing
+fails, rather than skipping or substituting a fake backend. See
+[deployment and verification](docs/mcp/wolfram.md).

@@ -825,3 +825,14 @@ Use either instance-local stdio or an internal HTTP sidecar with input upload
 and artifact download. See [deployment, tool contracts and tested scope](docs/mcp/lammps.md).
 Scientific dependencies are installed in a pinned CPU image at build time;
 native script capabilities share the server container trust boundary.
+
+### Mathematica / Wolfram MCP
+
+The `wolfram` catalog entry runs the official Wolfram AgentTools MCP with
+native WL jobs, cancellation, exact-expression/WXF artifacts and stdio or
+internal HTTP deployment. See [installation, licensing and task authoring](docs/mcp/wolfram.md).
+The published Engine 14.3 / AgentTools 2.2.0 image is pinned by digest; a valid
+Wolfram license is required. Protocol/image tests are available without a
+license; real scientific, frontend and Codex acceptance require a licensed
+runtime and are not claimed by those tests. Task services now support scoped
+`env_from` references and bounded `memory_mb` / `cpus` configuration.

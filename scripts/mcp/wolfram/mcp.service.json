@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "wolfram": {
+      "url": "http://wolfram:8765/mcp",
+      "sandbox": {
+        "deployment": "service",
+        "service": "wolfram",
+        "startup_timeout_seconds": 300
+      }
+    }
+  }
+}

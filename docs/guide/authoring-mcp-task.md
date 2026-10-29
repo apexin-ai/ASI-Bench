@@ -250,6 +250,16 @@ Use this only when tool provenance is part of the benchmark objective. The
 verifier complements the scorer: `tool_called` does not mean `tool_correct`,
 and a correct answer does not prove that it came from MCP.
 
+## Mathematica / Wolfram tasks
+
+Use catalog id `wolfram`. The [Wolfram deployment guide](../mcp/wolfram.md)
+covers the pinned official MCP, arbitrary Wolfram Language programs, persistent
+evaluator sessions, native asynchronous jobs and artifact download. A valid
+runtime license is required. Choose instance stdio or an offline-licensed HTTP
+sidecar; a usable Mathematica frontend is an additional requirement for
+frontend Notebook evaluation/rendering. Engine protocol availability does not
+certify GUI operations or scientific correctness.
+
 ## Author checklist
 
 Before submitting, confirm:

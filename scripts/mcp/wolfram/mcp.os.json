@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "wolfram": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/wolfram-mcp/server.py"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "WOLFRAM_MCP_WORKSPACE": "/workspace",
+        "MCP_SERVER_NAME": "WolframLanguage",
+        "WOLFRAM_STATE_ROOT": "/home/agent/.cache/wolfram"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 300
+      }
+    }
+  }
+}

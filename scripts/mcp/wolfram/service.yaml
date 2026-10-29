@@ -1,0 +1,18 @@
+# Merge runtime.services into the task's task_meta.yaml.
+# Build the image first. Use an immutable registry digest for distributed runs.
+runtime:
+  services:
+    - name: wolfram
+      image: asibench-wolfram:test
+      port: 8765
+      command: ["/opt/venv/bin/python", "/opt/wolfram-mcp/server.py", "--transport", "streamable-http"]
+      startup_timeout_seconds: 300
+      memory_mb: 8192
+      cpus: 2
+      environment:
+        MCP_SERVER_NAME: WolframLanguage
+        WOLFRAM_MCP_WORKSPACE: /workspace
+      env_from:
+        # Operator environment variable containing base64 of a valid mathpass.
+        # This must be a license that works OFFLINE for this actual container.
+        WOLFRAM_LICENSE_B64: ASIBENCH_WOLFRAM_LICENSE_B64
