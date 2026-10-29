@@ -45,6 +45,8 @@
 
 </div>
 
+Release notes: [0.3.0](docs/releases/0.3.0.md).
+
 ## Paper
 
 **ASI-Bench: At the Dawn of Artificial Superintelligence**

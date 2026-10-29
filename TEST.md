@@ -1280,3 +1280,12 @@ convergence/step exhaustion, NVE drift and JSON-RPC stdout are checked.
 Three offline tests cover thermo parsing, interrupted-job recovery and both
 OS configuration contracts. Docker tests skip unless explicitly enabled.
 See [the author guide](docs/mcp/lammps.md) for image configuration and limits.
+
+### Release version consistency
+
+Before publishing a release, update `pyproject.toml`,
+`ai4sci_bench/__init__.py`, and the editable package version in `uv.lock`
+together. Check `uv lock --check`, build wheel/sdist, run strict Twine checks,
+and install both artifacts in separate clean environments. Confirm both CLI
+aliases and `importlib.metadata.version("asibench")` agree with the runtime
+`__version__`. Release notes are retained in `docs/releases/`.
