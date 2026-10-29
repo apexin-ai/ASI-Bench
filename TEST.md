@@ -554,7 +554,12 @@ uv run --frozen pytest -q tests/test_task_scorer_runtime_regressions.py
 BenchFlow seed31415 adapter regression coverage validates the manifest seed and
 instance boundary, required run-result binding, independent agent execution
 status checks, deterministic artifact hashing, public reference usage, and
-stable JSON score output. CLI coverage also verifies that
+stable JSON score output. Data-dependent scoring is compared against the standard
+`score` entry point, including per-detail parity and unchanged source outputs.
+Regressions cover missing data, symlinks, evaluator-input overwrite attempts,
+missing predictions as valid zero scores, task-runtime activation in a fresh
+worker, runtime setup failure, and redacted scorer-import diagnostics.
+CLI coverage also verifies that
 `run --fail-on-agent-error` saves evidence before returning non-zero and only
 uses the final retry attempt:
 

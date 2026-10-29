@@ -12,20 +12,23 @@ import importlib.metadata
 import json
 import platform
 import subprocess
-import sys
-from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from ai4sci_bench.core.task import TaskLoader
-from ai4sci_bench.core.judge_api import JudgeAPIOverride, use_judge_api_override
-from ai4sci_bench.core.scorer import (
-    normalize_task_score,
-    score_divisor,
-    scoring_max_score,
+from ai4sci_bench.core.judge_api import JudgeAPIOverride, get_judge_api_override
+from ai4sci_bench.core.scorer import scoring_max_score
+from ai4sci_bench.local_scoring import (
+    _ScoreJob,
+    _evaluate_score_job,
+    _json_default,
+    _prepare_score_runtimes,
+    _redact_scoring_logs,
+    _redact_secret,
+    _score_jobs_parallel,
+    _worker_failure_result,
 )
-from ai4sci_bench.local_scoring import _detail_dict, _has_internal_error, _json_default
 
 PUBLIC_SEED = 31415
 SCHEMA_VERSION = 2
@@ -93,10 +96,10 @@ def _load_public_scorer_revision(tasks_dir: Path) -> str | None:
 def _require_directory(label: str, value: Any) -> Path:
     if not isinstance(value, str) or not value:
         raise BenchFlowScoringError(f"manifest.{label} must be a non-empty path")
-    path = Path(value).resolve()
-    if not path.is_dir():
-        raise BenchFlowScoringError(f"manifest.{label} directory not found: {path}")
-    return path
+    path = Path(value).absolute()
+    if path.is_symlink() or not path.is_dir():
+        raise BenchFlowScoringError(f"manifest.{label} must be a real directory: {path}")
+    return path.resolve()
 
 
 def _load_run_result(
@@ -217,15 +220,6 @@ def score_seed31415_manifest(
         prediction_dir=prediction_dir,
     )
 
-    try:
-        import ai4sci_bench.scorers  # noqa: F401
-        from ai4sci_bench.runner.orchestrator import _evaluate_gates_and_scores
-        from ai4sci_bench.scorers.custom import load_custom_scorer
-    except ModuleNotFoundError as exc:
-        raise BenchFlowScoringError(
-            "BenchFlow scoring requires `asibench[full]` and the public task bundle"
-        ) from exc
-
     loader = TaskLoader(tasks_dir)
     try:
         metadata = loader.load_task_by_id(task_id)
@@ -234,35 +228,33 @@ def score_seed31415_manifest(
     evaluation = metadata.get("evaluation")
     if not isinstance(evaluation, dict):
         raise BenchFlowScoringError(f"Task {task_id} has no evaluation contract")
-    task_dir = Path(metadata["_task_dir"])
-    try:
-        load_custom_scorer(task_dir)
-    except Exception as exc:
-        raise BenchFlowScoringError(
-            f"Could not load public scorer for {task_id}: {type(exc).__name__}: {exc}"
-        ) from exc
-
-    # Keep the operator-selected Judge transport scoped to this evaluation.
-    # The manifest is an untrusted, persisted input and must never carry an
-    # API key or endpoint override.
-    judge_scope = (
-        use_judge_api_override(judge_api_override)
-        if judge_api_override is not None
-        else nullcontext()
-    )
-    with judge_scope:
-        gates, hard_ok, soft_failures, scores, final_score = _evaluate_gates_and_scores(
-            evaluation,
-            prediction_dir,
-            reference_dir,
-            parameters,
-            prompt_level=prompt_level,
-        )
-    all_details = [*gates, *scores]
-    internal_error = _has_internal_error(all_details)
-    raw_max_score = scoring_max_score(evaluation)
-    final_score, max_score = normalize_task_score(
-        evaluation, final_score, raw_max_score
+    runtime_mode = evaluation.get("runtime")
+    if runtime_mode not in (None, "task"):
+        raise BenchFlowScoringError(f"Unsupported evaluation.runtime: {runtime_mode!r}")
+    input_config = metadata.get("input", {})
+    input_files = input_config.get("files", []) if isinstance(input_config, dict) else []
+    task_runtime = None
+    if runtime_mode == "task":
+        task_runtime = {
+            "_runtime_python": metadata.get("_runtime_python"),
+            "_runtime_packages": list(metadata.get("_runtime_packages", [])),
+        }
+    job = _ScoreJob(
+        index=0,
+        source_result=str(run_result_path),
+        task_id=task_id,
+        instance_id=instance_id,
+        prompt_level=prompt_level or "",
+        attempt=int(_run_result.get("attempt", 1)),
+        task_dir=str(Path(metadata["_task_dir"]).resolve()),
+        output_dir=str(prediction_dir),
+        reference_dir=str(reference_dir),
+        data_dir=str(instance_dir / "data"),
+        requires_instance_data=bool(input_files),
+        evaluation=evaluation,
+        parameters=parameters,
+        max_score=scoring_max_score(evaluation),
+        task_runtime=task_runtime,
     )
     scorer_revision = _load_public_scorer_revision(tasks_dir)
     requested_revision = manifest.get("scorer_revision")
@@ -271,14 +263,43 @@ def score_seed31415_manifest(
             f"scorer_revision mismatch: manifest={requested_revision!r}, public_policy={scorer_revision!r}"
         )
 
+    # Reuse local scoring's immutable staging, task runtime and failure taxonomy.
+    # Preserve an ambient Judge scope for callers using the Python API, including
+    # when evaluation runs in a fresh task-runtime worker.
+    effective_override = judge_api_override or get_judge_api_override()
+    secret = effective_override.resolve_api_key() if effective_override else None
+    try:
+        job = _prepare_score_runtimes([job], tasks_root=tasks_dir)[0]
+        if job.task_runtime is not None and job.runtime_error is None:
+            scored = _score_jobs_parallel(
+                [job], parallel=1, judge_api_override=effective_override,
+                progress_callback=None,
+            )[0]
+        else:
+            with _redact_scoring_logs(secret):
+                scored = _evaluate_score_job(job, effective_override)
+    except Exception as exc:
+        scored = _worker_failure_result(
+            job,
+            error_type=type(exc).__name__,
+            error=_redact_secret(str(exc), secret),
+            failure_kind=getattr(
+                exc, "failure_kind",
+                "evaluator_unavailable" if isinstance(exc, ModuleNotFoundError)
+                else "evaluator_runtime_error",
+            ),
+            scorer_name="_benchflow_scoring_runtime",
+        )
+    scored = _redact_secret(scored, secret)
+
     try:
         framework_version = importlib.metadata.version("asibench")
     except importlib.metadata.PackageNotFoundError:
         framework_version = None
 
-    evaluation_status = "evaluation_invalid" if internal_error else "completed"
+    evaluation_status = scored["evaluation_status"]
     attempt_failed = attempt_status != "completed"
-    return {
+    result = {
         "schema_version": SCHEMA_VERSION,
         "benchmark": "ASI-Bench",
         "seed": PUBLIC_SEED,
@@ -306,15 +327,18 @@ def score_seed31415_manifest(
             "effort": manifest.get("effort"),
             "sandbox": manifest.get("sandbox"),
         },
-        "hard_gates_passed": hard_ok,
-        "soft_gate_failures": soft_failures,
-        "score": float(final_score or 0.0),
-        "max_score": max_score,
-        "score_divisor": score_divisor(evaluation),
-        "gate_results": [_detail_dict(item) for item in gates],
-        "score_details": [_detail_dict(item) for item in scores],
-        "scorer_internal_error": internal_error,
+        "hard_gates_passed": scored["hard_gates_passed"],
+        "soft_gate_failures": scored["soft_gate_failures"],
+        "score": scored["final_score"],
+        "max_score": scored["max_score"],
+        "score_divisor": scored["score_divisor"],
+        "gate_results": scored["gate_results"],
+        "score_details": scored["score_results"],
+        "scorer_internal_error": scored["scorer_internal_error"],
     }
+    if "failure_kind" in scored:
+        result["failure_kind"] = scored["failure_kind"]
+    return result
 
 
 def score_manifest_file(

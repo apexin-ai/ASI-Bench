@@ -108,8 +108,15 @@ The required fields are `task_id`, `instance_id`, `run_result`,
 `prediction_dir`, `instance_dir`, and `tasks_dir`. Use absolute paths when the
 execution and scoring stages have different working directories.
 
-`instance_dir` must contain the public `reference/` directory, and `tasks_dir`
-must point to this checkout's public task bundle. The adapter rejects
+`instance_dir` must contain the public `reference/` directory and the original
+`data/` tree for tasks declaring instance inputs. `tasks_dir` must point to this
+checkout's public task bundle. Keep `prediction_dir` bound to persisted model
+outputs; the model does not need to copy instance inputs into its outputs.
+Before evaluation, the adapter uses the same temporary staging as `score`:
+copy immutable instance `data/`, then merge persisted outputs without modifying
+either source. Symlinks and attempts to overwrite instance inputs are rejected.
+Tasks declaring `evaluation.runtime: task` also use local scoring's runtime
+preparation and a fresh scorer worker. The adapter rejects
 non-`__seed31415` instance IDs, mismatched run-result and prediction paths, and
 attempts to generate references.
 
@@ -141,13 +148,22 @@ BenchFlow should parse `benchflow_score.json`, not human-readable stdout.
 | `attempt_status` | Agent execution outcome, independent of scoring |
 | `evaluation_status` | Whether the public scorer completed without an internal error |
 | `retryable` | Whether BenchFlow should consider another agent attempt |
-| `score` / `max_score` | Non-official local score for this attempt |
+| `score` / `max_score` | Non-official local score; `score` is `null` when evaluation is invalid |
+| `scorer_internal_error` / `failure_kind` | Evaluator failure flag and canonical failure category |
 | `gate_results` / `score_details` | Stable per-check `ScoreDetail` records |
 
 For example, `status: attempt_failed`, `attempt_status: execution_failed`, and
 `evaluation_status: completed` means that the scorer ran successfully but the
 agent attempt failed. This differs from a completed attempt that earned a low
 score or failed a hard gate.
+
+A missing required instance data directory or unsafe staging produces
+`evaluation_status: evaluation_invalid`, `scorer_internal_error: true`,
+`failure_kind: missing_evaluator_input`, and `score: null`. Task-runtime setup
+failures use `evaluator_unavailable`; other evaluator failures use
+`evaluator_runtime_error`. Exclude invalid evaluations from score aggregates
+and track them separately. Missing model predictions remain valid submission
+failures, with scores determined by the task's gates and scorers.
 
 The result also records prediction and run-result SHA-256 values, scorer and
 task revisions, framework version, and any harness, model, effort, or sandbox

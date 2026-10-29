@@ -66,6 +66,10 @@
   目录和 task bundle。`benchflow-score` 不得接受 seed 生成请求、调用
   `generate_gt.py` 或评分 seed42。输出必须包含固定 schema 的 ScoreDetail、
   artifact SHA-256、scorer/task revision 和 harness/model/effort provenance。
+- BenchFlow 评分复用本地评分的 `_ScoreJob`、隔离 data/outputs staging 和 task
+  runtime 准备；opt-in runtime 在 fresh worker 内加载 scorer。必要 data 根目录缺失或
+  不安全合并应标记 `missing_evaluator_input`；评估无效时 `score: null`，不得序列化为零分。
+  manifest 的 prediction 路径及 artifact SHA-256 始终对应原始 persisted outputs。
 - Harbor `harbor-verify` 只评分已物化的公开 seed31415 task/instance 与恢复的 agent
   产物，复用本地评分的隔离合并、task runtime 和错误分类。成功时仅写归一化
   `reward.json` 及完整 `score_detail.json`；评估器故障必须删除旧 reward、写诊断并

@@ -212,6 +212,10 @@ scorers, preserves source order in the report, and writes the report atomically.
 BenchFlow owns scheduling and agent execution, while
 `asibench benchflow-score` scores one already-materialized seed31415 attempt.
 The score is local and non-official; seed42 is not accepted by this interface.
+Like `score`, it merges original instance `data/` and persisted outputs in a
+temporary directory and prepares opted-in task runtimes. Keep the prediction
+path pointed at the run's persisted outputs. Evaluator input/runtime failures
+produce `evaluation_status: evaluation_invalid` and `score: null`.
 
 See the **[BenchFlow integration guide](docs/guide/benchflow.md)** for the
 end-to-end run, schema-v2 manifest, scoring command, status fields, retries,
