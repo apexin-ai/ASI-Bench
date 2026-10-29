@@ -94,6 +94,16 @@ uv run pytest -q \
   tests/test_readme_examples.py::test_agent_docs_distinguish_new_models_from_new_harnesses
 ```
 
+The same module also checks that `CITATION.cff`, the README `## Citation`
+BibTeX entry and the README author header list the same 42 authors in arXiv
+order, and that the BibTeX entry keeps the Google Scholar form
+(`@article{zhou2026asi,`, `journal={arXiv preprint arXiv:2608.17271}`):
+
+```bash
+uv run pytest -q \
+  tests/test_readme_examples.py::test_citation_metadata_matches_readme_and_paper
+```
+
 Run external tests only when intentionally providing credentials and accepting
 their network/runtime cost:
 

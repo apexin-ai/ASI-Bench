@@ -130,3 +130,34 @@ def test_readme_fences_do_not_swallow_markdown_sections():
     assert swallowed_headings == [], (
         f"README headings are inside fenced code: {swallowed_headings}"
     )
+
+
+def test_citation_metadata_matches_readme_and_paper():
+    citation = yaml.safe_load((ROOT / "CITATION.cff").read_text(encoding="utf-8"))
+    paper = citation["preferred-citation"]
+    assert citation["cff-version"] == "1.2.0"
+    assert citation["authors"] == paper["authors"]
+    assert paper["type"] == "article"
+    assert paper["title"] == "ASI-Bench: At the Dawn of Artificial Superintelligence"
+    assert paper["journal"] == "arXiv preprint arXiv:2608.17271"
+    assert paper["year"] == 2026
+    assert paper["url"] == "https://arxiv.org/abs/2608.17271"
+
+    # Header author order (core authors, then contributors) is the arXiv order.
+    header = README.split("<strong>Core Authors</strong>", 1)[1].split("<sup>1</sup> Tsinghua", 1)[0]
+    header = re.sub(r"<sup>.*?</sup>|<[^>]+>|&nbsp;", " ", header)
+    core = header.split("Equal contribution", 1)[0]
+    contributors = header.split("Contributors", 1)[1]
+    header_names = [
+        " ".join(name.split()) for name in f"{core},{contributors}".split(",") if name.strip()
+    ]
+    cff_names = [f"{a['given-names']} {a['family-names']}" for a in paper["authors"]]
+    assert header_names == cff_names
+
+    bibtex = README.split("## Citation", 1)[1]
+    assert "@article{zhou2026asi," in bibtex
+    assert f"title={{{paper['title']}}}" in bibtex
+    assert "journal={arXiv preprint arXiv:2608.17271}" in bibtex
+    assert "year={2026}" in bibtex
+    bib_names = " and ".join(f"{a['family-names']}, {a['given-names']}" for a in paper["authors"])
+    assert f"author={{{bib_names}}}" in bibtex
