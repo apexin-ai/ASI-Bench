@@ -1294,7 +1294,9 @@ pytest -q tests/mcp_e2e/test_wolfram_adapter.py tests/test_service_runtime_crede
 
 Build `asibench-wolfram:test` using `scripts/mcp/wolfram/Dockerfile`, then set
 `ASIBENCH_WOLFRAM_IMAGE_TEST=1` to additionally check fresh-HOME OS preflight and
-missing-license failure in the real image. Set `ASIBENCH_WOLFRAM_DOCKER=1` only
+missing-license failure in the real image, plus a framework-managed offline
+sidecar proving service-only credential delivery and workspace separation.
+Set `ASIBENCH_WOLFRAM_DOCKER=1` only
 with a valid runtime license to enable exact integration, persistent sessions,
 independent mathematical references, native CSV/PNG/WXF artifacts, failure and
 timeout checks, plus framework HTTP sidecar transfer. HTTP requires an

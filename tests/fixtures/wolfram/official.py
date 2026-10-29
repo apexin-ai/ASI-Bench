@@ -1,8 +1,12 @@
 """Protocol-only fixture. NEVER substitutes for a Wolfram scientific test."""
 import base64
 import json
+import os
 import sys
 import time
+
+if 'PROTOCOL_FIXTURE_SECRET' in os.environ:
+    assert os.environ['PROTOCOL_FIXTURE_SECRET'] == 'fixture-service-secret'
 
 for line in sys.stdin:
     request = json.loads(line)

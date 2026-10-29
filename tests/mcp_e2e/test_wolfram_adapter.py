@@ -304,3 +304,58 @@ def test_hung_upstream_startup_fails_and_cleans_up(tmp_path):
     result=subprocess.run([sys.executable,str(ADAPTER/'server.py')],env=env,capture_output=True,text=True,timeout=10)
     assert result.returncode==70 and not result.stdout
     assert 'Future exception was never retrieved' not in result.stderr
+
+
+@pytest.mark.skipif(os.environ.get('ASIBENCH_WOLFRAM_IMAGE_TEST')!='1',reason='build image for actual framework sidecar/credential protocol check')
+def test_framework_offline_sidecar_protocol_and_credential_separation(tmp_path,monkeypatch):
+    from ai4sci_bench.runner.os_sandbox import OSSandbox
+    import uuid
+    runner_home=tmp_path/'runner-home';runner_home.mkdir()
+    monkeypatch.setenv('HOME',str(runner_home))
+    image='asibench-wolfram-protocol:'+uuid.uuid4().hex[:12]
+    context=tmp_path/'build';context.mkdir()
+    (context/'official.py').write_text((FIXTURE/'official.py').read_text())
+    command=json.dumps(['/opt/venv/bin/python','/opt/official-fixture.py'])
+    (context/'Dockerfile').write_text('FROM asibench-wolfram:test\nCOPY official.py /opt/official-fixture.py\nENV WOLFRAM_MCP_COMMAND_JSON='+json.dumps(command)+'\n')
+    build=subprocess.run(['docker','build','-q','-t',image,str(context)],capture_output=True,text=True,timeout=90)
+    assert build.returncode==0,build.stderr
+    monkeypatch.setenv('PROTOCOL_TEST_SECRET','fixture-service-secret')
+    workspace=tmp_path/'agent';workspace.mkdir();workspace.chmod(0o777)
+    script='''import asyncio,os,json
+from pathlib import Path
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+assert 'PROTOCOL_FIXTURE_SECRET' not in os.environ
+assert 'PROTOCOL_TEST_SECRET' not in os.environ
+Path('/workspace/agent-only-marker').write_text('must not be shared')
+async def main():
+    async with streamable_http_client('http://wolfram:8765/mcp') as (read,write,_):
+        async with ClientSession(read,write) as client:
+            await client.initialize()
+            info=await client.call_tool('wolfram_info',{})
+            assert not info.isError,info
+            info_value=info.structuredContent or json.loads(info.content[0].text)
+            assert info_value['official_server']['name']=='protocol-fixture-not-Wolfram'
+            result=await client.call_tool('WolframLanguageEvaluator',{'code':'protocol-only'})
+            assert result.structuredContent=={'echo':'protocol-only'}
+            files=await client.call_tool('wolfram_files',{})
+            files_value=files.structuredContent or json.loads(files.content[0].text)
+            assert not any(f['name']=='agent-only-marker' for f in files_value['files'])
+            upload=await client.call_tool('wolfram_upload',{'name':'server-only-input','data':'protocol'})
+            assert not upload.isError
+            assert not Path('/workspace/server-only-input').exists()
+asyncio.run(main())
+print('FRAMEWORK_SIDECAR_PROTOCOL_AND_CREDENTIAL_SEPARATION_PASS; no Wolfram computation performed')
+'''
+    (workspace/'check.py').write_text(script)
+    metadata={'runtime':{'image':'asibench-wolfram:test','services':[{
+        'name':'wolfram','image':image,'port':8765,'startup_timeout_seconds':60,
+        'command':['/opt/venv/bin/python','/opt/wolfram-mcp/server.py','--transport','streamable-http'],
+        'env_from':{'PROTOCOL_FIXTURE_SECRET':'PROTOCOL_TEST_SECRET'},'memory_mb':2048,'cpus':1}]}}
+    try:
+        result=OSSandbox(ROOT).execute_python(metadata,workspace=workspace,code_file='check.py',timeout=60)
+        assert result[0],result[1]
+        assert 'FRAMEWORK_SIDECAR_PROTOCOL_AND_CREDENTIAL_SEPARATION_PASS' in result[2]
+        assert 'fixture-service-secret' not in result[1]
+    finally:
+        subprocess.run(['docker','image','rm',image],capture_output=True,text=True,timeout=30)

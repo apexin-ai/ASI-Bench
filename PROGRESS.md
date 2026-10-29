@@ -17,7 +17,11 @@
   and HTTP scientific acceptance. Both science/Codex images built, and the
   unlicensed real image fails explicitly with clean MCP stdout. New service
   Docker-start timeout test also confirms cleanup registration and env-file
-  deletion. These suite counts overlap and must not be added together.
+  deletion. An additional real framework-managed offline sidecar protocol test
+  passed, checking service-only credential delivery, no shared workspace,
+  HTTP file transfer and cleanup. Normalize both text JSON and structuredContent
+  in test clients; untyped dict-returning SDK tools may use text JSON.
+  These suite counts overlap and must not be added together.
 - Limitation: the user confirmed no Wolfram license is currently available
   and requested implementation first. No real mathematical, frontend or
   Codex model acceptance is claimed. Licensed tests and operator commands

@@ -243,7 +243,8 @@ filesystem/auth separation is required.
 python -m pytest -q tests/mcp_e2e/test_wolfram_adapter.py \
   tests/test_service_runtime_credentials.py
 
-# Actual built-image + fresh-HOME preflight and missing-license behavior.
+# Built-image/fresh-HOME preflight, missing-license behavior, and actual
+# framework offline sidecar credential/workspace separation.
 # Upstream fixture is protocol-only; this is not mathematical acceptance.
 ASIBENCH_WOLFRAM_IMAGE_TEST=1 python -m pytest -q \
   tests/mcp_e2e/test_wolfram_adapter.py
