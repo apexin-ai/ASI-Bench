@@ -1,5 +1,29 @@
 # Progress
 
+## 2026-10-29: BenchFlow immutable scoring inputs and runtime parity
+
+- Problem: `benchflow-score` passed persisted model outputs directly to the
+  evaluator, so data-dependent scorers silently lost points when original
+  instance `data/` was absent from those outputs. Task runtime preparation also
+  differed from local `score`.
+- Resolution: build a local-scoring `_ScoreJob` and reuse its temporary staging,
+  runtime preparation, evaluation and failure records. Opted-in runtimes load
+  scorers in a fresh worker. Preserve original artifact hashes and Judge scope;
+  reject symlink roots and input overwrites, redact evaluator diagnostics, and
+  serialize invalid evaluations as `score: null` with `failure_kind`.
+- Prevention: test data-dependent parity against standard scoring, immutable
+  outputs, missing/unsafe inputs, runtime setup/activation, valid zero-score
+  submissions and CLI JSON serialization. Consumers must exclude invalid
+  evaluations from score aggregates instead of coercing null to zero.
+- Verification: baseline 60 tests passed; five new regressions failed before
+  the fix. Final related suite: 249 passed. Offline replay of both reported
+  tasks at B1–B4: all eight totals and complete gate/scorer details equal
+  standard scoring, with original model outputs unchanged and no model calls.
+  Evidence and reusable replay script are retained in the companion
+  `/home/ubuntu/Projects/asibench-fix` artifact repository. This is not a
+  full 240-cell rescore.
+- Implementation commit: `38f6ba3`.
+
 ## Flaky parallel local-scoring test
 
 - Problem: `test_parallel_local_scoring_is_bounded_isolated_and_ordered` failed
