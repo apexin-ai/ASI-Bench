@@ -229,9 +229,14 @@
   `image_media_types`。Codex 证据是 `exec --json` 的 `mcp_tool_call` item，无 server/tool
   列表事件，`mcp_connected` 只能由必需工具的成功返回证明，其内置 `list_mcp_resources*`
   不算必需工具。
-- `--mcp-config` 不自动打开 web search；restricted 保留 MCP/ToolSearch，search 额外
-  开放 Claude WebSearch/WebFetch 或 Codex web_search。shell/MCP 自身仍可能联网，
-  fake task 的 bypass 检查须覆盖实际开放能力。
+- `--mcp-config` 不自动打开 web search；工具策略与网络策略分开记录。
+  Claude restricted + OS 默认使用 model-only：network none、drop ALL capabilities、
+  no-new-privileges；固定路由 Unix model relay 保留 Messages API，API key 留在 host。
+  显式 network override、runtime.services、service MCP、额外 host mounts 必须拒绝；
+  offline instance MCP 共享无 IP 网络的实例边界。OAuth 不支持时明确失败，不回退开放网络。
+  search/unrestricted 或显式 network_policy=inherit 保留旧联网条件；其他 harness 的
+  restricted 仍非网络隔离保证。结果需记录 network_runtime / provenance.network 的
+  policy version、实际启动检查与 relay 计数。详见 docs/guide/network-isolation.md。
 - `tests/mcp_e2e/golden.json` 锁定每个 `verify_one` 的 verdict/各项检查/per-call 状态：
   纯重构必须逐字节不变，有意改变判定用 `MCP_E2E_GOLDEN=update` 整文件重生成并审 diff，
   `importorskip` 之后的测试不得喂 golden。离线测试全部在 `tests/mcp_e2e/`，共享构件只在

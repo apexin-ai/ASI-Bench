@@ -1337,3 +1337,22 @@ ASIBENCH_MATH_DOCKER=1 pytest -q tests/mcp_e2e/test_math_adapters.py
 
 This enables real scientific Docker checks and OSSandbox stdio/HTTP config
 injection and workspace-isolation checks. Protocol clients are not live agents.
+
+## Restricted Claude network isolation
+
+`tests/test_network_isolation.py` covers policy defaults, fail-closed conflicts,
+relay route/auth pinning, SSE, rejected redirects/remote tools/HTTP framing,
+startup rejection provenance and Docker command hardening. Docker probes prove
+an external canary is reachable from a bridge control, then check networkless
+containers and concurrent attempts while fixed model requests still work.
+
+```bash
+ASIBENCH_NETWORK_DOCKER=1 uv run --frozen pytest -q tests/test_network_isolation.py
+# Prepared local image containing Claude and curl; uses a local API fixture:
+ASIBENCH_NETWORK_DOCKER=1 ASIBENCH_NETWORK_AGENT_IMAGE=your-local-image \
+  uv run --frozen pytest -q tests/test_network_isolation.py
+```
+
+The Docker CI job includes the network probes. The optional real-CLI fixture
+checks Bash transport without calling a commercial model. Tests must never
+use benchmark reference downloads as network probes.

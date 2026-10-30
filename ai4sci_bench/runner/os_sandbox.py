@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 import logging
 import math
 import os
@@ -181,6 +182,8 @@ class OSSandbox:
         stdin_input: str | None = None,
         mcp_servers: dict | None = None,
         mcp_runtime: dict | None = None,
+        network_policy: str = "inherit",
+        network_runtime: dict | None = None,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         """Run an arbitrary agent command inside the task container.
 
@@ -195,12 +198,28 @@ class OSSandbox:
             agent_type: e.g. "claude_code", "codex", "pi", "opencode", or None.
                 Controls which auth credentials are mounted into the container.
             extra_env: Additional environment variables to inject (e.g. API keys).
-            allow_external_tools: Whether the user allowed external tools (web search etc.).
-                Network is only enabled when BOTH this and task's requires_network are True.
+            allow_external_tools: Tool policy for legacy networking paths.
+            network_policy: model-only removes all container IP networking and
+                relays fixed Messages routes; inherit retains legacy networking.
+            network_runtime: Per-attempt policy/preflight and relay counters,
+                populated without secrets for persisted provenance.
 
         Returns:
             Tuple of (success, log, stdout, stderr, image_identity).
         """
+        if network_policy not in {"inherit", "model-only"}:
+            raise ValueError("network_policy must be inherit or model-only")
+        if network_policy == "model-only":
+            if agent_type != "claude_code":
+                raise ValueError("model-only currently supports only Claude Code")
+            if os.environ.get("AI4SCI_DOCKER_NETWORK", "").strip():
+                raise ValueError("model-only conflicts with AI4SCI_DOCKER_NETWORK; unset it")
+            if self._task_services(task_metadata):
+                raise ValueError("model-only does not permit runtime.services; use offline instance MCP")
+            if extra_mounts:
+                raise ValueError("model-only does not permit additional host mounts")
+            if any(e.get("sandbox", {}).get("deployment") != "instance" for e in (mcp_servers or {}).values()):
+                raise ValueError("model-only requires offline instance MCP, not service MCP")
         services = self._task_services(task_metadata)
         if mcp_servers:
             from ai4sci_bench.runner.mcp_sandbox import validate_os_mcp
@@ -228,27 +247,49 @@ class OSSandbox:
         requires_network = bool(task_metadata.get("difficulty", {}).get("requires_network"))
         requires_gpu = bool(task_metadata.get("difficulty", {}).get("requires_gpu"))
         from ai4sci_bench.runner.mcp_sandbox import stage_os_mcp
-        with stage_os_mcp(mcp_servers or {}, task_metadata, agent_type, agent_cmd, extra_env) as (staged_cmd, staged_env, mcp_mounts):
-            outcome = self._run_task_container(
-                task_metadata,
-                services=services,
-                image=image,
-                image_identity=image_identity,
-                container_name=container_name,
-                workspace=workspace,
-                exec_args=staged_cmd,
-                timeout=timeout,
-                requires_network=requires_network,
-                requires_gpu=requires_gpu,
-                allow_external_tools=allow_external_tools,
-                agent_type=agent_type,
-                extra_env=staged_env,
-                extra_mounts=[*(extra_mounts or []), *mcp_mounts],
-                stdin_input=stdin_input,
-                timeout_label="OS sandbox agent execution",
-                isolate_mcp=bool(mcp_servers),
-                mcp_runtime=mcp_runtime,
-            )
+        runtime = network_runtime if network_runtime is not None else {}
+        if network_policy == "inherit":
+            runtime.update(effective="inherit", enforced=False, policy="legacy-tool-policy-only")
+        from ai4sci_bench.runner.model_relay import model_relay
+        relay_scope = model_relay(extra_env or {}, runtime) if network_policy == "model-only" else nullcontext(None)
+        with relay_scope as relay_root:
+            if relay_root is not None:
+                # Only a Unix socket and trusted bridge code cross the boundary.
+                # Upstream keys remain exclusively in the host relay.
+                extra_env = {
+                    key: value for key, value in (extra_env or {}).items()
+                    if key not in {"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"}
+                    and key.lower() not in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
+                }
+                extra_env.update(ANTHROPIC_API_KEY="asibench-model-relay", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1")
+                extra_mounts = [
+                    "-v", f"{relay_root}:/opt/asibench-network/socket:ro",
+                    "-v", f"{Path(__file__).with_name('model_relay_client.py')}:/opt/asibench-network/client.py:ro",
+                ]
+                agent_cmd = ["/opt/venv/bin/python", "/opt/asibench-network/client.py", *agent_cmd]
+            with stage_os_mcp(mcp_servers or {}, task_metadata, agent_type, agent_cmd, extra_env) as (staged_cmd, staged_env, mcp_mounts):
+                outcome = self._run_task_container(
+                    task_metadata,
+                    services=services,
+                    image=image,
+                    image_identity=image_identity,
+                    container_name=container_name,
+                    workspace=workspace,
+                    exec_args=staged_cmd,
+                    timeout=timeout,
+                    requires_network=requires_network,
+                    requires_gpu=requires_gpu,
+                    allow_external_tools=allow_external_tools,
+                    agent_type=agent_type,
+                    extra_env=staged_env,
+                    extra_mounts=[*(extra_mounts or []), *mcp_mounts],
+                    stdin_input=stdin_input,
+                    timeout_label="OS sandbox agent execution",
+                    model_only=network_policy == "model-only",
+                    network_runtime=runtime,
+                    isolate_mcp=bool(mcp_servers),
+                    mcp_runtime=mcp_runtime,
+                )
         if pre_snapshot is not None:
             audit = self._diff_workspace(pre_snapshot, workspace)
             if audit:
@@ -276,6 +317,8 @@ class OSSandbox:
         timeout_label: str,
         isolate_mcp: bool = False,
         mcp_runtime: dict | None = None,
+        model_only: bool = False,
+        network_runtime: dict | None = None,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         service_network: str | None = None
         service_containers: list[str] = []
@@ -318,11 +361,12 @@ class OSSandbox:
                 allow_external_tools=allow_external_tools,
                 extra_mounts=extra_mounts,
                 stdin_open=stdin_input is not None,
-                docker_action="create" if services else "run",
+                docker_action="create" if services or model_only else "run",
                 docker_network_override=service_network,
                 isolate_mcp=isolate_mcp,
+                model_only=model_only,
             )
-            if services:
+            if services or model_only:
                 created = subprocess.run(
                     cmd, capture_output=True, text=True, encoding="utf-8",
                     errors="replace", timeout=30,
@@ -331,6 +375,18 @@ class OSSandbox:
                     raise RuntimeError(
                         f"Could not create agent container: {(created.stderr or created.stdout).strip()}"
                     )
+                if model_only:
+                    inspected = subprocess.run(
+                        ["docker", "inspect", container_name], capture_output=True,
+                        text=True, check=True, timeout=15,
+                    )
+                    config = json.loads(inspected.stdout)[0]["HostConfig"]
+                    if (config["NetworkMode"] != "none" or config.get("Privileged")
+                            or "ALL" not in config.get("CapDrop", [])
+                            or not any(value.startswith("no-new-privileges") for value in config.get("SecurityOpt", []))):
+                        raise RuntimeError("model-only Docker isolation preflight failed")
+                    if network_runtime is not None:
+                        network_runtime.update(enforced=True, startup_check="docker-inspect-passed")
                 if external_network:
                     self._docker_control(
                         ["docker", "network", "connect", external_network, container_name],
@@ -823,6 +879,7 @@ class OSSandbox:
         docker_action: str = "run",
         docker_network_override: str | None = None,
         isolate_mcp: bool = False,
+        model_only: bool = False,
     ) -> list[str]:
         cmd = [
             "docker",
@@ -899,7 +956,7 @@ class OSSandbox:
                 cmd += ["-e", f"{key}={value}"]
 
         # Auth credential mounts (read-only, specific files only)
-        auth_mounts = self._prepare_auth_mounts(agent_type)
+        auth_mounts = [] if model_only else self._prepare_auth_mounts(agent_type)
         if isolate_mcp and agent_type == "claude_code":
             # Host settings may contain hooks/plugins; only login credentials
             # belong in an explicitly isolated MCP run.
@@ -923,10 +980,16 @@ class OSSandbox:
             "claude_code", "codex", "mimo_code", "kimi_code", "agy", "openhands",
             "pi", "opencode",
         )
-        if needs_api_network:
+        if needs_api_network and not model_only:
             for key, value in self._host_proxy_env().items():
                 cmd += ["-e", f"{key}={value}"]
-        if docker_network_override:
+        if model_only:
+            if docker_network_override or os.environ.get("AI4SCI_DOCKER_NETWORK", "").strip():
+                raise ValueError("model-only cannot use a network override")
+            cmd += ["--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true"]
+            for key in PROXY_ENV_KEYS:
+                cmd += ["-e", f"{key}="]
+        elif docker_network_override:
             cmd += ["--network", docker_network_override]
         elif needs_api_network:
             docker_network = os.environ.get("AI4SCI_DOCKER_NETWORK", "").strip()

@@ -1018,6 +1018,9 @@ class BenchmarkOrchestrator:
         """Return normalized agent provenance metadata."""
         provenance = dict(self.config.agent_metadata or {})
         provenance.setdefault("adapter_class", self.agent.__class__.__name__)
+        if hasattr(self.agent, "network_policy"):
+            provenance["network_policy_requested"] = self.agent.network_policy
+            provenance["network_policy_selected"] = self.agent.effective_network_policy
         servers = getattr(self.agent, "mcp_servers", {})
         if servers:
             from ai4sci_bench.runner.mcp_sandbox import mcp_provenance
@@ -1066,6 +1069,8 @@ class BenchmarkOrchestrator:
                 image_identity=getattr(self.agent, "sandbox_image_identity", None),
             ),
         }
+        if eval_result.agent_output is not None and eval_result.agent_output.network_runtime:
+            provenance["network"] = self._sanitize_persisted_value(eval_result.agent_output.network_runtime)
         if eval_result.agent_output is not None and eval_result.agent_output.mcp_runtime:
             provenance["mcp"] = self._sanitize_persisted_value(eval_result.agent_output.mcp_runtime)
         if task_metadata is not None:

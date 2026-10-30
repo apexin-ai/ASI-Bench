@@ -463,6 +463,18 @@ environment, timeout, and score-variance issues.
 - Retired internal orchestration commands are not part of the public CLI. Use
   `run`, `report`, `batch-report`, `review`, and the Portal workflows.
 
+## Agent network policy
+
+Claude Code restricted runs with `--sandbox os` now default to model-only
+network isolation: the container has no IP network and uses a fixed-route Unix
+relay for model requests. Explicit API-key authentication is required; network
+overrides, runtime services and service MCP conflict with this policy and fail
+closed. Search/unrestricted retain legacy networking. Use
+`"network_policy":"inherit"` in Claude's `--agent-config` only when intentionally
+retaining the legacy network conditions. Other harnesses' restricted tool mode
+does not imply network isolation. See the [network isolation guide](docs/guide/network-isolation.md)
+for supported configurations, audit fields and validation.
+
 ## Built-in CLI agents — installation
 
 Install the CLI agent you want to evaluate, then select its ASI-Bench adapter

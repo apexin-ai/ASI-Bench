@@ -88,6 +88,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         supports_image_input: bool = False,
         anthropic_via_responses: bool = False,
         mcp_config: str | None = None,
+        network_policy: str = "auto",
     ):
         super().__init__(
             timeout_seconds=timeout_seconds,
@@ -98,6 +99,10 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
                 f"Invalid effort '{effort}' for claude_code_cli. "
                 f"Valid levels: {', '.join(self.VALID_EFFORT_LEVELS)}"
             )
+        if network_policy not in {"auto", "model-only", "inherit"}:
+            raise ValueError("network_policy must be auto, model-only or inherit")
+        self.network_policy = network_policy
+        self.effective_network_policy = "inherit"
         self.model = model
         self.permission_mode = permission_mode
         self.allow_external_tools = allow_external_tools
@@ -298,6 +303,13 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             validate_os_mcp(self.mcp_servers)
         if self.sandbox != "os" and any("sandbox" in e for e in self.mcp_servers.values()):
             raise ValueError("MCP sandbox deployment requires --sandbox os")
+        if self.network_policy == "model-only" and self.sandbox != "os":
+            raise ValueError("model-only network policy requires --sandbox os")
+        self.effective_network_policy = (
+            "model-only" if self.network_policy == "auto" and self.sandbox == "os"
+            and self.tool_mode.value == "restricted" else
+            ("inherit" if self.network_policy == "auto" else self.network_policy)
+        )
         if self.sandbox == "os":
             self._os_sandbox = OSSandbox(self.repo_root)
 
@@ -403,25 +415,35 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         cmd = self._build_os_agent_cmd(workspace)
 
         extra_env: dict[str, str] | None = self._build_api_env() or None
-        if self._uses_proxy or self._uses_anthropic_rewrite_proxy or self._uses_tokenrouter_openai_chat_proxy:
+        if self.effective_network_policy == "inherit" and (self._uses_proxy or self._uses_anthropic_rewrite_proxy or self._uses_tokenrouter_openai_chat_proxy):
             os.environ.setdefault("AI4SCI_DOCKER_NETWORK", "host")
 
         mcp_runtime: dict = {}
+        network_runtime: dict = {}
         t0 = time.time()
         assert self._os_sandbox is not None
-        success, log, raw_stdout, raw_stderr, image_identity = (
-            self._os_sandbox.run_agent(
-                task_metadata=task_instance.metadata,
-                agent_cmd=cmd,
-                workspace=workspace,
-                timeout=eff_timeout,
-                agent_type="claude_code",
-                allow_external_tools=self.allow_external_tools,
-                extra_env=extra_env,
-                mcp_servers=self.mcp_servers or None,
-                mcp_runtime=mcp_runtime,
+        network_runtime.update(requested=self.network_policy, effective=self.effective_network_policy, enforced=False)
+        try:
+            success, log, raw_stdout, raw_stderr, image_identity = (
+                self._os_sandbox.run_agent(
+                    task_metadata=task_instance.metadata,
+                    agent_cmd=cmd,
+                    workspace=workspace,
+                    timeout=eff_timeout,
+                    agent_type="claude_code",
+                    allow_external_tools=self.allow_external_tools,
+                    extra_env=extra_env,
+                    mcp_servers=self.mcp_servers or None,
+                    mcp_runtime=mcp_runtime,
+                    network_policy=self.effective_network_policy,
+                    network_runtime=network_runtime,
+                )
             )
-        )
+        except (ValueError, RuntimeError, OSError) as exc:
+            network_runtime.update(startup_check="rejected")
+            success, log, raw_stdout, raw_stderr, image_identity = (
+                False, f"OS sandbox startup rejected: {exc}", None, None, None,
+            )
         elapsed = time.time() - t0
         self._sandbox_image_identity = image_identity
 
@@ -441,6 +463,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         return AgentOutput(
             instance_id=task_instance.instance_id,
             mcp_runtime=mcp_runtime or None,
+            network_runtime=network_runtime or None,
             output_dir=workspace,
             code_files=[f for f in produced_files if f.endswith(".py")],
             data_files=[f for f in produced_files if not f.endswith(".py")],
