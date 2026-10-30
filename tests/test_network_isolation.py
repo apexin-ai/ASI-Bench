@@ -72,9 +72,20 @@ def upstream_server():
 def call_relay(root, method="POST", path="/v1/messages", payload=None, headers=None):
     connection = UnixConnection(root / "model.sock")
     body = json.dumps({"model": "fixture", "max_tokens": 16, "messages": []} if payload is None else payload)
-    connection.request(method, path, body, {"Content-Type": "application/json", **(headers or {})})
-    response = connection.getresponse()
+    # Send the complete fixture request together: an immediate policy rejection
+    # may close the connection before HTTPConnection's separate body write.
+    # That is correct server behavior, not a failed isolation assertion.
+    encoded = body.encode() if method == "POST" else b""
+    request_headers = {"Host": "localhost", "Content-Type": "application/json",
+                       "Content-Length": str(len(encoded)), **(headers or {})}
+    wire = f"{method} {path} HTTP/1.1\r\n" + "".join(
+        f"{key}: {value}\r\n" for key, value in request_headers.items()) + "\r\n"
+    connection.connect()
+    connection.sock.sendall(wire.encode() + encoded)
+    response = http.client.HTTPResponse(connection.sock)
+    response.begin()
     result = response.status, response.read()
+    response.close()
     connection.close()
     return result
 
@@ -409,3 +420,27 @@ def test_local_tool_schema_source_property_does_not_count_as_url_attachment():
             }}]}
             assert call_relay(root, payload=payload)[0] == 200
         assert len(requests) == 1
+
+
+def test_network_policy_audit_survives_result_serialization(tmp_path):
+    from ai4sci_bench.core.types import AgentOutput, EvalResult, PromptLevel, RunStatus
+    from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator, RunConfig
+    from tests.test_runner import DummyAgent
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    orchestrator = BenchmarkOrchestrator(RunConfig(agent=DummyAgent(), tasks_dir=str(tasks), output_dir=str(tmp_path / "results")))
+    runtime = {"policy": "model-only-unix-v1", "effective": "model-only", "enforced": True,
+        "startup_check": "docker-inspect-passed", "forwarded_requests": 2, "denied_requests": 1,
+        "allowed_routes": ["/v1/messages", "/v1/messages/count_tokens", "/private/host/path"], "api_key": "never-persist"}
+    result = EvalResult(instance_id="fixture__seed31415", task_id="fixture", prompt_level=PromptLevel.B1,
+        agent_name="fixture", parameters={}, gate_results=[], gates_passed=True, score_results=[], final_score=0,
+        agent_output=AgentOutput(instance_id="fixture__seed31415", output_dir=tmp_path, code_files=[], data_files=[],
+            log="fixture", execution_time_seconds=0, status=RunStatus.COMPLETED, network_runtime=runtime))
+    orchestrator._save_result(result)
+    saved = json.loads((tmp_path / "results/fixture/fixture__seed31415__b1.json").read_text())
+    audit = saved["provenance"]["network"]
+    assert audit == saved["agent_output"]["network_runtime"]
+    assert audit["allowed_routes"] == ["/v1/messages", "/v1/messages/count_tokens"]
+    assert audit["enforced"] is True
+    assert audit["api_key"] == "<redacted>"
+    assert "never-persist" not in json.dumps(saved)

@@ -856,6 +856,8 @@ class BenchmarkOrchestrator:
                 "termination_signal": eval_result.agent_output.termination_signal,
                 "timeout_phase": eval_result.agent_output.timeout_phase,
             }
+            if "network" in data["provenance"]:
+                data["agent_output"]["network_runtime"] = data["provenance"]["network"]
             raw_artifacts = self._save_agent_output_artifacts(
                 result_dir,
                 base_name,
@@ -1070,7 +1072,16 @@ class BenchmarkOrchestrator:
             ),
         }
         if eval_result.agent_output is not None and eval_result.agent_output.network_runtime:
-            provenance["network"] = self._sanitize_persisted_value(eval_result.agent_output.network_runtime)
+            runtime = eval_result.agent_output.network_runtime
+            provenance["network"] = self._sanitize_persisted_value(runtime)
+            # These fixed API routes are audit identifiers, not host paths.
+            # Restore only known constants after generic path/secret redaction.
+            routes = runtime.get("allowed_routes", [])
+            if isinstance(routes, list):
+                provenance["network"]["allowed_routes"] = [
+                    route for route in routes
+                    if route in ("/v1/messages", "/v1/messages/count_tokens")
+                ]
         if eval_result.agent_output is not None and eval_result.agent_output.mcp_runtime:
             provenance["mcp"] = self._sanitize_persisted_value(eval_result.agent_output.mcp_runtime)
         if task_metadata is not None:

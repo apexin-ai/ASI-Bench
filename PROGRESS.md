@@ -29,7 +29,14 @@
   networking. Offline stdio MCP shares the same networkless container; service
   MCP and OAuth are rejected rather than claimed isolated. Historical network
   conditions cannot be repaired by rescoring.
-- Implementation commits: `f38382a`, `beccb14`.
+- Final audit checks: persist the network policy in both agent_output and
+  provenance while preserving only known API route identifiers across generic
+  path redaction. The audit/runner/Docker/real-CLI suite passed 126 tests.
+  Python 3.13 CI exposed a fixture race: immediate rejection could close the
+  socket between separate HTTP header/body writes. Send complete fixture
+  requests in one write rather than interpreting that BrokenPipe as a policy
+  failure; kernel isolation behavior was unchanged.
+- Implementation commits: `f38382a`, `beccb14`, `d8170c1`.
 
 ## 2026-10-30: SageMath and SymPy MCP
 
