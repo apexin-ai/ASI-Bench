@@ -289,3 +289,34 @@ def test_framework_preflight_and_actual_scientific_call(tmp_path, monkeypatch, b
     assert created
     for name in created:
         assert subprocess.run(['docker', 'inspect', name], capture_output=True).returncode != 0
+
+
+@pytest.mark.skipif(not DOCKER, reason='requires both built images and Docker')
+def test_both_http_backends_in_one_offline_task(tmp_path, monkeypatch):
+    from ai4sci_bench.runner.os_sandbox import OSSandbox
+    tmp_path.chmod(0o777)
+    metadata = yaml.safe_load((ADAPTER / 'both.service.yaml').read_text())
+    metadata['runtime']['image'] = 'asibench-sympy:test'
+    monkeypatch.delenv('AI4SCI_DOCKER_NETWORK', raising=False)
+    code = '''import asyncio,json
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+async def main():
+    for backend, expression in [('sagemath','QQ(1)/3'), ('sympy','Rational(1,3)')]:
+        async with streamable_http_client('http://'+backend+':8765/mcp') as (read,write,_):
+            async with ClientSession(read,write) as client:
+                await client.initialize()
+                response=await client.call_tool('evaluate',{'code':expression})
+                assert not response.isError,response
+                result=response.structuredContent or json.loads(response.content[0].text)
+                assert result['status']['state']=='completed',result
+                assert result['result']['backend']==backend
+                assert result['result']['representation']=='1/3'
+    print('BOTH_MATH_SERVICES_PASS')
+asyncio.run(main())
+'''
+    (tmp_path / 'check.py').write_text(code)
+    success, log, stdout, *_ = OSSandbox(ROOT).execute_python(metadata, workspace=tmp_path,
+                                                  code_file='check.py', timeout=180)
+    assert success, log
+    assert 'BOTH_MATH_SERVICES_PASS' in stdout
