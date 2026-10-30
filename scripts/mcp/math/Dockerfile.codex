@@ -5,6 +5,7 @@ USER root
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
-    && npm install -g @openai/codex@0.162.1 && codex --version
+    && npm install -g @openai/codex@0.162.1 && codex --version \
+    && test -s /etc/ssl/certs/ca-certificates.crt
 USER 1000:1000
 WORKDIR /workspace

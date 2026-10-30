@@ -203,6 +203,12 @@ DOCKER = os.environ.get('ASIBENCH_MATH_DOCKER') == '1'
 @pytest.mark.parametrize('backend', ['sagemath', 'sympy'])
 def test_real_docker_stdio_science_and_artifacts(tmp_path, backend):
     tmp_path.chmod(0o777)
+    # Actual Sage upstream once lacked system roots: model HTTPS then fails despite CAS success.
+    certificate = subprocess.run(['docker', 'run', '--rm', '--network', 'none',
+        '--entrypoint', '/opt/venv/bin/python', f'asibench-{backend}:test', '-c',
+        'import ssl; assert ssl.create_default_context().cert_store_stats()["x509_ca"] > 0'],
+        capture_output=True, text=True, timeout=30)
+    assert certificate.returncode == 0, certificate.stderr
     client = StdioMCP('docker', ['run', '--rm', '-i', '--network', 'none', '--memory', '4g',
                      '--cpus', '2', '--pids-limit', '512', '--cap-drop', 'ALL',
                      '--security-opt', 'no-new-privileges', '--tmpfs', '/tmp:rw,noexec',
@@ -263,7 +269,14 @@ def test_framework_preflight_and_actual_scientific_call(tmp_path, monkeypatch, b
     sandbox = OSSandbox(ROOT, image_builder=ImageBuilder(f'asibench-{backend}:test'))
     monkeypatch.setattr(sandbox, '_prepare_auth_mounts', lambda _: [])
     monkeypatch.delenv('AI4SCI_DOCKER_NETWORK', raising=False)
-    before = set(subprocess.check_output(['docker', 'ps', '-aq', '--filter', 'name=ai4sci-'], text=True).split())
+    # Other validations may run concurrently. Inspect only containers we created.
+    created = []
+    original_run = subprocess.run
+    def track_run(command, *args, **kwargs):
+        if isinstance(command, list) and command[:1] == ['docker'] and '--name' in command:
+            created.append(command[command.index('--name') + 1])
+        return original_run(command, *args, **kwargs)
+    monkeypatch.setattr(subprocess, 'run', track_run)
     runtime = {}
     success, log, stdout, stderr, identity = sandbox.run_agent(metadata, workspace=tmp_path,
         agent_cmd=['/opt/venv/bin/python', '/workspace/check.py'], timeout=180,
@@ -273,5 +286,6 @@ def test_framework_preflight_and_actual_scientific_call(tmp_path, monkeypatch, b
     assert 'MATH_FRAMEWORK_SCIENCE_PASS' in stdout
     assert json.loads((tmp_path / 'verified.json').read_text())['answer'] == '1/3'
     assert identity.startswith('sha256:')
-    after = set(subprocess.check_output(['docker', 'ps', '-aq', '--filter', 'name=ai4sci-'], text=True).split())
-    assert after <= before
+    assert created
+    for name in created:
+        assert subprocess.run(['docker', 'inspect', name], capture_output=True).returncode != 0

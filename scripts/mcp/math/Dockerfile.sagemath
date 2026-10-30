@@ -1,5 +1,8 @@
 FROM --platform=linux/amd64 sagemath/sagemath:10.7@sha256:c7f2f4c4c5360900d22b90f33500d8ccd96edb3a1127dcd56b4f107c14315691
 USER root
+# The upstream mathematical image omits the system CA bundle. Agent HTTPS needs it.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 COPY requirements.lock /opt/math-mcp/requirements.lock
 # Keep MCP dependencies separate from Sage's scientific environment.
 RUN sage --python -m venv /opt/venv \
