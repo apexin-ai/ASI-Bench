@@ -1,5 +1,17 @@
 # Progress
 
+## 2026-10-30: Restore synchronized agent instructions
+
+- Problem: Wolfram integration updated `AGENTS.md` and `CLAUDE.md` with
+  different wording, failing the existing synchronization check in both CI
+  Python versions. Build and Docker integration jobs passed.
+- Resolution: copy the fuller Wolfram guidance from `AGENTS.md` into
+  `CLAUDE.md`, preserving the license and runtime limitations.
+- Prevention: include `tests/test_ci_workflow.py` in integration checks and
+  run the locked CI environment; a custom MCP development venv is not a
+  substitute for the repository-wide CI suite.
+- Fix commit: `83747c0`.
+
 ## 2026-10-29: Wolfram MCP deployment and native execution
 
 - Implementation: `868bd4890117c788d90e021b78774c3cffc9b662` on
