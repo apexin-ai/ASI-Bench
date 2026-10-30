@@ -1,5 +1,36 @@
 # Progress
 
+## 2026-10-30: Restricted Claude OS network isolation
+
+- Problem: restricted disabled built-in search/fetch but CLI model traffic and
+  Bash/MCP subprocesses shared an open container network, allowing external
+  retrieval during generation.
+- Resolution: Claude restricted OS runs select model-only by default. Disable
+  container IP networking, drop capabilities, disallow privilege escalation,
+  inspect effective Docker settings before start, and relay only fixed
+  Anthropic Messages/count_tokens JSON requests over a per-attempt Unix socket.
+  The upstream key remains on the host. Reject conflicting network overrides,
+  task services, service MCP and host mounts without open-network fallback.
+  Preserve explicit inherit mode and record requested/selected/enforced policy
+  separately, including per-attempt startup checks and relay counters.
+- Prevention: Docker CI now tests a bridge-reachable external canary against
+  isolated concurrent containers. Regression coverage includes IPv4/IPv6,
+  HTTP/DNS/subprocesses/proxies, route/auth pinning, redirect/server-tool/remote
+  attachment rejection and cleanup. A real Claude 2.1.219 + curl image passed
+  the Bash-tool test using a local Messages fixture, without commercial API
+  calls or reference downloads. This verifies transport/network enforcement,
+  not the behavior of every future CLI/model/provider version.
+- Validation: baseline 433 passed; the new default-policy reproduction failed
+  before implementation. Full suite: 3952 passed, 47 skipped, 24 deselected;
+  network Docker/real-CLI suite: 30 passed; final portability and sandbox suite:
+  97 passed, 2 skipped. Wheel/sdist build and strict Twine checks passed.
+- Scope: model-only currently supports Claude with explicit API-key auth and
+  local Linux Docker; other harnesses and legacy inherit retain their existing
+  networking. Offline stdio MCP shares the same networkless container; service
+  MCP and OAuth are rejected rather than claimed isolated. Historical network
+  conditions cannot be repaired by rescoring.
+- Implementation commits: `f38382a`, `beccb14`.
+
 ## 2026-10-30: SageMath and SymPy MCP
 
 - Implementation: `a1d4201`; HTTPS/cleanup fix `be7c6b9`, paired-sidecar

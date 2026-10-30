@@ -210,6 +210,8 @@ class OSSandbox:
         if network_policy not in {"inherit", "model-only"}:
             raise ValueError("network_policy must be inherit or model-only")
         if network_policy == "model-only":
+            if platform.system() != "Linux":
+                raise ValueError("model-only currently requires a local Linux Docker daemon")
             if agent_type != "claude_code":
                 raise ValueError("model-only currently supports only Claude Code")
             if os.environ.get("AI4SCI_DOCKER_NETWORK", "").strip():
@@ -250,8 +252,11 @@ class OSSandbox:
         runtime = network_runtime if network_runtime is not None else {}
         if network_policy == "inherit":
             runtime.update(effective="inherit", enforced=False, policy="legacy-tool-policy-only")
-        from ai4sci_bench.runner.model_relay import model_relay
-        relay_scope = model_relay(extra_env or {}, runtime) if network_policy == "model-only" else nullcontext(None)
+        if network_policy == "model-only":
+            from ai4sci_bench.runner.model_relay import model_relay
+            relay_scope = model_relay(extra_env or {}, runtime)
+        else:
+            relay_scope = nullcontext(None)
         with relay_scope as relay_root:
             if relay_root is not None:
                 # Only a Unix socket and trusted bridge code cross the boundary.

@@ -168,7 +168,7 @@ def model_relay(api_env: dict[str, str], runtime: dict):
             or any(part in {".", ".."} for part in upstream.path.split("/"))):
         raise ValueError("model-only requires a fixed HTTP(S) Anthropic endpoint")
     api_key = api_env.get("ANTHROPIC_API_KEY")
-    if not api_key:
+    if not api_key or "\r" in api_key or "\n" in api_key:
         raise ValueError("model-only requires explicit API-key authentication; OAuth login is unsupported")
     # Resolve port now, so malformed URLs fail before starting a container.
     _ = upstream.port
