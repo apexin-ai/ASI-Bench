@@ -29,6 +29,8 @@ The Sage base image is pinned to an amd64 manifest digest in
 and SHA-256 hashes. Sage's own Python environment is separate from the MCP
 venv; upgrading MCP dependencies does not replace Sage's mathematics packages.
 The engine and adapter are installed at **image build time**, not by the agent.
+The Sage image adds the system CA bundle and an explicit `SSL_CERT_FILE`; its
+upstream image omits roots and Python does not otherwise load the bundle.
 Distribute immutable image digests for reproducible tasks.
 
 The framework can add the selected agent CLI using its ordinary task-image
