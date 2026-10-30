@@ -101,7 +101,7 @@ def test_relay_pins_target_auth_and_preserves_streaming(tmp_path):
     ("POST", "/v1/../files", {}), ("POST", "/v1/files", {}),
     ("POST", "/v1/messages", {"messages": [], "tools": [{"type": "web_search_20250305", "name": "web_search"}]}),
     ("POST", "/v1/messages", {"messages": [], "mcp_servers": [{"url": "http://example.com"}]}),
-    ("POST", "/v1/messages", {"messages": [{"content": [{"source": {"type": "url", "url": "https://example.com"}}]}]}),
+    ("POST", "/v1/messages", {"messages": [{"content": [{"type": "image", "source": {"type": "url", "url": "https://example.com"}}]}]}),
 ])
 def test_relay_denies_forwarding_bypasses(method, path, payload):
     with upstream_server() as (port, requests):
@@ -399,3 +399,13 @@ def test_relay_cleans_up_after_aborted_agent():
             assert (root / "model.sock").is_socket()
             raise RuntimeError("abort")
     assert not root.exists()
+
+
+def test_local_tool_schema_source_property_does_not_count_as_url_attachment():
+    with upstream_server() as (port, requests):
+        with model_relay({"ANTHROPIC_BASE_URL": f"http://127.0.0.1:{port}", "ANTHROPIC_API_KEY": "secret"}, {}) as root:
+            payload = {"messages": [], "tools": [{"name": "offline_science", "input_schema": {
+                "type": "object", "properties": {"source": {"type": "string"}},
+            }}]}
+            assert call_relay(root, payload=payload)[0] == 200
+        assert len(requests) == 1

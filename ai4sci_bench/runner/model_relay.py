@@ -107,7 +107,7 @@ class RelayHandler(BaseHTTPRequestHandler):
             def external_source(value):
                 if isinstance(value, dict):
                     source = value.get("source")
-                    if isinstance(source, dict) and source.get("type") not in {"base64", "text"}:
+                    if value.get("type") in {"image", "document"} and isinstance(source, dict) and source.get("type") not in {"base64", "text"}:
                         return True
                     return any(external_source(item) for item in value.values())
                 return isinstance(value, list) and any(external_source(item) for item in value)
