@@ -94,6 +94,16 @@ uv run pytest -q \
   tests/test_readme_examples.py::test_agent_docs_distinguish_new_models_from_new_harnesses
 ```
 
+The same module also checks that `CITATION.cff`, the README `## Citation`
+BibTeX entry and the README author header list the same 42 authors in arXiv
+order, and that the BibTeX entry keeps the Google Scholar form
+(`@article{zhou2026asi,`, `journal={arXiv preprint arXiv:2608.17271}`):
+
+```bash
+uv run pytest -q \
+  tests/test_readme_examples.py::test_citation_metadata_matches_readme_and_paper
+```
+
 Run external tests only when intentionally providing credentials and accepting
 their network/runtime cost:
 
@@ -1303,3 +1313,12 @@ timeout checks, plus framework HTTP sidecar transfer. HTTP requires an
 **offline-valid** `WOLFRAM_LICENSE_B64`. Explicit opt-in with invalid licensing
 fails, rather than skipping or substituting a fake backend. See
 [deployment and verification](docs/mcp/wolfram.md).
+
+### Release version consistency
+
+Before publishing a release, update `pyproject.toml`,
+`ai4sci_bench/__init__.py`, and the editable package version in `uv.lock`
+together. Check `uv lock --check`, build wheel/sdist, run strict Twine checks,
+and install both artifacts in separate clean environments. Confirm both CLI
+aliases and `importlib.metadata.version("asibench")` agree with the runtime
+`__version__`. Release notes are retained in `docs/releases/`.

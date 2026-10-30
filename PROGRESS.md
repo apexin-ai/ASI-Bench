@@ -28,6 +28,36 @@
   are in `docs/mcp/wolfram.md`. Keep those checks separate from protocol
   fixtures, and validate container-specific license rights before activation.
 
+## 2026-10-29: Add CITATION.cff and README BibTeX for the paper
+
+- Problem: the repository linked arXiv:2608.17271 but had no citation
+  metadata, so GitHub showed no "Cite this repository" entry and users had to
+  build their own BibTeX.
+- Resolution: add `CITATION.cff` (CFF 1.2.0, validated with cffconvert 2.0.0)
+  whose `preferred-citation` is the arXiv article, and a README `## Citation`
+  section. The BibTeX entry uses the Google Scholar form (`zhou2026asi`,
+  `@article`, `journal={arXiv preprint arXiv:2608.17271}`, `year={2026}`) with
+  the full 42-author list from arXiv; Scholar's own export truncates after 10
+  authors with `others`. The arXiv DOI is `10.48550/arXiv.2608.17271`.
+- Prevention: `test_citation_metadata_matches_readme_and_paper` checks that
+  `CITATION.cff`, the BibTeX entry and the README author header keep the same
+  authors in the same order. If the author list changes, update all three.
+- Commit: `d960dec`.
+
+## 2026-10-29: Prepare the 0.3.0 package release
+
+- Problem: PyPI still served 0.2.0 while main included Harbor integration,
+  OS-sandbox MCP deployments and the BenchFlow scoring-input fix.
+- Resolution: bump project, runtime and lockfile versions together to 0.3.0,
+  document release contents and upgrade commands, and validate wheel/sdist
+  installation in clean Python 3.11 environments. Keep scientific MCP scripts,
+  task bundles and Docker resources in the repository rather than PyPI artifacts.
+- Prevention: release checks compare both CLI aliases, distribution metadata
+  and runtime version, and inspect artifact contents. The full suite exposed a
+  metadata test hard-coded to 0.2.0; compare the reported version to the package
+  version instead so future releases do not fail on a stale test literal.
+- Release preparation commit: `bd47058`.
+
 ## 2026-10-29: BenchFlow immutable scoring inputs and runtime parity
 
 - Problem: `benchflow-score` passed persisted model outputs directly to the

@@ -45,6 +45,8 @@
 
 </div>
 
+Release notes: [0.3.0](docs/releases/0.3.0.md).
+
 ## Paper
 
 **ASI-Bench: At the Dawn of Artificial Superintelligence**
@@ -836,3 +838,16 @@ Wolfram license is required. Protocol/image tests are available without a
 license; real scientific, frontend and Codex acceptance require a licensed
 runtime and are not claimed by those tests. Task services now support scoped
 `env_from` references and bounded `memory_mb` / `cpus` configuration.
+
+## Citation
+
+If you use ASI-Bench, please cite:
+
+```bibtex
+@article{zhou2026asi,
+  title={ASI-Bench: At the Dawn of Artificial Superintelligence},
+  author={Zhou, Junwei and Sun, Zhen and Li, Binyu and Zhou, Jiangyu and Pan, Yuexi and Wang, Hengyu and Ren, Honghe and Jia, Xiaohan and Zhou, Xueyang and Cao, Xiaoyu and Chen, Yongchao and Feng, Yuanning and Wu, Junhao and Zhang, Cheng and Chen, Sijia and Xue, Haoyu and You, Chengsong and Wang, Huan and Wu, Koutian and Gao, Peigan and Wu, Jiakun and Li, Wenzhe and Shang, Ergan and Zheng, Qingyuan and Zhou, Jingjing and Jia, Ruixuan and Xu, Yan and Zhang, Hongrui and Ma, Xiao-Han and Cheng, Zhengxiang and Hao, Yuexing and Mai, Liting and Ji, Xianglin and Zhang, Wenjun and Chen, Zhuofan and Huang, Yixiao and Wang, Chi and Hua, Wenyue and Hao, Yilun and Zhai, Yuantao and Zhao, Ziyan and Xie, Jingyan},
+  journal={arXiv preprint arXiv:2608.17271},
+  year={2026}
+}
+```
