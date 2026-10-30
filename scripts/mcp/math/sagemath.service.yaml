@@ -1,0 +1,10 @@
+# Merge runtime.services into task_meta.yaml in your task worktree.
+runtime:
+  services:
+    - name: sagemath
+      image: asibench-sagemath:test
+      port: 8765
+      command: [/opt/venv/bin/python, /opt/math-mcp/server.py, --backend, sagemath, --transport, streamable-http]
+      startup_timeout_seconds: 180
+      memory_mb: 4096
+      cpus: 2

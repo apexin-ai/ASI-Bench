@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "sympy": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/math-mcp/server.py",
+        "--backend",
+        "sympy"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "MATH_MCP_WORKSPACE": "/workspace",
+        "MATH_PYTHON": "/opt/venv/bin/python",
+        "MPLBACKEND": "Agg",
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MATH_STATE_ROOT": "/home/agent/.cache/math"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 180
+      }
+    }
+  }
+}

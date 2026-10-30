@@ -161,6 +161,12 @@
   pinned checkout 内的 `bootstrap.script` 取得其源码资源，不能只安装 wheel。
   smoke 不得把“有响应”当业务成功：须检查 in-band error、模型加载结果和实际产物；
   势能预测用独立 ASE 进程对账，MatterGen 随机产物独立解析，不比较生成字节。
+- 自有 SageMath/SymPy MCP 位于 `scripts/mcp/math/`，catalog id 为 `sagemath`/`sympy`。
+  Sage 官方镜像锁定 digest，MCP venv 与 Sage 数学环境隔离；SymPy 使用独立哈希依赖锁。
+  原生代码通过新进程运行，无隐式变量持久化；保留精确表达，不默认转浮点。
+  `MATH_STATE_ROOT` 必须可写且可执行，避免 noexec 临时 HOME；文件 API 不构成代码沙箱。
+  实例 stdio 与离线 sidecar 用不同配置，sidecar 数据通过 MCP 传输。
+  `ASIBENCH_MATH_DOCKER=1` 启用真实引擎与框架 Docker 验收；不需要引擎激活凭据。
 - Wolfram MCP 位于 `scripts/mcp/wolfram/`：通过网关保留官方 AgentTools 工具，原生 WL
   作业使用独立内核，精确表达用 InputForm/WXF 保存。已发布镜像锁定 Engine 14.3 / AgentTools
   2.2.0，不混用新源码要求的 15.0。缺许可证必须失败；protocol fixture 不得声称科学验证。

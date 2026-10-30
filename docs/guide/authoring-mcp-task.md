@@ -277,3 +277,6 @@ Before submitting, confirm:
 See [MCP in the OS sandbox](../mcp/os-sandbox.md) for deployment details and
 [the MCP E2E README](../../examples/mcp-e2e-tasks/README.md) for verifier
 examples.
+
+For open-source mathematics without engine activation, see
+[SageMath and SymPy deployment and examples](../mcp/sage-sympy.md).

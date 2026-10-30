@@ -1,0 +1,19 @@
+FROM --platform=linux/amd64 sagemath/sagemath:10.7@sha256:c7f2f4c4c5360900d22b90f33500d8ccd96edb3a1127dcd56b4f107c14315691
+USER root
+COPY requirements.lock /opt/math-mcp/requirements.lock
+# Keep MCP dependencies separate from Sage's scientific environment.
+RUN sage --python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /opt/math-mcp/requirements.lock
+COPY runtime.py worker.py server.py healthcheck.py /opt/math-mcp/
+ENV HOME=/home/agent MATH_MCP_WORKSPACE=/workspace \
+    MATH_PYTHON=/home/sage/sage/local/var/lib/sage/venv-python3.12.5/bin/python3 \
+    DOT_SAGE=/home/agent/.cache/sage MPLBACKEND=Agg OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+RUN mkdir -p /workspace /home/agent/.cache/sage /home/agent/.codex \
+    && chown -R 1000:1000 /workspace /home/agent
+USER 1000:1000
+RUN "$MATH_PYTHON" /opt/math-mcp/worker.py --probe sagemath
+WORKDIR /workspace
+HEALTHCHECK --interval=5s --timeout=10s --start-period=30s --retries=3 CMD ["/opt/venv/bin/python", "/opt/math-mcp/healthcheck.py"]
+# Override the official image's Sage command-line entrypoint for MCP stdio.
+ENTRYPOINT []
+CMD ["/opt/venv/bin/python", "/opt/math-mcp/server.py", "--backend", "sagemath"]

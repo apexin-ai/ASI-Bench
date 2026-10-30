@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "sagemath": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/math-mcp/server.py",
+        "--backend",
+        "sagemath"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "MATH_MCP_WORKSPACE": "/workspace",
+        "MATH_PYTHON": "/home/sage/sage/local/var/lib/sage/venv-python3.12.5/bin/python3",
+        "MPLBACKEND": "Agg",
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "DOT_SAGE": "/home/agent/.cache/sage",
+        "MATH_STATE_ROOT": "/home/agent/.cache/math",
+        "PATH": "/home/sage/sage/local/var/lib/sage/venv-python3.12.5/bin:/home/sage/sage/local/bin:/opt/venv/bin:/usr/local/bin:/usr/bin:/bin"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 180
+      }
+    }
+  }
+}

@@ -839,6 +839,14 @@ license; real scientific, frontend and Codex acceptance require a licensed
 runtime and are not claimed by those tests. Task services now support scoped
 `env_from` references and bounded `memory_mb` / `cpus` configuration.
 
+### SageMath and SymPy MCP
+
+The `sagemath` and `sympy` catalog entries expose native mathematics programs,
+exact expressions, asynchronous jobs and file transfer over instance stdio or
+internal HTTP. No engine activation is required. See [installation and task
+examples](docs/mcp/sage-sympy.md). Images and dependencies are pinned; scripts
+share the server container trust boundary.
+
 ## Citation
 
 If you use ASI-Bench, please cite:

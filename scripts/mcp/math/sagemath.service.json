@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "sagemath": {
+      "url": "http://sagemath:8765/mcp",
+      "sandbox": {
+        "deployment": "service",
+        "service": "sagemath",
+        "startup_timeout_seconds": 180
+      }
+    }
+  }
+}
