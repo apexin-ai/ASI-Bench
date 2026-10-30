@@ -1,0 +1,17 @@
+{
+  "sagemath": {
+    "version": "10.7",
+    "image": "sagemath/sagemath:10.7@sha256:c7f2f4c4c5360900d22b90f33500d8ccd96edb3a1127dcd56b4f107c14315691",
+    "platform": "linux/amd64",
+    "source": "https://github.com/sagemath/sage/tree/10.7",
+    "license": "GPL-2.0-or-later; bundled components have their own licenses"
+  },
+  "sympy": {
+    "version": "1.14.0",
+    "source": "https://github.com/sympy/sympy/tree/1.14.0",
+    "license": "BSD-3-Clause",
+    "dependencies": "requirements.sympy.lock"
+  },
+  "adapter": "repository-owned; no external MCP server clone",
+  "notes": "No activation credential. Container distribution must respect bundled software licenses. Native scripts have container privileges."
+}

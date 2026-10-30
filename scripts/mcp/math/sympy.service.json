@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "sympy": {
+      "url": "http://sympy:8765/mcp",
+      "sandbox": {
+        "deployment": "service",
+        "service": "sympy",
+        "startup_timeout_seconds": 180
+      }
+    }
+  }
+}

@@ -1322,3 +1322,18 @@ together. Check `uv lock --check`, build wheel/sdist, run strict Twine checks,
 and install both artifacts in separate clean environments. Confirm both CLI
 aliases and `importlib.metadata.version("asibench")` agree with the runtime
 `__version__`. Release notes are retained in `docs/releases/`.
+
+
+## SageMath and SymPy MCP
+
+`tests/mcp_e2e/test_math_adapters.py` checks catalog/deployment contracts,
+file transfer, native process lifecycle and (with dependencies installed)
+real local SymPy computation. After building both images as described in
+[the author guide](docs/mcp/sage-sympy.md), run:
+
+```sh
+ASIBENCH_MATH_DOCKER=1 pytest -q tests/mcp_e2e/test_math_adapters.py
+```
+
+This enables real scientific Docker checks and OSSandbox stdio/HTTP config
+injection and workspace-isolation checks. Protocol clients are not live agents.

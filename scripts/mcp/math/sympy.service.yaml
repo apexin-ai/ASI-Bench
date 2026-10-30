@@ -1,0 +1,10 @@
+# Merge runtime.services into task_meta.yaml in your task worktree.
+runtime:
+  services:
+    - name: sympy
+      image: asibench-sympy:test
+      port: 8765
+      command: [/opt/venv/bin/python, /opt/math-mcp/server.py, --backend, sympy, --transport, streamable-http]
+      startup_timeout_seconds: 180
+      memory_mb: 2048
+      cpus: 2
