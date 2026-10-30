@@ -94,6 +94,16 @@ uv run pytest -q \
   tests/test_readme_examples.py::test_agent_docs_distinguish_new_models_from_new_harnesses
 ```
 
+The same module also checks that `CITATION.cff`, the README `## Citation`
+BibTeX entry and the README author header list the same 42 authors in arXiv
+order, and that the BibTeX entry keeps the Google Scholar form
+(`@article{zhou2026asi,`, `journal={arXiv preprint arXiv:2608.17271}`):
+
+```bash
+uv run pytest -q \
+  tests/test_readme_examples.py::test_citation_metadata_matches_readme_and_paper
+```
+
 Run external tests only when intentionally providing credentials and accepting
 their network/runtime cost:
 
@@ -1280,6 +1290,29 @@ convergence/step exhaustion, NVE drift and JSON-RPC stdout are checked.
 Three offline tests cover thermo parsing, interrupted-job recovery and both
 OS configuration contracts. Docker tests skip unless explicitly enabled.
 See [the author guide](docs/mcp/lammps.md) for image configuration and limits.
+
+## Wolfram MCP checks
+
+Use a Python 3.12 test venv with `scripts/mcp/wolfram/requirements.lock` and the
+framework test dependencies. Run the following for protocol/lifecycle, exact content
+forwarding, HTTP transport, process-tree cancellation, timeout recovery, and
+service credential/resource boundaries. Fixtures are explicitly protocol-only.
+
+```sh
+pytest -q tests/mcp_e2e/test_wolfram_adapter.py tests/test_service_runtime_credentials.py
+```
+
+Build `asibench-wolfram:test` using `scripts/mcp/wolfram/Dockerfile`, then set
+`ASIBENCH_WOLFRAM_IMAGE_TEST=1` to additionally check fresh-HOME OS preflight and
+missing-license failure in the real image, plus a framework-managed offline
+sidecar proving service-only credential delivery and workspace separation.
+Set `ASIBENCH_WOLFRAM_DOCKER=1` only
+with a valid runtime license to enable exact integration, persistent sessions,
+independent mathematical references, native CSV/PNG/WXF artifacts, failure and
+timeout checks, plus framework HTTP sidecar transfer. HTTP requires an
+**offline-valid** `WOLFRAM_LICENSE_B64`. Explicit opt-in with invalid licensing
+fails, rather than skipping or substituting a fake backend. See
+[deployment and verification](docs/mcp/wolfram.md).
 
 ### Release version consistency
 

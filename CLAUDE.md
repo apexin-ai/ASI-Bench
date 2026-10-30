@@ -161,6 +161,11 @@
   pinned checkout 内的 `bootstrap.script` 取得其源码资源，不能只安装 wheel。
   smoke 不得把“有响应”当业务成功：须检查 in-band error、模型加载结果和实际产物；
   势能预测用独立 ASE 进程对账，MatterGen 随机产物独立解析，不比较生成字节。
+- Wolfram MCP 位于 `scripts/mcp/wolfram/`，固定已发布 Engine 14.3 / AgentTools 2.2.0
+  镜像 digest；保留官方工具，原生作业用独立内核，精确表达用 InputForm/WXF 保存。
+  缺许可证须失败，protocol fixture 不得当科学验证。service `env_from` 通过短期 0600
+  env 文件传值，不放 argv/agent/provenance；Docker 管理员仍可 inspect。sidecar 保持
+  离线，使用适合实际容器的许可；资源用受限 `memory_mb` / `cpus`。
 - 自有 LAMMPS MCP 位于 `scripts/mcp/lammps/`，固定引擎 wheel、MPICH 和完整哈希依赖锁。
   `LD_LIBRARY_PATH=/opt/venv/lib` 对原生 Python 动态加载同样必需；不能只检查 `lmp -h`。
   原生脚本具有 server 容器权限，不得把文件 API 的路径校验描述为脚本沙箱。

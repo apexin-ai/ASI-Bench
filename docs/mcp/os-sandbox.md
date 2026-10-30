@@ -91,18 +91,27 @@ Reference it from the operator's MCP config:
 
 The hostname and explicit port must match a declared task service. Arbitrary
 remote URLs, host networking endpoints, embedded URL credentials, legacy SSE
-transport and HTTP authentication headers are rejected in this mode. This
-release supports unauthenticated MCP within the private per-instance network;
-service credential injection/remote authenticated MCP require further work.
+transport and HTTP authentication headers are rejected in this mode. MCP endpoints remain unauthenticated within the private per-instance network;
+remote authenticated MCP requires further work. Service processes may receive
+operator credentials via `runtime.services[].env_from` (not MCP HTTP headers).
 The sidecar has no agent auth mounts or workspace mount, publishes no host
 ports, and has only an internal network, so it cannot access external APIs.
 The agent keeps its existing model API network policy. Domain-whitelisted
-external sidecars, GUI/commercial software and remote MCP are not implemented.
+external sidecars and remote MCP are not implemented. Licensed software can run
+in a prepared image with an offline-valid license; GUI features require the
+image's frontend/display runtime and separate verification.
 Sidecars require a connectable bridge network. Existing agent API proxy
 configurations that force `AI4SCI_DOCKER_NETWORK=host` cannot be combined
 with services; use a bridge-reachable direct API endpoint instead.
-Service resource limits and cleanup follow the existing `runtime.services`
-mechanism (currently at most two services per instance).
+Services accept `memory_mb` (256–65536, default 1024) and `cpus` (0.25–16,
+default 1); PID limit remains 512, with at most two services per instance.
+`env_from: {TARGET_VARIABLE: RUNNER_VARIABLE}` resolves values from the runner
+using a private temporary Docker env file, removed after creation even on
+failure. No values enter argv, agent env or provenance; Docker administrators
+can inspect the service environment. Multiline/NUL values are rejected (use
+base64 for license files); loader/path variables and collisions with ordinary
+`environment` keys are rejected. Missing references fail startup. Network and
+filesystem isolation remain unchanged. See [Wolfram](wolfram.md) for an example.
 
 ## Run and author verification
 

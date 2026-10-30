@@ -1,5 +1,49 @@
 # Progress
 
+## 2026-10-29: Wolfram MCP deployment and native execution
+
+- Implementation: `868bd4890117c788d90e021b78774c3cffc9b662` on
+  `task-wolfram-mcp`; main was not modified or integrated.
+- Problem: Mathematica needs a real licensed runtime, not just MCP JSON. The
+  published official image is Engine 14.3 / AgentTools 2.2.0, while current
+  source requires 15.0; fresh sandbox HOME also loses preinstalled paclets.
+- Resolution: pin the published image/source, forward official MCP content,
+  add independent native WL jobs, exact InputForm/WXF and file transfer,
+  and seed package/data state in an isolated executable per-server HOME.
+  Extend services with scoped env references and bounded memory/CPU options;
+  retain offline networking and no workspace/auth mounts.
+- Verification: related suite 1525 passed, 31 skipped, 2 deselected. Final
+  SDK/image/service suite 28 passed, 2 skipped; the skips are licensed stdio
+  and HTTP scientific acceptance. Both science/Codex images built, and the
+  unlicensed real image fails explicitly with clean MCP stdout. New service
+  Docker-start timeout test also confirms cleanup registration and env-file
+  deletion. An additional real framework-managed offline sidecar protocol test
+  passed, checking service-only credential delivery, no shared workspace,
+  HTTP file transfer and cleanup. Normalize both text JSON and structuredContent
+  in test clients; untyped dict-returning SDK tools may use text JSON.
+  These suite counts overlap and must not be added together.
+- Limitation: the user confirmed no Wolfram license is currently available
+  and requested implementation first. No real mathematical, frontend or
+  Codex model acceptance is claimed. Licensed tests and operator commands
+  are in `docs/mcp/wolfram.md`. Keep those checks separate from protocol
+  fixtures, and validate container-specific license rights before activation.
+
+## 2026-10-29: Add CITATION.cff and README BibTeX for the paper
+
+- Problem: the repository linked arXiv:2608.17271 but had no citation
+  metadata, so GitHub showed no "Cite this repository" entry and users had to
+  build their own BibTeX.
+- Resolution: add `CITATION.cff` (CFF 1.2.0, validated with cffconvert 2.0.0)
+  whose `preferred-citation` is the arXiv article, and a README `## Citation`
+  section. The BibTeX entry uses the Google Scholar form (`zhou2026asi`,
+  `@article`, `journal={arXiv preprint arXiv:2608.17271}`, `year={2026}`) with
+  the full 42-author list from arXiv; Scholar's own export truncates after 10
+  authors with `others`. The arXiv DOI is `10.48550/arXiv.2608.17271`.
+- Prevention: `test_citation_metadata_matches_readme_and_paper` checks that
+  `CITATION.cff`, the BibTeX entry and the README author header keep the same
+  authors in the same order. If the author list changes, update all three.
+- Commit: `d960dec`.
+
 ## 2026-10-29: Prepare the 0.3.0 package release
 
 - Problem: PyPI still served 0.2.0 while main included Harbor integration,

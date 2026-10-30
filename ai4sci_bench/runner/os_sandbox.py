@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import platform
 import re
@@ -57,6 +58,7 @@ _SERVICE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 _SERVICE_ENV_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 _SERVICE_KEYS = {
     "name", "image", "port", "command", "startup_timeout_seconds", "environment",
+    "env_from", "memory_mb", "cpus",
 }
 
 
@@ -415,6 +417,22 @@ class OSSandbox:
                 raise ValueError(
                     f"runtime.services[{index}].environment must map non-reserved variable names to strings"
                 )
+            refs = service.get("env_from", {})
+            if not isinstance(refs, dict) or any(
+                not isinstance(k, str) or not _SERVICE_ENV_RE.fullmatch(k)
+                or not isinstance(v, str) or not _SERVICE_ENV_RE.fullmatch(v)
+                or k.startswith("ASIBENCH_SERVICE_")
+                or k in {"HOME", "TMPDIR", "PATH", "PYTHONPATH", "LD_PRELOAD", "LD_LIBRARY_PATH"}
+                or k in environment
+                for k, v in refs.items()
+            ):
+                raise ValueError(f"runtime.services[{index}].env_from must map safe, non-duplicate environment names")
+            memory = service.get("memory_mb", 1024)
+            cpus = service.get("cpus", 1.0)
+            if type(memory) is not int or not 256 <= memory <= 65536:
+                raise ValueError(f"runtime.services[{index}].memory_mb must be 256..65536")
+            if isinstance(cpus, bool) or not isinstance(cpus, (int, float)) or not math.isfinite(cpus) or not .25 <= cpus <= 16:
+                raise ValueError(f"runtime.services[{index}].cpus must be .25..16")
             parsed.append({
                 "name": name,
                 "image": image.strip(),
@@ -422,6 +440,9 @@ class OSSandbox:
                 "command": command,
                 "startup_timeout_seconds": startup_timeout,
                 "environment": environment,
+                "env_from": refs,
+                "memory_mb": memory,
+                "cpus": float(cpus),
             })
         return parsed
 
@@ -466,22 +487,40 @@ class OSSandbox:
             cmd = [
                 "docker", "run", "--detach", "--name", container,
                 "--network", network, "--network-alias", name,
-                "--memory", "1g", "--cpus", "1.0", "--pids-limit", "512",
+                "--memory", f"{service.get('memory_mb', 1024)}m",
+                "--cpus", str(service.get("cpus", 1.0)), "--pids-limit", "512",
             ]
             for key, value in service["environment"].items():
                 cmd += ["-e", f"{key}={value}"]
             cmd.append(service["image"])
             if service["command"] is not None:
                 cmd.extend(service["command"])
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, encoding="utf-8",
-                errors="replace", timeout=60,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"Could not start task service {name!r}: {(result.stderr or result.stdout).strip()}"
+            # Docker env files keep credential values out of argv and runner logs.
+            # Docker administrators can still inspect the container environment.
+            with tempfile.TemporaryDirectory(prefix="asibench-service-env-") as staging:
+                lines = []
+                for target, source in service.get("env_from", {}).items():
+                    value = os.environ.get(source)
+                    if value is None:
+                        raise ValueError(f"Task service {name!r}: environment reference {source!r} is unset")
+                    if any(c in value for c in "\r\n\0"):
+                        raise ValueError(f"Task service {name!r}: env_from values must be single-line (encode binary/license files as base64)")
+                    lines.append(f"{target}={value}\n")
+                if lines:
+                    env_file = Path(staging) / "env"
+                    env_file.touch(mode=0o600)
+                    env_file.write_text("".join(lines))
+                    cmd[2:2] = ["--env-file", str(env_file)]
+                # Register the known name before Docker: a timed-out client may
+                # still have created the container, which finally must remove.
+                containers.append(container)
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, encoding="utf-8",
+                    errors="replace", timeout=60,
                 )
-            containers.append(container)
+            if result.returncode != 0:
+                # Docker errors may quote arguments; do not persist secret values.
+                raise RuntimeError(f"Could not start task service {name!r} (Docker exit {result.returncode})")
             self._wait_for_task_service(service, container)
             environment[f"ASIBENCH_SERVICE_{name.upper().replace('-', '_')}_URL"] = (
                 f"http://{name}:{service['port']}"
