@@ -1,5 +1,33 @@
 # Progress
 
+## 2026-10-30: SageMath and SymPy MCP
+
+- Implementation: `a1d4201`; HTTPS/cleanup fix `be7c6b9`, paired-sidecar
+  acceptance `3964990`, explicit Sage Python CA path `5cb778f` on
+  `task-sage-sympy-mcp`. Main was not modified or integrated.
+- Added separate `sagemath`/`sympy` catalog entries, shared native-program
+  adapter with 11 tools, exact expression files, asynchronous jobs, timeouts,
+  process-group cancellation and bounded binary/text transfer. Pin Sage 10.7
+  amd64 image and SymPy 1.14.0 dependencies. Keep Sage mathematics packages
+  separate from the MCP venv. Both instance stdio and offline internal HTTP
+  work, including two backends in one task; no engine activation is required.
+- Verification: final real local/Docker suite 16 passed; Python 3.11 and 3.13
+  locked offline suites each 3925 passed, 45 skipped, 24 deselected. Real
+  gpt-6.1-sol medium / Codex 0.162.1 via CodexCLIAdapter + OSSandbox covered
+  all 11 tools in each representative run: Sage stdio 99.4 s and SymPy HTTP
+  101.0 s, each 15 successful MCP calls. Saved objects match actual responses;
+  independent factorial/integral/determinant/rational and byte checks pass.
+- Lessons: the upstream Sage image lacks system CA roots, breaking live model
+  HTTPS despite working local mathematics. Install roots and set Python's
+  SSL_CERT_FILE explicitly; do not disable verification. Keep executable
+  caches outside noexec /tmp and explicitly configure the stdio interpreter.
+  Cleanup tests must inspect only their own containers when runs overlap.
+  Accept MCP text JSON or structuredContent in evidence readers, including
+  saved envelopes, without relaxing mathematical comparisons.
+- Limits: native code has container privileges; no Mathematica compatibility,
+  persistent sessions, GUI notebooks, optional Sage packages or full task
+  generation/scoring acceptance is implied. See `docs/mcp/sage-sympy.md`.
+
 ## 2026-10-30: Restore synchronized agent instructions
 
 - Problem: Wolfram integration updated `AGENTS.md` and `CLAUDE.md` with
