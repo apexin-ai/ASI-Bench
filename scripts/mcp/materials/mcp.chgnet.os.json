@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "chgnet": {
+      "command": "/opt/mcp/atomisticskills_mlip/venv/mlip/.venv/bin/python",
+      "args": ["-m", "src.mcp_server.matgl_server"],
+      "cwd": "/workspace",
+      "env": {
+        "ATOMISTIC_WORKSPACE": "/workspace",
+        "HF_HUB_OFFLINE": "1",
+        "FASTMCP_CHECK_FOR_UPDATES": "off",
+        "MPLBACKEND": "Agg",
+        "PYTHONWARNINGS": "ignore",
+        "OMP_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "sandbox": {"deployment": "instance"}
+    }
+  }
+}

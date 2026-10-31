@@ -254,7 +254,7 @@
         }
       },
       "model": "CHGNet-PES-MatPES-PBE-1M-2026.9",
-      "notes": "MatGL CHGNet-family PES; this is not the original chgnet package checkpoint."
+      "notes": "MatGL CHGNet-family PES; this is not the original chgnet package checkpoint. Catalog paths are templates, not an installed server. Host install: python3 scripts/mcp/e2e/setup.py chgnet --root ~/mcp. Reproducible OS image/config: scripts/mcp/materials/Dockerfile.chgnet and mcp.chgnet.os.json; see docs/mcp/chgnet.md."
     },
     "mace_atomisticskills": {
       "category": "materials-mlip",

@@ -397,6 +397,9 @@ sandbox selection, and platform-specific commands.
 
 ### Scientific MCP tools
 
+For the MatGL CHGNet-family server, see [installation and offline OS deployment](docs/mcp/chgnet.md).
+The catalog entry is a template; the guide supplies the install command and Docker/config files.
+
 For opt-in, revision-pinned repairs of the SketchUp, Fusion 360 and CadQuery
 stdio servers, see [CAD MCP repair instructions](scripts/mcp/cad-repairs/README.md)
 and the [local smoke results](docs/mcp/cad-mcp-repair-smoke.md). These patches do

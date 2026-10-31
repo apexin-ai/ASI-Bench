@@ -1370,3 +1370,10 @@ Codex and pi/OpenCode fixture-driven model/tool round trips. Codex also tests
 offline stdio MCP under the same namespace. No paid model API or reference
 bundle is required. Preinstall the CLIs/curl in those images; the tests never
 install dependencies in running isolated containers.
+
+### CHGNet offline deployment
+
+See [CHGNet deployment](docs/mcp/chgnet.md) to build `asibench-chgnet:20261031`.
+`uv run --frozen pytest -q tests/mcp_e2e/test_chgnet_deployment.py` checks
+checkpoint integrity and Codex OS config staging. Add `ASIBENCH_CHGNET_DOCKER=1`
+to run offline CPU MCP prediction against an independent ASE backend.

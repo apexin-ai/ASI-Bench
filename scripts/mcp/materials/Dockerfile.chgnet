@@ -1,0 +1,21 @@
+# Build from the repository root. Reuse the pinned upstream installation contract.
+FROM --platform=linux/amd64 python:3.12-slim@sha256:e8a38829209aea82774882e5157e1f7c3e8c8393ff53a697b3580896e57f345c
+RUN apt-get update && apt-get install -y --no-install-recommends git build-essential libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir uv==0.11.26
+COPY scripts/mcp/e2e/setup.py scripts/mcp/e2e/manifest.json /opt/materials-setup/
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN python /opt/materials-setup/setup.py chgnet --root /opt/mcp && uv cache clean
+COPY scripts/mcp/materials/fetch_model.py scripts/mcp/materials/chgnet-model.lock.json /opt/materials-setup/
+RUN python /opt/materials-setup/fetch_model.py /opt/materials-setup/chgnet-model.lock.json /opt/models/CHGNet-PES-MatPES-PBE-1M-2026.9
+ENV PATH=/opt/mcp/atomisticskills_mlip/venv/mlip/.venv/bin:/usr/local/bin:/usr/bin:/bin \
+    HOME=/home/agent ATOMISTIC_WORKSPACE=/workspace HF_HUB_OFFLINE=1 \
+    MPLBACKEND=Agg FASTMCP_CHECK_FOR_UPDATES=off PYTHONWARNINGS=ignore \
+    OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+RUN /usr/sbin/groupadd --gid 1000 agent && /usr/sbin/useradd --uid 1000 --gid 1000 --create-home agent \
+    && mkdir -p /workspace && chown agent:agent /workspace
+USER agent
+WORKDIR /workspace
+# Verify the packaged checkpoint loads as the runtime user without downloads.
+RUN python -c "import matgl; matgl.load_model('/opt/models/CHGNet-PES-MatPES-PBE-1M-2026.9')"
+CMD ["python", "-m", "src.mcp_server.matgl_server"]

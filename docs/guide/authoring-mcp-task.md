@@ -155,6 +155,10 @@ the same ID in a run-specific MCP config only when the task needs that model:
 | `mattergen` | AtomisticSkills MatterGen structure generation; stochastic and usually GPU/checkpoint heavy | `generate_structures` |
 | `mattersim` | ASI-Bench adapter around the official MatterSim package; set a pinned local checkpoint for offline runs | `predict_structure`, `relax_structure` |
 
+For CHGNet-family local installation, a ready-to-build OS image and its
+container MCP config, see [CHGNet deployment](../mcp/chgnet.md). The catalog
+entry alone is a path template and does not install a server.
+
 The reusable setup pins the AtomisticSkills revision and installs the required
 subproject (`venv/mlip` for `chgnet`/`mace`, `venv/mattergen` for
 `mattergen`/`mattersim`), including the locked `cu126` extra. This build also

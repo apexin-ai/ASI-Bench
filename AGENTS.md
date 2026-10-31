@@ -179,6 +179,10 @@
   数值输出区分 native 自选 units/norm 和 convenience metal/norm-no；converged 按实际
   minimizer stop reason，不能从 exit 0 推断。直接镜像/HTTP 测试用 `ASIBENCH_LAMMPS_DOCKER=1`。
   sidecar 没有 agent workspace，必须用 MCP 上传/下载并在 teardown 前保存产物。
+- CHGNet-family 部署位于 `scripts/mcp/materials/`，复用固定 AtomisticSkills MatGL
+  server；不是原始 `chgnet` 包。权重在构建时按 revision/SHA-256 下载，运行时
+  `load_model` 使用 `/opt/models/CHGNet-PES-MatPES-PBE-1M-2026.9`，不依赖 HOME cache。
+  `ASIBENCH_CHGNET_DOCKER=1` 启用断网、fresh HOME 的独立 ASE 对账。
 - 自有 ASE/OVITO MCP 放在 `scripts/mcp/atomistic/`，依赖用完整 SHA-256 lock
   安装，不为本仓库 adapter 伪造上游 clone manifest。目录 id 为 `ase_native`、`ovito`；
   原 `ase`/AtomicToolkit 合同保留。实例配置显式设置 `QT_QPA_PLATFORM=ovitoheadless`，

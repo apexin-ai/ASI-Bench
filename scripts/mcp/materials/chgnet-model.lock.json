@@ -1,0 +1,10 @@
+{
+  "model": "CHGNet-PES-MatPES-PBE-1M-2026.9",
+  "repository": "materialyze/CHGNet-PES-MatPES-PBE-1M-2026.9",
+  "revision": "b38b2e9523479a4601e46e9ae5362845f055111e",
+  "files": {
+    "model.json": "ef0a447a9989168ee326605fb21a4e9c9807ee15a61f6682f7be474ba028dc9e",
+    "model.pt": "523d3da637687e82e2a4645197810e7aaaf89c51421d4d1708cfcd98f74370a6",
+    "state.pt": "e9da73c92dc50734db276029936768e27a26a506fc226c98de2f08106488c6d4"
+  }
+}
