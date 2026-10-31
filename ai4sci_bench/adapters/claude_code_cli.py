@@ -99,10 +99,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
                 f"Invalid effort '{effort}' for claude_code_cli. "
                 f"Valid levels: {', '.join(self.VALID_EFFORT_LEVELS)}"
             )
-        if network_policy not in {"auto", "model-only", "inherit"}:
-            raise ValueError("network_policy must be auto, model-only or inherit")
-        self.network_policy = network_policy
-        self.effective_network_policy = "inherit"
+        self._init_network_policy(network_policy)
         self.model = model
         self.permission_mode = permission_mode
         self.allow_external_tools = allow_external_tools
@@ -303,13 +300,6 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
             validate_os_mcp(self.mcp_servers)
         if self.sandbox != "os" and any("sandbox" in e for e in self.mcp_servers.values()):
             raise ValueError("MCP sandbox deployment requires --sandbox os")
-        if self.network_policy == "model-only" and self.sandbox != "os":
-            raise ValueError("model-only network policy requires --sandbox os")
-        self.effective_network_policy = (
-            "model-only" if self.network_policy == "auto" and self.sandbox == "os"
-            and self.tool_mode.value == "restricted" else
-            ("inherit" if self.network_policy == "auto" else self.network_policy)
-        )
         if self.sandbox == "os":
             self._os_sandbox = OSSandbox(self.repo_root)
 

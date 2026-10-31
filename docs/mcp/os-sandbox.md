@@ -59,7 +59,7 @@ filesystem and network policy. A clean environment is not a separate security
 boundary: the server can access files available to that container user, including
 agent auth files. Use a sidecar for filesystem/credential/network separation.
 There is no independent domain egress whitelist for instance-local servers.
-Under Claude's model-only policy, these processes share a container with no IP
+Under the shared model-only policy, these processes share a container with no IP
 network; all software must be prepared in the image. Service MCP is rejected
 under that policy. Other policies retain their existing network behavior.
 See [network isolation](../guide/network-isolation.md).
@@ -99,7 +99,7 @@ remote authenticated MCP requires further work. Service processes may receive
 operator credentials via `runtime.services[].env_from` (not MCP HTTP headers).
 The sidecar has no agent auth mounts or workspace mount, publishes no host
 ports, and has only an internal network, so it cannot access external APIs.
-Claude model-only runs reject this service topology instead of attaching the
+All model-only runs reject this service topology instead of attaching the
 agent to a service network. For legacy `inherit` runs the agent keeps its model
 API network policy. Domain-whitelisted
 external sidecars and remote MCP are not implemented. Licensed software can run

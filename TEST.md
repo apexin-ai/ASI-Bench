@@ -1356,3 +1356,17 @@ ASIBENCH_NETWORK_DOCKER=1 ASIBENCH_NETWORK_AGENT_IMAGE=your-local-image \
 The Docker CI job includes the network probes. The optional real-CLI fixture
 checks Bash transport without calling a commercial model. Tests must never
 use benchmark reference downloads as network probes.
+
+## Shared restricted OS networking
+
+Run `uv run --frozen pytest -q tests/test_unified_network_policy.py tests/test_network_isolation.py`.
+These cover policy selection across OS harnesses, fixed Messages/Chat/Responses
+routes, nested hosted-tool rejection, URL/file attachments, audit persistence,
+unsupported transports, and host-only sandbox rejection.
+
+Set `ASIBENCH_NETWORK_DOCKER=1` for actual network probes. Optional
+`ASIBENCH_NETWORK_CODEX_IMAGE` and `ASIBENCH_NETWORK_NATIVE_IMAGE` enable real
+Codex and pi/OpenCode fixture-driven model/tool round trips. Codex also tests
+offline stdio MCP under the same namespace. No paid model API or reference
+bundle is required. Preinstall the CLIs/curl in those images; the tests never
+install dependencies in running isolated containers.

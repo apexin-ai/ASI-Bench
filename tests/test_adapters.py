@@ -1411,7 +1411,7 @@ class TestCodexCLIAdapter:
     @patch("ai4sci_bench.adapters.codex_cli.OSSandbox")
     def test_solve_os_sandbox_success(self, mock_os_sandbox_cls, sample_task_instance):
         """solve() with sandbox=os delegates to OSSandbox.run_agent()."""
-        adapter = CodexCLIAdapter()
+        adapter = CodexCLIAdapter(api_key="fixture-key")
         adapter.setup({"sandbox": "os"})
         mock_sandbox = MagicMock()
         mock_sandbox.run_agent.return_value = (
@@ -1460,7 +1460,7 @@ class TestCodexCLIAdapter:
     @patch("ai4sci_bench.adapters.codex_cli.OSSandbox")
     def test_solve_os_sandbox_failure(self, mock_os_sandbox_cls, sample_task_instance):
         """solve() with sandbox=os returns FAILED on non-zero exit."""
-        adapter = CodexCLIAdapter()
+        adapter = CodexCLIAdapter(api_key="fixture-key")
         adapter.setup({"sandbox": "os"})
         mock_sandbox = MagicMock()
         mock_sandbox.run_agent.return_value = (
@@ -1476,7 +1476,7 @@ class TestCodexCLIAdapter:
     @patch("ai4sci_bench.adapters.codex_cli.OSSandbox")
     def test_solve_os_sandbox_timeout(self, mock_os_sandbox_cls, sample_task_instance):
         """solve() with sandbox=os returns TIMEOUT when OSSandbox reports timeout."""
-        adapter = CodexCLIAdapter(timeout_seconds=120)
+        adapter = CodexCLIAdapter(timeout_seconds=120, api_key="fixture-key")
         adapter.setup({"sandbox": "os"})
         mock_sandbox = MagicMock()
         mock_sandbox.run_agent.return_value = (
@@ -1509,7 +1509,7 @@ class TestCodexCLIAdapter:
         self, mock_os_sandbox_cls, sample_task_instance
     ):
         """solve() should store the image identity for provenance."""
-        adapter = CodexCLIAdapter()
+        adapter = CodexCLIAdapter(api_key="fixture-key")
         adapter.setup({"sandbox": "os"})
         mock_sandbox = MagicMock()
         mock_sandbox.run_agent.return_value = (
@@ -1625,7 +1625,7 @@ class TestCodexCLIAdapter:
         self, mock_os_sandbox_cls, sample_task_instance
     ):
         """solve() should collect output files from workspace after run_agent."""
-        adapter = CodexCLIAdapter()
+        adapter = CodexCLIAdapter(api_key="fixture-key")
         adapter.setup({"sandbox": "os"})
         mock_sandbox = MagicMock()
         mock_sandbox.run_agent.return_value = (True, "ok", "", "", "sha256:abc")
@@ -1641,7 +1641,7 @@ class TestCodexCLIAdapter:
         self, mock_os_sandbox_cls, sample_task_instance
     ):
         """In OS sandbox mode, solve() should NOT call subprocess.run directly."""
-        adapter = CodexCLIAdapter()
+        adapter = CodexCLIAdapter(api_key="fixture-key")
         adapter.setup({"sandbox": "os"})
         mock_sandbox = MagicMock()
         mock_sandbox.run_agent.return_value = (True, "ok", "", "", "sha256:abc")

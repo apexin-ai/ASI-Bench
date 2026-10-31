@@ -465,15 +465,19 @@ environment, timeout, and score-variance issues.
 
 ## Agent network policy
 
-Claude Code restricted runs with `--sandbox os` now default to model-only
-network isolation: the container has no IP network and uses a fixed-route Unix
-relay for model requests. Explicit API-key authentication is required; network
-overrides, runtime services and service MCP conflict with this policy and fail
-closed. Search/unrestricted retain legacy networking. Use
-`"network_policy":"inherit"` in Claude's `--agent-config` only when intentionally
-retaining the legacy network conditions. Other harnesses' restricted tool mode
-does not imply network isolation. See the [network isolation guide](docs/guide/network-isolation.md)
-for supported configurations, audit fields and validation.
+Built-in OS agents share `network_policy` (`auto`, `model-only`, `inherit`).
+Restricted + OS defaults to model-only: no container IP network, a fixed-route
+Unix relay for supported model protocols, and API keys kept on the host. This
+covers Claude, Codex, pi, OpenCode, Kimi, MiMo and image-installed OpenHands;
+unsupported transports fail closed. Antigravity currently has no verified relay
+transport; host-only integrations reject OS requests. Direct LLM runs its model
+on the host and isolates generated code without a relay.
+
+Network overrides, runtime services, service MCP and arbitrary host mounts
+conflict with model-only. Search/unrestricted retain legacy networking by
+default. Explicit `"network_policy":"inherit"` keeps weaker legacy conditions
+and is recorded accordingly. See the [network isolation guide](docs/guide/network-isolation.md)
+for protocol support, setup requirements, audit fields and validation.
 
 ## Built-in CLI agents — installation
 

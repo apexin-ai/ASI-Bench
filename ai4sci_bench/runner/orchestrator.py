@@ -1076,11 +1076,12 @@ class BenchmarkOrchestrator:
             provenance["network"] = self._sanitize_persisted_value(runtime)
             # These fixed API routes are audit identifiers, not host paths.
             # Restore only known constants after generic path/secret redaction.
+            from ai4sci_bench.runner.model_relay import ALL_ROUTES
             routes = runtime.get("allowed_routes", [])
             if isinstance(routes, list):
                 provenance["network"]["allowed_routes"] = [
                     route for route in routes
-                    if route in ("/v1/messages", "/v1/messages/count_tokens")
+                    if route in ALL_ROUTES
                 ]
         if eval_result.agent_output is not None and eval_result.agent_output.mcp_runtime:
             provenance["mcp"] = self._sanitize_persisted_value(eval_result.agent_output.mcp_runtime)

@@ -125,8 +125,18 @@ class OSSandbox:
         code_file: str,
         timeout: int,
         allow_external_tools: bool = False,
+        network_policy: str = "inherit",
+        network_runtime: dict | None = None,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         """Execute one Python file in the task image."""
+        runtime = network_runtime if network_runtime is not None else {}
+        model_only = network_policy == "model-only"
+        if network_policy not in {"model-only", "inherit"}:
+            raise ValueError("network_policy must be inherit or model-only")
+        runtime.update(effective=network_policy, enforced=False, policy="model-only-code-v2" if model_only else "legacy-tool-policy-only", allowed_routes=[])
+        if model_only and (platform.system() != "Linux" or os.environ.get("AI4SCI_DOCKER_NETWORK", "").strip() or self._task_services(task_metadata)):
+            runtime.update(startup_check="rejected")
+            raise ValueError("model-only code execution requires local Linux Docker without network overrides or runtime.services")
         services = self._task_services(task_metadata)
         image = self.image_builder.ensure_image(task_metadata)
         image_identity = self.image_builder.get_image_identity(image)
@@ -161,6 +171,8 @@ class OSSandbox:
             allow_external_tools=allow_external_tools,
             agent_type=None,
             timeout_label="OS sandbox execution",
+            model_only=model_only,
+            network_runtime=runtime,
         )
         if pre_snapshot is not None:
             audit = self._diff_workspace(pre_snapshot, workspace)
@@ -184,6 +196,7 @@ class OSSandbox:
         mcp_runtime: dict | None = None,
         network_policy: str = "inherit",
         network_runtime: dict | None = None,
+        model_connection: dict | None = None,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         """Run an arbitrary agent command inside the task container.
 
@@ -212,8 +225,8 @@ class OSSandbox:
         if network_policy == "model-only":
             if platform.system() != "Linux":
                 raise ValueError("model-only currently requires a local Linux Docker daemon")
-            if agent_type != "claude_code":
-                raise ValueError("model-only currently supports only Claude Code")
+            if agent_type != "claude_code" and model_connection is None:
+                raise ValueError("model-only requires a supported model transport")
             if os.environ.get("AI4SCI_DOCKER_NETWORK", "").strip():
                 raise ValueError("model-only conflicts with AI4SCI_DOCKER_NETWORK; unset it")
             if self._task_services(task_metadata):
@@ -254,24 +267,20 @@ class OSSandbox:
             runtime.update(effective="inherit", enforced=False, policy="legacy-tool-policy-only")
         if network_policy == "model-only":
             from ai4sci_bench.runner.model_relay import model_relay
-            relay_scope = model_relay(extra_env or {}, runtime)
+            relay_scope = model_relay(extra_env or {}, runtime, model_connection)
         else:
             relay_scope = nullcontext(None)
         with relay_scope as relay_root:
             if relay_root is not None:
                 # Only a Unix socket and trusted bridge code cross the boundary.
                 # Upstream keys remain exclusively in the host relay.
-                extra_env = {
-                    key: value for key, value in (extra_env or {}).items()
-                    if key not in {"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"}
-                    and key.lower() not in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
-                }
-                extra_env.update(ANTHROPIC_API_KEY="asibench-model-relay", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1")
+                # Adapters supply a fresh placeholder-only environment. No
+                # legacy credentials, provider config or host login enters it.
+                extra_env = {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}
                 extra_mounts = [
                     "-v", f"{relay_root}:/opt/asibench-network/socket:ro",
                     "-v", f"{Path(__file__).with_name('model_relay_client.py')}:/opt/asibench-network/client.py:ro",
                 ]
-                agent_cmd = ["/opt/venv/bin/python", "/opt/asibench-network/client.py", *agent_cmd]
             with stage_os_mcp(mcp_servers or {}, task_metadata, agent_type, agent_cmd, extra_env) as (staged_cmd, staged_env, mcp_mounts):
                 outcome = self._run_task_container(
                     task_metadata,
@@ -280,7 +289,7 @@ class OSSandbox:
                     image_identity=image_identity,
                     container_name=container_name,
                     workspace=workspace,
-                    exec_args=staged_cmd,
+                    exec_args=(["/opt/venv/bin/python", "/opt/asibench-network/client.py", *staged_cmd] if relay_root is not None else staged_cmd),
                     timeout=timeout,
                     requires_network=requires_network,
                     requires_gpu=requires_gpu,

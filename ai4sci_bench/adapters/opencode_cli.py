@@ -118,7 +118,9 @@ class OpenCodeCLIAdapter(SubprocessAgentAdapter):
         api_base_env: str | None = None,
         api_protocol: str | None = None,
         provider: str | None = None,
+        network_policy: str = "auto",
     ):
+        self._init_network_policy(network_policy)
         super().__init__(
             timeout_seconds=timeout_seconds,
             supported_sandbox_modes=("none", "task", "os", "linux_ns"),
@@ -311,12 +313,14 @@ class OpenCodeCLIAdapter(SubprocessAgentAdapter):
         eff_timeout = self._get_effective_timeout(task_instance)
         workspace = task_instance.workspace_dir
         cmd = self._build_os_agent_cmd(workspace)
-        extra_env: dict[str, str] | None = self._build_api_env() or None
+        extra_env: dict[str, str] | None = None if self.effective_network_policy == "model-only" else self._build_api_env() or None
 
+        network_runtime: dict = {}
         t0 = time.time()
         assert self._os_sandbox is not None
         success, log, raw_stdout, raw_stderr, image_identity = (
-            self._os_sandbox.run_agent(
+            self._run_os_agent(
+                network_runtime=network_runtime,
                 task_metadata=task_instance.metadata,
                 agent_cmd=cmd,
                 workspace=workspace,
@@ -344,6 +348,7 @@ class OpenCodeCLIAdapter(SubprocessAgentAdapter):
             status = RunStatus.FAILED
 
         return AgentOutput(
+            network_runtime=network_runtime,
             instance_id=task_instance.instance_id,
             output_dir=workspace,
             code_files=[f for f in produced_files if f.endswith(".py")],

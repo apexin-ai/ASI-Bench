@@ -139,6 +139,8 @@ class HermesAgentAdapter(AgentAdapter):
         return kwargs
 
     def setup(self, config: dict) -> None:
+        from ai4sci_bench.runner.sandbox_support import validate_sandbox_mode
+        validate_sandbox_mode(config.get("sandbox", "none"), supported_modes=("none",), component=self.__class__.__name__)
         self.timeout_seconds = int(config.get("timeout", self.timeout_seconds))
         self.repo_root = Path(config.get("repo_root", self.repo_root))
 

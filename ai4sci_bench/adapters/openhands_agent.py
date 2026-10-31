@@ -42,8 +42,8 @@ workspace = cfg["workspace"]
 prompt = cfg["prompt"]
 result_path = cfg["result_path"]
 model = cfg["model"]
-api_key = cfg.get("api_key")
-api_base = cfg.get("api_base")
+api_key = os.environ.get("OPENAI_API_KEY") if cfg.get("model_only") else cfg.get("api_key")
+api_base = (os.environ.get("ANTHROPIC_BASE_URL") if cfg.get("relay_protocol") == "anthropic" else os.environ.get("OPENAI_BASE_URL")) if cfg.get("model_only") else cfg.get("api_base")
 max_iterations = cfg.get("max_iterations", 999999)
 temperature = cfg.get("temperature")
 max_output_tokens = cfg.get("max_output_tokens", 16384)
@@ -165,6 +165,7 @@ except Exception as e:
 
 with open(result_path, "w") as f:
     json.dump(result, f, default=str)
+sys.exit(0 if result["status"] == "completed" else 1)
 ''')
 
 
@@ -204,7 +205,9 @@ class OpenHandsAdapter(AgentAdapter):
         openhands_venv: str | None = None,
         allow_external_tools: bool = False,
         tool_mode: str | None = None,
+        network_policy: str = "auto",
     ):
+        self._init_network_policy(network_policy)
         from ai4sci_bench.core.types import ToolMode
         if tool_mode is not None:
             self.tool_mode = ToolMode(tool_mode) if isinstance(tool_mode, str) else tool_mode
@@ -226,6 +229,7 @@ class OpenHandsAdapter(AgentAdapter):
         else:
             self.model = model
         self.api_base = api_base
+        self._explicit_api_key = api_key
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY") or ""
         self.timeout_seconds = timeout_seconds
         self.max_iterations = max_iterations
@@ -247,6 +251,7 @@ class OpenHandsAdapter(AgentAdapter):
         self.timeout_seconds = int(config.get("timeout", self.timeout_seconds))
         self.repo_root = Path(config.get("repo_root", self.repo_root))
         self.sandbox = config.get("sandbox", "none")
+        self._setup_network_policy()
         if self.sandbox == "os":
             from ai4sci_bench.runner.os_sandbox import OSSandbox
             self._os_sandbox = OSSandbox(self.repo_root)
@@ -305,13 +310,16 @@ class OpenHandsAdapter(AgentAdapter):
         eff_timeout = self._get_effective_timeout(task_instance)
         workspace = task_instance.workspace_dir
 
-        host_oh_python = self._find_openhands_python()
-        if not host_oh_python:
-            return self._fail(task_instance, "OpenHands venv not found for os sandbox.")
-        host_oh_venv = Path(host_oh_python).parent.parent.resolve()
-        host_site_packages = self._find_site_packages(host_oh_venv)
-        if not host_site_packages:
-            return self._fail(task_instance, f"Cannot find site-packages in {host_oh_venv}")
+        model_only = self.effective_network_policy == "model-only"
+        host_site_packages = None
+        if not model_only:
+            host_oh_python = self._find_openhands_python()
+            if not host_oh_python:
+                return self._fail(task_instance, "OpenHands venv not found for os sandbox.")
+            host_oh_venv = Path(host_oh_python).parent.parent.resolve()
+            host_site_packages = self._find_site_packages(host_oh_venv)
+            if not host_site_packages:
+                return self._fail(task_instance, f"Cannot find site-packages in {host_oh_venv}")
 
         helper_path = workspace / ".oh_runner.py"
         helper_path.write_text(_HELPER_SCRIPT, encoding="utf-8")
@@ -323,8 +331,10 @@ class OpenHandsAdapter(AgentAdapter):
             "prompt": prompt,
             "result_path": "/workspace/.oh_result.json",
             "model": self.model,
-            "api_key": self.api_key,
-            "api_base": self.api_base,
+            "api_key": None if model_only else self.api_key,
+            "api_base": None if model_only else self.api_base,
+            "model_only": model_only,
+            "relay_protocol": self.api_protocol or ("anthropic" if self.model.startswith("anthropic/") else "openai"),
             "max_iterations": self.max_iterations,
             "temperature": self.temperature,
             "max_output_tokens": self.max_output_tokens,
@@ -347,12 +357,14 @@ class OpenHandsAdapter(AgentAdapter):
 
         # Mount the OpenHands site-packages into the container's venv
         container_site_packages = "/opt/venv/lib/python3.12/site-packages"
-        extra_mounts = ["-v", f"{host_site_packages}:{container_site_packages}:ro"]
+        extra_mounts = [] if model_only else ["-v", f"{host_site_packages}:{container_site_packages}:ro"]
 
+        network_runtime: dict = {}
         t0 = time.time()
         assert self._os_sandbox is not None
         success, log, raw_stdout, raw_stderr, image_identity = (
-            self._os_sandbox.run_agent(
+            self._run_os_agent(
+                network_runtime=network_runtime,
                 task_metadata=task_instance.metadata,
                 agent_cmd=cmd,
                 workspace=workspace,
@@ -376,6 +388,7 @@ class OpenHandsAdapter(AgentAdapter):
             status = RunStatus.FAILED
 
         return AgentOutput(
+            network_runtime=network_runtime,
             instance_id=task_instance.instance_id,
             output_dir=workspace,
             code_files=[f for f in produced_files if f.endswith(".py")],

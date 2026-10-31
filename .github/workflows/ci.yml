@@ -83,7 +83,7 @@ jobs:
       - name: Verify model-only network isolation
         run: |
           docker pull python:3.12-slim
-          ASIBENCH_NETWORK_DOCKER=1 uv run --frozen pytest -q tests/test_network_isolation.py
+          ASIBENCH_NETWORK_DOCKER=1 uv run --frozen pytest -q tests/test_network_isolation.py tests/test_unified_network_policy.py
       - name: Run MCP Docker protocol integration
         run: |
           docker build -t asibench-mcp-ci-base - <<'DOCKERFILE'

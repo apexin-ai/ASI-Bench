@@ -160,6 +160,7 @@ class SubprocessAgentAdapter(AgentAdapter):
             supported_modes=self._supported_sandbox_modes,
             component=self.__class__.__name__,
         )
+        self._setup_network_policy()
         self.repo_root = Path(config.get("repo_root", self.repo_root))
         self.task_env_manager = (
             TaskEnvironmentManager(self.repo_root)

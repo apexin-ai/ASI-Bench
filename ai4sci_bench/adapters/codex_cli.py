@@ -88,7 +88,17 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         codex_home: str | None = None,
         supports_image_input: bool = False,
         mcp_config: str | None = None,
+        network_policy: str = "auto",
+        api_key_env: str | None = None,
+        api_base_env: str | None = None,
     ):
+        self._init_network_policy(network_policy)
+        for name in (api_key_env, api_base_env):
+            if name and not os.environ.get(name):
+                raise ValueError(f"Environment variable '{name}' is not set")
+        api_key = api_key if api_key is not None else os.environ.get(api_key_env or "")
+        api_base = api_base if api_base is not None else os.environ.get(api_base_env or "")
+        self.api_key_env, self.api_base_env = api_key_env, api_base_env
         super().__init__(
             timeout_seconds=timeout_seconds,
             supported_sandbox_modes=("none", "task", "os", "linux_ns"),
@@ -258,13 +268,15 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
         workspace = task_instance.workspace_dir
         cmd = self._build_os_agent_cmd(workspace, python_executable=OS_SANDBOX_PYTHON)
 
-        extra_env: dict[str, str] | None = self._build_api_env() or None
+        extra_env: dict[str, str] | None = None if self.effective_network_policy == "model-only" else self._build_api_env() or None
 
         mcp_runtime: dict = {}
+        network_runtime: dict = {}
         t0 = time.time()
         assert self._os_sandbox is not None
         success, log, raw_stdout, raw_stderr, image_identity = (
-            self._os_sandbox.run_agent(
+            self._run_os_agent(
+                network_runtime=network_runtime,
                 task_metadata=task_instance.metadata,
                 agent_cmd=cmd,
                 workspace=workspace,
@@ -290,6 +302,7 @@ class CodexCLIAdapter(SubprocessAgentAdapter):
             status = RunStatus.FAILED
 
         return AgentOutput(
+            network_runtime=network_runtime,
             instance_id=task_instance.instance_id,
             mcp_runtime=mcp_runtime or None,
             output_dir=workspace,

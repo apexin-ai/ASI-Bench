@@ -84,7 +84,9 @@ class DirectLLMAdapter(AgentAdapter):
         api_key: str | None = None,
         api_base: str | None = None,
         api_protocol: str | None = None,
+        network_policy: str = "auto",
     ):
+        self._init_network_policy(network_policy)
         self.api_protocol = api_protocol
         if api_base is not None and api_protocol is None:
             raise ValueError(
@@ -117,6 +119,7 @@ class DirectLLMAdapter(AgentAdapter):
             supported_modes=("none", "task", "os", "linux_ns"),
             component=self.__class__.__name__,
         )
+        self._setup_network_policy()
         self.repo_root = Path(config.get("repo_root", self.repo_root))
         self.task_env_manager = (
             TaskEnvironmentManager(self.repo_root)
@@ -152,6 +155,7 @@ class DirectLLMAdapter(AgentAdapter):
             boundary_kind="provider_client_call",
             evidence_status="partial",
         )
+        network_runtime: dict = {}
         t0 = time.time()
         try:
             structured_log.append({
@@ -289,7 +293,7 @@ class DirectLLMAdapter(AgentAdapter):
             (task_instance.workspace_dir / code_file).write_text(code, encoding="utf-8")
 
             exec_t0 = time.time()
-            success, log, raw_stdout, raw_stderr = self._execute(task_instance, code_file)
+            success, log, raw_stdout, raw_stderr = self._execute(task_instance, code_file, network_runtime=network_runtime)
             exec_duration_ms = int((time.time() - exec_t0) * 1000)
             elapsed = time.time() - t0
 
@@ -306,6 +310,7 @@ class DirectLLMAdapter(AgentAdapter):
             structured_log_json = json.dumps(structured_log, ensure_ascii=False)
 
             return AgentOutput(
+                network_runtime=network_runtime or None,
                 instance_id=task_instance.instance_id,
                 output_dir=task_instance.workspace_dir,
                 code_files=code_files,
@@ -365,6 +370,7 @@ class DirectLLMAdapter(AgentAdapter):
             })
             structured_log_json = json.dumps(structured_log, ensure_ascii=False)
             return AgentOutput(
+                network_runtime=network_runtime or None,
                 instance_id=task_instance.instance_id,
                 output_dir=task_instance.workspace_dir,
                 code_files=[],
@@ -474,17 +480,21 @@ class DirectLLMAdapter(AgentAdapter):
             score -= 6
         return score
 
-    def _execute(self, task_instance: TaskInstance, code_file: str) -> tuple[bool, str, str | None, str | None]:
+    def _execute(self, task_instance: TaskInstance, code_file: str, *, network_runtime: dict | None = None) -> tuple[bool, str, str | None, str | None]:
         """Execute the generated code in the workspace."""
         timeout = self._get_effective_timeout(task_instance)
         workspace = task_instance.workspace_dir
         if self.sandbox == "os":
+            if network_runtime is not None:
+                network_runtime.update(requested=self.network_policy, model_transport="host")
             sandbox = OSSandbox(self.repo_root)
             success, log, raw_stdout, raw_stderr, image_identity = sandbox.execute_python(
                 task_instance.metadata,
                 workspace=workspace,
                 code_file=code_file,
                 timeout=timeout,
+                network_policy=self.effective_network_policy,
+                network_runtime=network_runtime,
             )
             self.sandbox_image_identity = image_identity
             return success, log, raw_stdout, raw_stderr
