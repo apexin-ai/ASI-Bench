@@ -1825,3 +1825,16 @@ Lessons — process:
   known request/content types and inline attachments; reject nested hosted
   tools, remote conversation references, URL/file-ID sources and redirects.
 - Main remains at 09939e8 pending a separate merge approval for this task.
+
+## 2026-10-31 — CHGNet MCP deployment completeness
+
+- Commit `2cdf65a`: the catalog's placeholder paths were mistaken for an installed
+  MCP server. Actual AtomisticSkills MatGL server/setup existed, but the prior
+  Docker acceptance recipe lived only in the external artifact workspace.
+- Added a repository-owned Docker recipe, OS instance config, model revision/hash
+  lock and deployment guide. Install the compiler toolchain for upstream source
+  dependencies; use a local `/opt/models/...` checkpoint across isolated HOMEs.
+- Avoid equating a catalog entry or past acceptance run with a deployable image;
+  this is MatGL CHGNet-family, not the original `chgnet` package.
+- Validation: offline fresh-HOME Docker/ASE acceptance 4 passed; MCP E2E regression
+  1294 passed, 37 skipped. No Codex model agent rerun in this change.
