@@ -1794,3 +1794,34 @@ Lessons — process:
   private staging cleaned; runtime-only credentials not retained in evidence.
   No full generate/run/score or broad arbitrary-material certification.
   Main remains 62763e4; no merge/push under this implementation authorization.
+
+## 2026-10-31 — Shared restricted OS network boundary (007752c)
+
+- Problem: only Claude selected model-only by default. Other CLI harnesses
+  retained arbitrary egress for API access; host-only adapters ignored OS mode.
+- Implementation commit: `007752c`. All built-in OS harnesses share the
+  auto/model-only/inherit selector and Docker enforcement/audit. Anthropic
+  Messages, OpenAI Chat and Responses use per-attempt fixed-route Unix relays;
+  real keys stay on the host, and CLI configs/HOME are created in-container.
+- Codex uses HTTP SSE and a generated provider, supports nested local-tool
+  namespaces, and rejects hosted retrieval and remote content. MCP staging
+  must precede relay command wrapping so Codex -c flags reach Codex itself.
+- Direct LLM code gets the same network-none/capability-drop startup check
+  without a model socket. Hermes/CodeWhale reject unsupported OS requests.
+  Antigravity, Google/Vertex and custom CLI homes fail closed rather than
+  silently using open networking. OpenHands requires an image-installed SDK;
+  its helper now reports SDK/dependency failures with a nonzero exit.
+- Real Codex 0.166.0, pi 0.84.3, OpenCode 1.17.15 and installed Claude use local
+  protocol fixtures. Controlled canary is reachable over bridge, unreachable
+  from isolated shell/MCP/code, while local answer.txt=42 and API round trips
+  work. Final Docker/CLI/MCP suite: 164 passed. Fixtures do not certify paid
+  provider availability. Kimi/MiMo/OpenHands have configuration/protocol
+  coverage, not real full-harness certification.
+- Earlier full suite: 4029 passed, 53 skipped, 24 deselected; final expanded
+  suite and branch CI evidence are recorded in the companion artifact repo.
+  Wheel/sdist, strict Twine and clean Python 3.11 installation/import/help pass.
+- Keep protocol allowlists reviewed: provider-hosted tools can bypass an IP
+  boundary through the allowed inference service. Accept only local tools,
+  known request/content types and inline attachments; reject nested hosted
+  tools, remote conversation references, URL/file-ID sources and redirects.
+- Main remains at 09939e8 pending a separate merge approval for this task.
