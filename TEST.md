@@ -1370,3 +1370,13 @@ Codex and pi/OpenCode fixture-driven model/tool round trips. Codex also tests
 offline stdio MCP under the same namespace. No paid model API or reference
 bundle is required. Preinstall the CLIs/curl in those images; the tests never
 install dependencies in running isolated containers.
+
+## CMOS ngspice temporary-directory permissions
+
+Run `uv run --frozen pytest -q tests/test_task_scorer_runtime_regressions.py tests/test_cmos_judge_redaction.py tests/test_public_task_policy.py`.
+For real Docker acceptance, call `_run_ngspice_in_task_image` and
+`_dc_operating_region_report` from Linux scoring processes with effective
+UID/GID 0:0 and 1000:1000, using owner-only (0700) temporary directories and
+synthetic MOS circuits. Both must read the netlist, write owner-matching OP
+vectors and report finite device measurements. No benchmark reference or
+LLM judge is required; keep synthetic circuits outside the public task bundle.

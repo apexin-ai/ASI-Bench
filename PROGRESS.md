@@ -1825,3 +1825,21 @@ Lessons — process:
   known request/content types and inline attachments; reject nested hosted
   tools, remote conversation references, URL/file-ID sources and redirects.
 - Main remains at 09939e8 pending a separate merge approval for this task.
+
+## 2026-11-01 — CMOS scorer ngspice UID/GID (a5c38e0)
+
+- Root-owned TemporaryDirectory mode 0700 prevented the default UID 1000 task
+  image user from opening generated netlists and writing measurements. The
+  misleading ngspice diagnostic was `probe.cir: No such file or directory`.
+- Implementation `a5c38e0` adds only Docker `--user` with the scorer process's
+  effective UID/GID in `_run_ngspice_in_task_image`; shared simulation checks
+  inherit the fix without changing scoring rules or temporary permissions.
+- Reproduced the failure as root, then verified the actual CMOS task image
+  (ngspice 44.2) as root and UID 1000. Both read the generated netlist, wrote
+  owner-matching OP results and produced a valid `_dc_operating_region_report`
+  for a synthetic BSIM4 MOS stage, with matching finite measurements and no
+  unknown devices. No reference bundle, model/Judge call or historical output
+  was used. Related baseline: 6 passed; regression/public-policy: 29 passed.
+- Preserve creator/container identity alignment for owner-only bind mounts;
+  do not loosen temporary-directory permissions to work around this mismatch.
+- Main remains 73457c4 pending a separate approval for this task.
