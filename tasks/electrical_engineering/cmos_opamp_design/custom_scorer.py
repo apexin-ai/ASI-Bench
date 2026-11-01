@@ -77,6 +77,8 @@ def _run_ngspice_in_task_image(work_dir: Path, netlist_name: str, timeout_s: int
         "docker",
         "run",
         "--rm",
+        "--user",
+        f"{os.geteuid()}:{os.getegid()}",
         "-v",
         f"{work_dir.resolve()}:/workspace",
         "-w",
