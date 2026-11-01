@@ -1843,3 +1843,26 @@ Lessons — process:
 - Preserve creator/container identity alignment for owner-only bind mounts;
   do not loosen temporary-directory permissions to work around this mismatch.
 - Main remains 73457c4 pending a separate approval for this task.
+
+## 2026-11-01 — Opt-in helper output persistence (a951cc9)
+
+- Max-3-SAT permits optional helper source, binaries, modules and configuration,
+  but collecting only declared `solver.py` dropped them before persisted outputs
+  reached independent scoring. Implementation `a951cc9` changes exactly two
+  production files: the shared collector and Max-3-SAT metadata.
+- Default collection remains unchanged. Explicit Boolean
+  `output.collect_extra_files: true` adds sorted/deduplicated workspace-relative
+  regular files without introducing helper requirements or changing scoring.
+  Reject symlinks (including parents), escapes and special files; exclude
+  framework/instance inputs and caches from supplemental collection. Declared
+  outputs retain precedence over extra-file exclusions and must be safe files.
+- Baseline 421 passed; red reproduction 5 failed / 4 passed; affected suite
+  430 passed; collection-specific final run 9 passed; full offline-safe suite
+  4059 passed, 54 skipped, 24 deselected. The persistence/staging regression
+  deletes the original workspace before running a solver with a nested module,
+  JSON configuration and real extensionless executable, preserving execute mode.
+  A nested analysis.py still fails the required root entry-point check.
+- Avoid extension/name allowlists for optional helpers and test the full
+  persistence boundary, rather than testing only files in the live workspace.
+  Synthetic tests do not establish a real benchmark score or paid-model run.
+- Main remains at 2d3d5eb pending a separate approval for this task.
