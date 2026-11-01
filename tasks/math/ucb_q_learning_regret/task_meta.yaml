@@ -31,6 +31,9 @@ prompts:
   b2: prompt_b2.md
   b3: prompt_b3.md
   b4: prompt_b4.md
+runtime:
+  packages:
+  - numpy
 input:
   files:
   - name: problem_setup.json
