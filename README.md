@@ -190,6 +190,16 @@ Input declarations are contracts for the instance data root, not literal
 filesystem paths: declarations containing expansions such as `<ii>` are
 supported because the complete materialized `data/` tree is staged.
 
+Subprocess agents normally persist only files declared in `output.files`.
+Tasks that permit optional helper source, modules, configuration or executables
+can set `output.collect_extra_files: true` in `task_meta.yaml` (enabled for
+Max-3-SAT). This adds sorted, deduplicated workspace-relative regular files;
+it does not make helpers mandatory or change entry-point checks or scoring.
+Extra collection excludes symlinks, special files, declared inputs, framework
+files, `data/`, `reference/`, `.ai4sci-bench/`, `.git/`, common caches and `.venv/`.
+Explicit output declarations retain precedence over these extra-file exclusions;
+all collected paths in opt-in mode must remain safe regular workspace files.
+
 Scorers that need the task's declared Python packages opt in with
 `evaluation.runtime: task` in `task_eval.yaml`. Before any scorer starts,
 `score` creates or reuses one cached environment for each unique

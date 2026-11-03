@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import signal as _signal_module
 import hashlib
+import os
+import re
+import stat
 import subprocess
 import time
 from abc import abstractmethod
@@ -67,12 +70,91 @@ def get_task_environment(
 def collect_output_files(
     workspace: Path, task_instance: TaskInstance
 ) -> list[str]:
-    """Collect expected output files that exist in the workspace."""
+    """Collect declared outputs, plus safe helpers for explicitly opted-in tasks.
+
+    Without the opt-in, preserve the legacy declared-file behavior. Extra files
+    never satisfy or relocate a missing required entry point.
+    """
     files = []
     for f in task_instance.metadata.get("output", {}).get("files", []):
         if (workspace / f["name"]).exists():
             files.append(f["name"])
-    return files
+    if task_instance.metadata.get("output", {}).get("collect_extra_files") is not True:
+        return files
+
+    # A framework workspace alias may itself be a symlink. Trust only that root;
+    # every path component *inside* it must be a real directory or regular file.
+    root = workspace.resolve()
+
+    def safe_relative_file(name: str) -> str | None:
+        relative = Path(name)
+        if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+            return None
+        current = root
+        try:
+            for index, part in enumerate(relative.parts):
+                current = current / part
+                mode = current.lstat().st_mode
+                if index == len(relative.parts) - 1:
+                    if not stat.S_ISREG(mode):
+                        return None
+                elif not stat.S_ISDIR(mode):
+                    return None
+            current.resolve().relative_to(root)
+        except (OSError, ValueError, RuntimeError):
+            return None
+        return relative.as_posix()
+
+    excluded_names = {
+        "prompt.md", "task_info.json", "framework_task_info.json",
+        "_ai4sci_task_python", "_ai4sci_task_python.cmd",
+        "data", "reference", ".ai4sci-bench", ".git",
+        "__pycache__", ".cache", ".pytest_cache", ".mypy_cache",
+        ".ruff_cache", ".hypothesis", ".tox", ".nox", ".venv",
+    }
+    input_patterns = []
+    for declaration in task_instance.metadata.get("input", {}).get("files", []):
+        name = declaration["name"]
+        try:
+            name = name.format(**task_instance.parameters)
+        except (KeyError, ValueError, IndexError, AttributeError):
+            # An unexpanded input template must not leak its materialized files.
+            pass
+        path = Path(os.path.normpath(name))
+        if path.is_absolute():
+            try:
+                path = path.relative_to(root)
+            except ValueError:
+                continue
+        pattern = "".join(
+            "[^/]+" if re.fullmatch(r"\{[^{}]+\}|<[^<>]+>", part) else re.escape(part)
+            for part in re.split(r"(\{[^{}]+\}|<[^<>]+>)", path.as_posix())
+        )
+        input_patterns.append(re.compile(r".*" if path == Path(".") else pattern + r"(?:/.*)?"))
+
+    def excluded(relative: Path) -> bool:
+        return (
+            any(part in excluded_names for part in relative.parts)
+            or any(pattern.fullmatch(relative.as_posix()) for pattern in input_patterns)
+        )
+
+    # Declared outputs retain precedence over extra-file exclusions, but opt-in
+    # paths must all be safe regular files. Required-file gates stay unchanged.
+    collected = {relative for name in files if (relative := safe_relative_file(name))}
+    for directory, directories, filenames in os.walk(root, followlinks=False):
+        parent = Path(directory)
+        directories[:] = [
+            name for name in directories
+            if not (parent / name).is_symlink()
+            and not excluded((parent / name).relative_to(root))
+        ]
+        for name in filenames:
+            relative = (parent / name).relative_to(root)
+            if not excluded(relative):
+                safe = safe_relative_file(relative.as_posix())
+                if safe is not None:
+                    collected.add(safe)
+    return sorted(collected)
 
 
 def safe_run_key(run_key: str, max_length: int = 120) -> str:

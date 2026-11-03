@@ -39,6 +39,7 @@ prompts:
 input:
   files: []
 output:
+  collect_extra_files: true
   files:
   - name: solver.py
     type: code

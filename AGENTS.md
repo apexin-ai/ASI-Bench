@@ -252,6 +252,11 @@
   FreeCADCmd/FEM/Xvfb 镜像并显式声明 STEP、FCStd、VTK 输出。不得提交上游
   私有数据、商业软件或许可证。
 
+- 共享 subprocess collector 默认只收集 `output.files`；task 显式设置
+  `output.collect_extra_files: true` 才追加安全普通文件（Max-3-SAT 已启用）。
+  追加路径按工作区相对路径排序去重，排除输入、框架文件、缓存及符号链接/特殊文件；
+  不补齐或移动缺失入口，不改变必交项及评分规则。显式输出优先于追加分支的排除规则。
+
 ## 任务生命周期
 
 - Responses 翻译分支必须保留工具类型、原始 ID 和终止状态；未知字段须明确报错，

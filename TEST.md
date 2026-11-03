@@ -1377,3 +1377,28 @@ See [CHGNet deployment](docs/mcp/chgnet.md) to build `asibench-chgnet:20261031`.
 `uv run --frozen pytest -q tests/mcp_e2e/test_chgnet_deployment.py` checks
 checkpoint integrity and Codex OS config staging. Add `ASIBENCH_CHGNET_DOCKER=1`
 to run offline CPU MCP prediction against an independent ASE backend.
+
+## CMOS ngspice temporary-directory permissions
+
+Run `uv run --frozen pytest -q tests/test_task_scorer_runtime_regressions.py tests/test_cmos_judge_redaction.py tests/test_public_task_policy.py`.
+For real Docker acceptance, call `_run_ngspice_in_task_image` and
+`_dc_operating_region_report` from Linux scoring processes with effective
+UID/GID 0:0 and 1000:1000, using owner-only (0700) temporary directories and
+synthetic MOS circuits. Both must read the netlist, write owner-matching OP
+vectors and report finite device measurements. No benchmark reference or
+LLM judge is required; keep synthetic circuits outside the public task bundle.
+
+## Optional helper output collection
+
+Run `uv run --frozen pytest -q tests/test_output_collection.py` for the explicit
+`output.collect_extra_files: true` contract. Tests cover unchanged default
+collection, sorted/deduplicated relative paths, optional nested source/config
+and extensionless executables, input files/directories/templates, framework and
+cache exclusions, internal/external/broken symlinks and parent symlink traversal,
+path escapes, FIFOs and sockets. A framework workspace-root alias is supported.
+A nested `analysis.py` cannot pass the root entry-point existence check.
+The Max-3-SAT metadata drives a collector → AgentOutput → persisted `.outputs`
+→ fresh local-scoring staging test: the original workspace is deleted before
+running a solver that imports a helper, reads configuration and calls a real
+extensionless executable, whose execute permissions must survive both copies.
+This synthetic regression does not claim a benchmark score or model run.

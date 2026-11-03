@@ -1838,3 +1838,44 @@ Lessons — process:
   this is MatGL CHGNet-family, not the original `chgnet` package.
 - Validation: offline fresh-HOME Docker/ASE acceptance 4 passed; MCP E2E regression
   1294 passed, 37 skipped. No Codex model agent rerun in this change.
+
+## 2026-11-01 — CMOS scorer ngspice UID/GID (a5c38e0)
+
+- Root-owned TemporaryDirectory mode 0700 prevented the default UID 1000 task
+  image user from opening generated netlists and writing measurements. The
+  misleading ngspice diagnostic was `probe.cir: No such file or directory`.
+- Implementation `a5c38e0` adds only Docker `--user` with the scorer process's
+  effective UID/GID in `_run_ngspice_in_task_image`; shared simulation checks
+  inherit the fix without changing scoring rules or temporary permissions.
+- Reproduced the failure as root, then verified the actual CMOS task image
+  (ngspice 44.2) as root and UID 1000. Both read the generated netlist, wrote
+  owner-matching OP results and produced a valid `_dc_operating_region_report`
+  for a synthetic BSIM4 MOS stage, with matching finite measurements and no
+  unknown devices. No reference bundle, model/Judge call or historical output
+  was used. Related baseline: 6 passed; regression/public-policy: 29 passed.
+- Preserve creator/container identity alignment for owner-only bind mounts;
+  do not loosen temporary-directory permissions to work around this mismatch.
+- Main remains 73457c4 pending a separate approval for this task.
+
+## 2026-11-01 — Opt-in helper output persistence (a951cc9)
+
+- Max-3-SAT permits optional helper source, binaries, modules and configuration,
+  but collecting only declared `solver.py` dropped them before persisted outputs
+  reached independent scoring. Implementation `a951cc9` changes exactly two
+  production files: the shared collector and Max-3-SAT metadata.
+- Default collection remains unchanged. Explicit Boolean
+  `output.collect_extra_files: true` adds sorted/deduplicated workspace-relative
+  regular files without introducing helper requirements or changing scoring.
+  Reject symlinks (including parents), escapes and special files; exclude
+  framework/instance inputs and caches from supplemental collection. Declared
+  outputs retain precedence over extra-file exclusions and must be safe files.
+- Baseline 421 passed; red reproduction 5 failed / 4 passed; affected suite
+  430 passed; collection-specific final run 9 passed; full offline-safe suite
+  4059 passed, 54 skipped, 24 deselected. The persistence/staging regression
+  deletes the original workspace before running a solver with a nested module,
+  JSON configuration and real extensionless executable, preserving execute mode.
+  A nested analysis.py still fails the required root entry-point check.
+- Avoid extension/name allowlists for optional helpers and test the full
+  persistence boundary, rather than testing only files in the live workspace.
+  Synthetic tests do not establish a real benchmark score or paid-model run.
+- Main remains at 2d3d5eb pending a separate approval for this task.
