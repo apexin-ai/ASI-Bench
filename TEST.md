@@ -1,5 +1,13 @@
 # Testing
 
+UKF category scoring regressions run with
+`uv run pytest -q tests/test_ukf_category_scorer.py`. When `early_normal` is
+empty, its weight moves to populated `late_normal` (35/0/60/5 with the current
+contract); populated early categories keep their original weights and threshold.
+Tests cover perfect and imperfect tracking, repeated scoring without config
+mutation, and rejection when the late transfer target is also empty. Historical
+scores require reevaluation under this scorer revision; instance data is unchanged.
+
 Integration handoff documents live in `docs/handoff/benchflow.md` and
 `docs/handoff/harbor.md`. When updating them, verify branch/module availability
 and command options against the named source revision; distinguish historical
