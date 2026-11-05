@@ -1410,3 +1410,19 @@ The Max-3-SAT metadata drives a collector → AgentOutput → persisted `.output
 running a solver that imports a helper, reads configuration and calls a real
 extensionless executable, whose execute permissions must survive both copies.
 This synthetic regression does not claim a benchmark score or model run.
+
+### Full-score floating-point endpoints
+
+`normalize_task_score` removes only machine-scale tails at a finite positive
+maximum, after applying `score_divisor`. The absolute tolerance is at most
+`1e-12` normalized score units (`1e-14 * maximum` for smaller score scales).
+Native scoring and Harbor use the same normalization; raw scorer components
+are retained. This does not round ordinary scores or change scientific weights.
+
+```bash
+uv run pytest -q tests/test_score_endpoint_precision.py tests/test_harbor_verify.py tests/test_local_scoring.py
+```
+
+Coverage includes tails above/below full credit, divisors, genuine deductions,
+non-finite/missing scores, invalid/tiny maxima, and actual local/Harbor worker
+results with unchanged raw scorer details.

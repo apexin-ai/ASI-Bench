@@ -45,10 +45,16 @@ def normalize_task_score(
 ) -> tuple[float | None, float]:
     """Normalize a task score and maximum without altering scorer details."""
     divisor = score_divisor(evaluation)
-    return (
-        None if final_score is None else float(final_score) / divisor,
-        float(max_score) / divisor,
-    )
+    normalized = None if final_score is None else float(final_score) / divisor
+    maximum = float(max_score) / divisor
+    # Normalize only machine-scale full-credit tails, on both native and Harbor
+    # paths. Scale down for tiny maxima so zero cannot become full credit.
+    if (normalized is not None and math.isfinite(normalized)
+            and math.isfinite(maximum) and maximum > 0.0):
+        tolerance = min(1e-12, maximum * 1e-14)
+        if math.isclose(normalized, maximum, rel_tol=0.0, abs_tol=tolerance):
+            normalized = maximum
+    return normalized, maximum
 
 
 def failure_score_metadata(

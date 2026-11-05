@@ -260,3 +260,33 @@ def test_harbor_verify_invalid_judge_selector_removes_stale_reward(tmp_path, mon
 
     assert result.exit_code != 0
     assert not (out / "reward.json").exists()
+
+
+@pytest.mark.parametrize('raw_score, expected', [(99.99999999999999, 100.0), (99.999, 99.999)])
+def test_endpoint_precision_matches_local_and_preserves_raw_component(tmp_path, raw_score, expected):
+    task, instance, outputs, out = _paths(tmp_path)
+    (task / 'custom_scorer.py').write_text(f'''
+from ai4sci_bench.core.scorer import Scorer, register_scorer
+from ai4sci_bench.core.types import ScoreDetail
+
+@register_scorer("endpoint_precision_fixture")
+class EndpointPrecisionFixture(Scorer):
+    def score(self, pred_dir, ref_dir, config):
+        return ScoreDetail("endpoint_precision_fixture", {raw_score!r}, 100.0, True, {{}})
+''')
+    (task / 'task_eval.yaml').write_text('''
+task_id: physics.example
+evaluation:
+  gates: []
+  scoring:
+    - scorer: endpoint_precision_fixture
+      weight: 100
+''')
+    local, _ = score_seed31415_results(tmp_path / 'results', tmp_path / 'instances', tmp_path / 'tasks')
+    result = _run(task, instance, outputs, out)
+    assert result.exit_code == 0, result.output
+    detail = json.loads((out / 'score_detail.json').read_text())
+    assert detail['final_score'] == local['results'][0]['final_score'] == expected
+    assert detail['score_results'][0]['score'] == raw_score
+    assert local['results'][0]['score_results'][0]['score'] == raw_score
+    assert json.loads((out / 'reward.json').read_text()) == {'reward': expected / 100.0}
