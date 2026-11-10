@@ -1,0 +1,44 @@
+id: electrical_engineering.vector_pair_limits
+name: Exact sum capacity of a coupled multi-antenna link pair, or not determined
+version: '1.0'
+status: final
+domain: electrical_engineering
+subdomain: wireless_communications
+source:
+  paper: X. Shang, B. Chen, G. Kramer, H. V. Poor, Capacity Regions and Sum-Rate Capacities
+    of Vector Gaussian Interference Channels, arXiv:0907.0472
+  repo: null
+difficulty:
+  estimated_lines: 150-400
+  estimated_time_minutes: 120-360
+  requires_gpu: false
+  requires_network: false
+tags:
+- information_theory
+- interference_channel
+- matrix_analysis
+- sum_capacity
+- abstention
+runtime:
+  python: '>=3.11'
+  packages:
+  - numpy>=1.26
+  - scipy>=1.11
+  - cvxpy>=1.4
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: instances.json
+    type: data
+    description: 62 channel instances; each gives H1,H2,H3,H4 (nr x nt) and S1,S2
+      (nt x nt) as nested [real, imag] pairs
+output:
+  files:
+  - name: results/solution.json
+    type: data
+    description: Per instance, the exact largest total rate in nats, or null where
+      it is not determined

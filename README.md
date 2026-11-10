@@ -819,6 +819,12 @@ Installation, execution, submission, task contribution, catalog, and
 leaderboard documentation are available on the
 [ASI-Bench website](https://asibench.apexin.ai/).
 
+
+The pending [2026-11-10 v2 intake](docs/accepted-v2-20261110.md) adds 15 accepted
+scoring definitions to the source catalog. Its seed31415 payload is prepared
+separately; published dataset counts and historical results above remain those
+of the original 60-task release.
+
 ## License
 
 See [LICENSE](LICENSE).

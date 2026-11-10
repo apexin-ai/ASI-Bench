@@ -1,0 +1,11 @@
+task_id: computer_science.retry_storm_fault_localization
+evaluation:
+  hard_fail_score_mode: zero
+  gates:
+  - scorer: retry_storm_artifact_gate
+    severity: hard
+    config: {}
+  scoring:
+  - scorer: retry_storm_score
+    weight: 100
+    config: {}

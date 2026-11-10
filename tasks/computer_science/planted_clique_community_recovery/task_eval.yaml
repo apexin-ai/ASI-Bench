@@ -1,0 +1,33 @@
+task_id: computer_science.planted_clique_community_recovery
+output:
+  files:
+  - name: analysis.py
+    type: code
+  - name: results/community.csv
+    type: data
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: analysis.py
+      - file: results/community.csv
+  - scorer: code_analysis
+    severity: hard
+    config:
+      target_file: analysis.py
+      checks:
+      - pattern: (?i)__import__\s*\(|importlib\.
+        forbidden: true
+      - pattern: (?i)reference[\/]|community_ref|planted_ref|instance_meta
+        forbidden: true
+  scoring:
+  - scorer: planted_clique_community_score
+    weight: 100
+    config:
+      execute_analysis: true
+      code_file: analysis.py
+      result_file: results/community.csv
+      reference_result_file: community_ref.csv
+      planted_file: planted_ref.json

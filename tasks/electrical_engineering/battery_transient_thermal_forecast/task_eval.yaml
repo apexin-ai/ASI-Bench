@@ -1,0 +1,23 @@
+task_id: electrical_engineering.battery_transient_thermal_forecast
+output:
+  files:
+  - name: results/forecast.csv
+    type: data
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: analysis.py
+      - file: results/forecast.csv
+  - scorer: code_analysis
+    severity: hard
+    config:
+      target_file: analysis.py
+      checks:
+      - pattern: (?i)reference[/\\]|hidden_truth|ground_truth|instance_meta
+        forbidden: true
+  scoring:
+  - scorer: battery_transient_thermal_forecast_v3
+    weight: 100

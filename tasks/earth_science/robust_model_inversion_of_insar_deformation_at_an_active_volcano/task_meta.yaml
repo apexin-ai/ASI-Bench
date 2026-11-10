@@ -1,0 +1,47 @@
+id: earth_science.robust_model_inversion_of_insar_deformation_at_an_active_volcano
+name: Rapid InSAR Deformation Inversion for an Active Volcano
+version: '2.6'
+status: final
+domain: earth_science
+subdomain: geodesy
+tags:
+- insar
+- volcanology
+- inverse_problem
+- mcmc
+difficulty:
+  estimated_lines: 150-350
+  estimated_time_minutes: 4
+  requires_gpu: false
+  requires_network: false
+runtime:
+  python: '>=3.11'
+  packages:
+  - numpy>=1.26
+  - scipy>=1.11
+  - emcee>=3.1
+  - utm>=0.7
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: trident_ref.csv
+    type: data
+    description: Whitespace-delimited 2022-2023 Trident InSAR LOS velocity observations
+output:
+  files:
+  - name: analysis.py
+    type: code
+    description: Complete reproducible inversion
+  - name: model.json
+    type: data
+    description: Variable-length source-component description and parameter intervals
+  - name: modeled_los.npy
+    type: data
+    description: Referenced modeled LOS velocity in input row order
+  - name: timing.json
+    type: data
+    description: Untrusted agent-reported elapsed seconds and timing_source

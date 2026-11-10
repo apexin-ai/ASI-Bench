@@ -1,0 +1,57 @@
+id: materials.fcc_tilt_gb_family
+name: Misorientation scaling across a family of asymmetric <110> tilt grain boundaries
+version: '0.2'
+status: final
+domain: materials
+subdomain: atomistic_mechanics
+source:
+  paper: 'Liu et al., GBClaw: An agentic AI framework for atomistic grain boundary
+    research and mechanistic discovery, arXiv:2610.28629 (2026); protocol adapted,
+    materials and potentials changed'
+  repo: https://github.com/ZhuGroup-GT/GBClaw
+difficulty:
+  estimated_lines: 300-800
+  estimated_time_minutes: 150-400
+  requires_gpu: false
+  requires_network: false
+tags:
+- molecular_statics
+- lammps
+- mcp
+- grain_boundary
+- shear
+- eam
+- comparative_analysis
+runtime:
+  python: '>=3.11'
+  packages:
+  - numpy>=1.26
+  - lammps==2025.7.22.4.0
+  services:
+  - name: lammps
+    image: asibench-lammps:test
+    port: 8765
+    command:
+    - /opt/venv/bin/python
+    - /opt/lammps-mcp/server.py
+    - --transport
+    - streamable-http
+    startup_timeout_seconds: 120
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: params.json
+    type: data
+    description: Five grain-boundary member specifications (element, potential, planes,
+      repeat counts, shear sign, geometry settings), same element and potential throughout.
+output:
+  files:
+  - name: result.json
+    type: data
+    description: Per-member GB energy, peak shear stress, deformation mode and related
+      quantities for all five members, plus two family-level Pearson correlations
+      with misorientation angle.

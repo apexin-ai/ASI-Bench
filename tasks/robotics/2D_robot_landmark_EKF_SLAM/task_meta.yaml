@@ -1,0 +1,57 @@
+id: robotics.2D_robot_landmark_EKF_SLAM
+name: 2D_robot_landmark_EKF_SLAM
+version: '1.0'
+status: final
+domain: robotics
+subdomain: SLAM
+source:
+  paper: null
+  repo: null
+difficulty:
+  requires_gpu: false
+  requires_network: false
+tags: []
+runtime:
+  python: '>=3.11,<3.12'
+  packages:
+  - matplotlib
+  - numpy
+  - scipy
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: data.txt
+    type: text
+    description: alternating observation / control lines, first and last are observations;
+      observation lines are 'm b1 r1 ... bm rm' without landmark IDs after the first
+  - name: params.txt
+    type: text
+    description: five 'name = value;' noise standard deviations
+output:
+  files:
+  - name: solution.py
+    type: code
+  - name: pose.npy
+    type: data
+  - name: pose_cov.npy
+    type: data
+  - name: landmarks.npy
+    type: data
+  - name: landmark_cov.npy
+    type: data
+  - name: state.npy
+    type: data
+  - name: covariance.npy
+    type: data
+  - name: covariance_history.npy
+    type: data
+  - name: motion_jacobian.npy
+    type: data
+  - name: observation_jacobian.npy
+    type: data
+  - name: map.png
+    type: image

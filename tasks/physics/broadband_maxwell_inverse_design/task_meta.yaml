@@ -1,0 +1,49 @@
+id: physics.broadband_maxwell_inverse_design
+name: Fabrication-robust broadband Maxwell inverse design with curvature
+version: '2.2'
+status: final
+domain: physics
+subdomain: computational_electromagnetics
+tags:
+- maxwell-equations
+- inverse-design
+- frequency-domain
+- adjoint-method
+- hessian-vector-product
+- robust-optimization
+- scientific-computing
+difficulty:
+  estimated_lines: 200-500
+  estimated_time_minutes: 60-180
+  requires_gpu: false
+  requires_network: false
+runtime:
+  python: '>=3.12,<3.13'
+  packages:
+  - numpy==2.1.3
+  - scipy==1.14.1
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: problem.npz
+    type: data
+  - name: problem.json
+    type: data
+  - name: model_contract.json
+    type: data
+output:
+  files:
+  - name: fields.npy
+    type: data
+  - name: gradient.npy
+    type: data
+  - name: hvp.npy
+    type: data
+  - name: rho.npy
+    type: data
+  - name: report.json
+    type: data

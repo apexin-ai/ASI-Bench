@@ -1,0 +1,74 @@
+id: earth_science.flood_peak_reconstruction
+name: Flood Peak Reconstruction from Interrupted Stage Records
+version: '1.5'
+status: final
+domain: earth_science
+subdomain: hydrology
+source:
+  paper: null
+  repo: null
+difficulty:
+  estimated_lines: 250-500
+  estimated_time_minutes: 60-120
+  requires_gpu: false
+  requires_network: false
+tags:
+- hydrology
+- flood_routing
+- diffusive_wave
+- inverse_problem
+- incomplete_records
+runtime:
+  python: '>=3.11'
+  packages:
+  - numpy>=2.0
+  - scipy>=1.11
+  - matplotlib>=3.8
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: data/stage_records.csv
+    type: data
+    description: 'Stage records at the four gauges: time_s, then a stage_m column
+      and a valid flag per gauge; stage_m is NaN wherever the flag is 0.'
+  - name: data/forecast_inflow.csv
+    type: data
+    description: Metered upstream reservoir release, pre-event forecast inflow of
+      each tributary, and the basin-mean rainfall series, on the recording time grid.
+  - name: data/reach.json
+    type: data
+    description: Trapezoidal channel geometry, Manning roughness and bed slope, gauge
+      and tributary-junction chainages, tributary inflow length scale, recording settings,
+      and the forecast note.
+  - name: data/task_info.json
+    type: data
+    description: Scored sample indices for the gauges and the propagation section,
+      submission sample times, required output files and column names, and the scoring-component
+      summary.
+output:
+  files:
+  - name: analysis.py
+    type: code
+    description: End-to-end implementation.
+  - name: results/gauge_hydrographs.csv
+    type: data
+    description: Discharge at the scored sample indices of each gauge, columns gauge,sample_index,discharge_m3_s.
+  - name: results/propagation_section.csv
+    type: data
+    description: Discharge at the scored sample indices of the propagation section,
+      columns sample_index,discharge_m3_s.
+  - name: results/tributary_inflow.csv
+    type: data
+    description: Reconstructed tributary inflow on the published sample times, columns
+      time_s,T1_m3_s,T2_m3_s,T3_m3_s,T4_m3_s.
+  - name: results/flood_summary.json
+    type: data
+    description: 'Reported scalars: peak_time_s and peak_discharge_m3_s of the propagation
+      section.'
+  - name: results/diagnostics.png
+    type: figure
+    description: Diagnostic figure.

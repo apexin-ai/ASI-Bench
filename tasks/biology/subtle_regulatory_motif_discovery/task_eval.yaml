@@ -1,0 +1,38 @@
+task_id: biology.subtle_regulatory_motif_discovery
+output:
+  files:
+  - name: analysis.py
+    type: code
+  - name: results/sites.csv
+    type: data
+  - name: results/motif.txt
+    type: data
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: analysis.py
+      - file: results/sites.csv
+      - file: results/motif.txt
+  - scorer: code_analysis
+    severity: hard
+    config:
+      target_file: analysis.py
+      checks:
+      - pattern: (?i)__import__\s*\(|importlib\.
+        forbidden: true
+      - pattern: (?i)reference[\/]|sites_ref|motif_ref|instance_meta
+        forbidden: true
+  scoring:
+  - scorer: subtle_motif_discovery_score
+    weight: 100
+    config:
+      execute_analysis: true
+      code_file: analysis.py
+      sites_file: results/sites.csv
+      reference_sites_file: sites_ref.csv
+      motif_file: results/motif.txt
+      reference_motif_file: motif_ref.txt
+      truth_file: motif_ref.json

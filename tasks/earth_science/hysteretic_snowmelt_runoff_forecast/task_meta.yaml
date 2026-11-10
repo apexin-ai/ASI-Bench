@@ -1,0 +1,54 @@
+id: earth_science.hysteretic_snowmelt_runoff_forecast
+name: Hysteretic Snowmelt Runoff Forecast
+version: '2.1'
+status: final
+domain: earth_science
+subdomain: catchment_hydrology
+source:
+  paper: Anderson, E. A. (1973), National Weather Service River Forecast System—Snow
+    Accumulation and Ablation Model, NOAA Technical Memorandum NWS HYDRO-17.
+  repo: null
+difficulty:
+  estimated_lines: 200-440
+  estimated_time_minutes: 90-180
+  requires_gpu: false
+  requires_network: false
+tags:
+- hydrology
+- snowmelt
+- rainfall_runoff
+- state_space_model
+- forecast_extrapolation
+runtime:
+  image: ai4sci-bench-task:15a585b32d01
+  python: '>=3.11'
+  packages:
+  - numpy>=2.0
+  - pandas>=3.0
+  - scipy>=1.11
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: calibration_hydrograph.csv
+    type: data
+    description: Daily climate forcings and noisy observed runoff over the calibration
+      period.
+  - name: forecast_forcings.csv
+    type: data
+    description: Future daily climate forcings over the withheld forecast period.
+  - name: task_context.json
+    type: data
+    description: Public input fields, units, initial state, calibration-noise scale,
+      forecast objective, and output schema.
+output:
+  files:
+  - name: analysis.py
+    type: code
+    description: Reproducible hydrologic analysis and forecast program.
+  - name: results/forecast.csv
+    type: data
+    description: Predicted daily runoff with columns day and runoff_mm_per_day.

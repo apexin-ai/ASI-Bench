@@ -62,7 +62,22 @@
     "robotics.particle_filter",
     "robotics.rnea_inverse_dynamics_dh",
     "robotics.robust_pose_graph_false_loops",
-    "robotics.ukf_bearing_only_tracking"
+    "robotics.ukf_bearing_only_tracking",
+    "biology.mixed_perturbation_gene_transfer",
+    "biology.subtle_regulatory_motif_discovery",
+    "biostat.adaptive_cohort_transport",
+    "computer_science.generate_conforming_hexahedral_elements_with_planar_faces",
+    "computer_science.planted_clique_community_recovery",
+    "computer_science.retry_storm_fault_localization",
+    "earth_science.flood_peak_reconstruction",
+    "earth_science.hysteretic_snowmelt_runoff_forecast",
+    "earth_science.robust_model_inversion_of_insar_deformation_at_an_active_volcano",
+    "electrical_engineering.battery_transient_thermal_forecast",
+    "electrical_engineering.vector_pair_limits",
+    "finance.robust_arbitrage_free_option_surface",
+    "materials.fcc_tilt_gb_family",
+    "physics.broadband_maxwell_inverse_design",
+    "robotics.2D_robot_landmark_EKF_SLAM"
   ],
   "tasks_with_custom_scorers": [
     "astronomy.nbody_close_encounters",
@@ -121,7 +136,22 @@
     "robotics.occupancy_grid_mapping_correlated_clutter",
     "robotics.particle_filter",
     "robotics.robust_pose_graph_false_loops",
-    "robotics.ukf_bearing_only_tracking"
+    "robotics.ukf_bearing_only_tracking",
+    "biology.mixed_perturbation_gene_transfer",
+    "biology.subtle_regulatory_motif_discovery",
+    "biostat.adaptive_cohort_transport",
+    "computer_science.generate_conforming_hexahedral_elements_with_planar_faces",
+    "computer_science.planted_clique_community_recovery",
+    "computer_science.retry_storm_fault_localization",
+    "earth_science.flood_peak_reconstruction",
+    "earth_science.hysteretic_snowmelt_runoff_forecast",
+    "earth_science.robust_model_inversion_of_insar_deformation_at_an_active_volcano",
+    "electrical_engineering.battery_transient_thermal_forecast",
+    "electrical_engineering.vector_pair_limits",
+    "finance.robust_arbitrage_free_option_surface",
+    "materials.fcc_tilt_gb_family",
+    "physics.broadband_maxwell_inverse_design",
+    "robotics.2D_robot_landmark_EKF_SLAM"
   ],
   "task_helper_files": {
     "computer_science.euclidean_tsp_tour_optimization": [
@@ -138,6 +168,12 @@
     ],
     "electrical_engineering.cmos_opamp_design": [
       "cmos_eval_runtime.py"
+    ],
+    "computer_science.retry_storm_fault_localization": [
+      "retry_storm_eval_runtime.py"
+    ],
+    "physics.broadband_maxwell_inverse_design": [
+      "maxwell_eval_runtime.py"
     ]
   },
   "excluded_private_material": [
@@ -147,5 +183,22 @@
     "reference/**",
     "private_assets/**",
     "reference_solver/**"
-  ]
+  ],
+  "task_source_revisions": {
+    "biostat.adaptive_cohort_transport": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "biology.subtle_regulatory_motif_discovery": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "computer_science.planted_clique_community_recovery": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "computer_science.retry_storm_fault_localization": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "earth_science.flood_peak_reconstruction": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "earth_science.hysteretic_snowmelt_runoff_forecast": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "earth_science.robust_model_inversion_of_insar_deformation_at_an_active_volcano": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "electrical_engineering.battery_transient_thermal_forecast": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "finance.robust_arbitrage_free_option_surface": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "computer_science.generate_conforming_hexahedral_elements_with_planar_faces": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "materials.fcc_tilt_gb_family": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "biology.mixed_perturbation_gene_transfer": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "physics.broadband_maxwell_inverse_design": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "robotics.2D_robot_landmark_EKF_SLAM": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
+    "electrical_engineering.vector_pair_limits": "4906c6ead7bba054ff4b61fd3573349cfcca255d"
+  }
 }

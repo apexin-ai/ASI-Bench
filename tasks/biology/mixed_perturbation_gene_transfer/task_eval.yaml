@@ -1,0 +1,27 @@
+task_id: biology.mixed_perturbation_gene_transfer
+output:
+  files:
+  - name: predictions.npz
+    type: data
+    description: Signed direct-edge weights, prospective intervention trajectories,
+      and top hubs
+  - name: analysis.py
+    type: code
+    description: Reproducible public-input analysis
+  - name: report.md
+    type: text
+    description: Scientific interpretation and validation
+evaluation:
+  runtime: task
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: predictions.npz
+      - file: analysis.py
+      - file: report.md
+  scoring:
+  - scorer: mixed_perturbation_gene_transfer_v1
+    weight: 100
+    config: {}

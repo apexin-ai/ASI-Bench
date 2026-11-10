@@ -1,0 +1,140 @@
+task_id: robotics.2D_robot_landmark_EKF_SLAM
+output:
+  files:
+  - name: solution.py
+    type: code
+  - name: pose.npy
+    type: data
+    shape: '{num_steps+1,3}'
+    dtype: float64
+  - name: pose_cov.npy
+    type: data
+    shape: '{num_steps+1,3,3}'
+    dtype: float64
+  - name: landmarks.npy
+    type: data
+    shape: '{num_landmarks,2}'
+    dtype: float64
+  - name: landmark_cov.npy
+    type: data
+    shape: '{num_landmarks,2,2}'
+    dtype: float64
+  - name: state.npy
+    type: data
+    shape: '{3+2*num_landmarks}'
+    dtype: float64
+  - name: covariance.npy
+    type: data
+    shape: '{3+2*num_landmarks,3+2*num_landmarks}'
+    dtype: float64
+  - name: covariance_history.npy
+    type: data
+    shape: '{num_steps+1,3+2*num_landmarks,3+2*num_landmarks}'
+    dtype: float64
+  - name: motion_jacobian.npy
+    type: data
+    shape: '{num_steps,3,3}'
+    dtype: float64
+  - name: observation_jacobian.npy
+    type: data
+    shape: '{num_steps,num_landmarks,2,5}'
+    dtype: float64
+  - name: map.png
+    type: image
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: soft
+    config:
+      checks:
+      - file: solution.py
+      - file: map.png
+      - file: pose.npy
+        shape: '{num_steps+1,3}'
+        dtype: float64
+      - file: pose_cov.npy
+        shape: '{num_steps+1,3,3}'
+        dtype: float64
+      - file: landmarks.npy
+        shape: '{num_landmarks,2}'
+        dtype: float64
+      - file: landmark_cov.npy
+        shape: '{num_landmarks,2,2}'
+        dtype: float64
+      - file: state.npy
+        shape: '{3+2*num_landmarks}'
+        dtype: float64
+      - file: covariance.npy
+        shape: '{3+2*num_landmarks,3+2*num_landmarks}'
+        dtype: float64
+      - file: covariance_history.npy
+        shape: '{num_steps+1,3+2*num_landmarks,3+2*num_landmarks}'
+        dtype: float64
+      - file: motion_jacobian.npy
+        shape: '{num_steps,3,3}'
+        dtype: float64
+      - file: observation_jacobian.npy
+        shape: '{num_steps,num_landmarks,2,5}'
+        dtype: float64
+  - scorer: moment_contract
+    severity: soft
+    config: {}
+  scoring:
+  - &id001
+    scorer: moment_accuracy
+    weight: 3.75
+    config:
+      kind: trajectory
+      scales:
+      - 0.05
+      - 0.05
+      - 0.01
+      full: 1.0e-06
+      zero: 0.001
+  - &id002
+    scorer: moment_accuracy
+    weight: 3.75
+    config:
+      kind: map
+      scale: 0.05
+      full: 1.0e-06
+      zero: 0.001
+  - &id003
+    scorer: moment_accuracy
+    weight: 7.5
+    config:
+      kind: joint
+      full: 1.0e-06
+      zero: 0.0001
+  - &id004
+    scorer: moment_accuracy
+    weight: 7.5
+    config:
+      kind: jacobian
+      array: motion_jacobian
+      full: 1.0e-06
+      zero: 0.001
+  - &id005
+    scorer: moment_accuracy
+    weight: 7.5
+    config:
+      kind: jacobian
+      array: observation_jacobian
+      full: 1.0e-06
+      zero: 0.001
+  - scorer: runtime_efficiency
+    weight: 70
+    skip_in_gt_selfcheck: true
+    config:
+      entry: solution.py
+      full_seconds: 5
+      limit_seconds: 10
+      check_determinism: true
+      determinism_atol: 1.0e-09
+      determinism_rtol: 1.0e-09
+      accuracy_components:
+      - *id001
+      - *id002
+      - *id003
+      - *id004
+      - *id005
