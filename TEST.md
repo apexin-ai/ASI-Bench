@@ -1,5 +1,13 @@
 # Testing
 
+UKF category scoring regressions run with
+`uv run pytest -q tests/test_ukf_category_scorer.py`. When `early_normal` is
+empty, its weight moves to populated `late_normal` (35/0/60/5 with the current
+contract); populated early categories keep their original weights and threshold.
+Tests cover perfect and imperfect tracking, repeated scoring without config
+mutation, and rejection when the late transfer target is also empty. Historical
+scores require reevaluation under this scorer revision; instance data is unchanged.
+
 Integration handoff documents live in `docs/handoff/benchflow.md` and
 `docs/handoff/harbor.md`. When updating them, verify branch/module availability
 and command options against the named source revision; distinguish historical
@@ -1406,3 +1414,19 @@ This synthetic regression does not claim a benchmark score or model run.
 ## Accepted v2 task publication (2026-11-10)
 
 Run `pytest tests/test_public_task_policy.py tests/test_accepted_finance_replay.py` to check the 75-task catalog allowlists and confirm that finance replay consumes pre-materialized data without a generator. These checks do not constitute model difficulty evaluations.
+
+### Full-score floating-point endpoints
+
+`normalize_task_score` removes only machine-scale tails at a finite positive
+maximum, after applying `score_divisor`. The absolute tolerance is at most
+`1e-12` normalized score units (`1e-14 * maximum` for smaller score scales).
+Native scoring and Harbor use the same normalization; raw scorer components
+are retained. This does not round ordinary scores or change scientific weights.
+
+```bash
+uv run pytest -q tests/test_score_endpoint_precision.py tests/test_harbor_verify.py tests/test_local_scoring.py
+```
+
+Coverage includes tails above/below full credit, divisors, genuine deductions,
+non-finite/missing scores, invalid/tiny maxima, and actual local/Harbor worker
+results with unchanged raw scorer details.

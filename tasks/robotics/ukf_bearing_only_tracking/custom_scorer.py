@@ -7,6 +7,10 @@ truth at timestep indices listed in ``reference/category_masks.json``:
   - ``early_normal``: first normal updates — strict pass-rate gate
   - ``late_normal``: remaining normal updates — continuous error penalty
 
+If a generated instance has no ``early_normal`` samples, its category weight
+is transferred to non-empty ``late_normal`` tracking. Other instances retain
+their configured weights.
+
 State error at timestep ``t`` combines position error (metres) and a smaller
 velocity term (m/s). Covariance histories are scored explicitly rather than as
 a hidden multiplier, so a wrong uncertainty convention cannot zero otherwise
@@ -164,6 +168,17 @@ class UKFBearingCategoryScorer(Scorer):
 
         with open(ref_dir / masks_file, encoding="utf-8") as fh:
             masks = json.load(fh)
+
+        # Some trajectories stay near the angle discontinuity for the whole
+        # early window. Keep their full score attainable without free credit.
+        categories = [dict(cat) for cat in categories]
+        early = next((cat for cat in categories if cat["mask_key"] == "early_normal"), None)
+        if early is not None and not masks.get("early_normal", []):
+            late = next((cat for cat in categories if cat["mask_key"] == "late_normal"), None)
+            if late is None or not masks.get("late_normal", []):
+                raise ValueError("Cannot transfer empty early weight: late_normal has no scoring evidence")
+            late["score"] = float(late["score"]) + float(early["score"])
+            early["score"] = 0.0
 
         total_available = 0.0
         total_earned = 0.0

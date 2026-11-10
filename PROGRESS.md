@@ -1883,3 +1883,19 @@ Lessons — process:
 ## 2026-11-10 — accepted v2 public intake
 
 Commit `611b2cc` adds 15 accepted scorer contracts without prompt/GT source. Option-surface replay had depended on a private generator at scoring time; it now consumes a materialized replay reference bundle, retaining weights and thresholds. Exact evaluator helper allowlists and 25 publication/replay checks prevent recurrence. Seed31415 data is prepared outside the public Git repository and requires separate publication.
+
+## 2026-11-05: Machine-precision full-score endpoints
+
+- Fix commit: `ed94de043217d3a49f0f5945c5de1ba065f552a7`.
+- Exact-reference scientific scoring could return `99.99999999999999` after
+  weighted arithmetic; Harbor then emitted reward `0.9999999999999999`.
+- Shared `normalize_task_score` now normalizes only finite full-score endpoint
+  tails within `min(1e-12, normalized_maximum * 1e-14)`, retaining raw scorer
+  details. Native and Harbor callers use the same behavior.
+- Baseline: 124 tests passed. Reproduction: 6 failed / 15 passed before the fix.
+  After the fix: 185 related tests passed. Native CLI and real Docker Harbor
+  oracle both scored the two affected seed31415 tasks at B1–B4 exactly 100
+  (Harbor reward 1); input/reference/scientific scorer bytes were unchanged.
+- Evidence and isolated build/run scripts remain in the separate artifacts
+  repository, `internal/harbor-oracle/endpoint-precision-20261105/`.
+  No main integration, push or HF change was performed.
