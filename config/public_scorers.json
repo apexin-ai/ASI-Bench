@@ -183,22 +183,5 @@
     "reference/**",
     "private_assets/**",
     "reference_solver/**"
-  ],
-  "task_source_revisions": {
-    "biostat.adaptive_cohort_transport": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "biology.subtle_regulatory_motif_discovery": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "computer_science.planted_clique_community_recovery": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "computer_science.retry_storm_fault_localization": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "earth_science.flood_peak_reconstruction": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "earth_science.hysteretic_snowmelt_runoff_forecast": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "earth_science.robust_model_inversion_of_insar_deformation_at_an_active_volcano": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "electrical_engineering.battery_transient_thermal_forecast": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "finance.robust_arbitrage_free_option_surface": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "computer_science.generate_conforming_hexahedral_elements_with_planar_faces": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "materials.fcc_tilt_gb_family": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "biology.mixed_perturbation_gene_transfer": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "physics.broadband_maxwell_inverse_design": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "robotics.2D_robot_landmark_EKF_SLAM": "4906c6ead7bba054ff4b61fd3573349cfcca255d",
-    "electrical_engineering.vector_pair_limits": "4906c6ead7bba054ff4b61fd3573349cfcca255d"
-  }
+  ]
 }
