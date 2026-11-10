@@ -232,4 +232,3 @@ class PlantedCliqueCommunityScorer(Scorer):
         scaled = raw * weight / 100.0
         return ScoreDetail(scorer_name=name, score=float(scaled), max_score=weight, passed=True,
                            details=details, message=f"planted-community credit {final:.4f} → score {raw:.2f}/100")
-

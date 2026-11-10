@@ -1879,3 +1879,7 @@ Lessons — process:
   persistence boundary, rather than testing only files in the live workspace.
   Synthetic tests do not establish a real benchmark score or paid-model run.
 - Main remains at 2d3d5eb pending a separate approval for this task.
+
+## 2026-11-10 — accepted v2 public intake
+
+Commit `611b2cc` adds 15 accepted scorer contracts without prompt/GT source. Option-surface replay had depended on a private generator at scoring time; it now consumes a materialized replay reference bundle, retaining weights and thresholds. Exact evaluator helper allowlists and 25 publication/replay checks prevent recurrence. Seed31415 data is prepared outside the public Git repository and requires separate publication.
