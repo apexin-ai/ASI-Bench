@@ -1,0 +1,70 @@
+id: computer_science.retry_storm_fault_localization
+name: Distributed Retry-Storm Causal Diagnosis
+version: '1.0'
+status: final
+domain: computer_science
+subdomain: distributed_systems
+tags:
+- agentic-systems
+- distributed-systems
+- fault-localization
+- retry-storm
+- request-hedging
+- partial-observability
+- distribution-shift
+- tool-use
+- causal-reasoning
+difficulty:
+  estimated_lines: 250-700
+  estimated_time_minutes: 120-240
+  requires_gpu: false
+  requires_network: false
+runtime:
+  python: '>=3.11,<3.13'
+  packages:
+  - PyYAML==6.0.3
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: data/topology.yaml
+    type: data
+  - name: data/configs/runtime.yaml
+    type: data
+  - name: data/workload.csv
+    type: data
+  - name: data/metrics.csv
+    type: data
+  - name: data/rpc_metrics.csv
+    type: data
+  - name: data/traces.jsonl
+    type: data
+  - name: data/baseline_summary.json
+    type: data
+  - name: data/evaluation_contract.json
+    type: data
+  - name: data/simulation_manifest.json
+    type: data
+  - name: data/remediation_schema.json
+    type: data
+  - name: data/simulator_core.py
+    type: code
+  - name: data/run_simulator.py
+    type: code
+output:
+  files:
+  - name: diagnosis.json
+    type: data
+  - name: remediation.yaml
+    type: data
+  - name: counterfactuals.json
+    type: data
+  - name: analysis.py
+    type: code
+  - name: results/summary.json
+    type: data
+  - name: results/counterfactual_metrics.csv
+    type: data

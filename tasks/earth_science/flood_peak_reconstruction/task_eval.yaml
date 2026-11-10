@@ -1,0 +1,43 @@
+task_id: earth_science.flood_peak_reconstruction
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: analysis.py
+      - file: results/gauge_hydrographs.csv
+      - file: results/propagation_section.csv
+      - file: results/tributary_inflow.csv
+      - file: results/flood_summary.json
+      - file: results/diagnostics.png
+  - scorer: code_analysis
+    severity: hard
+    config:
+      target_file: analysis.py
+      checks:
+      - forbidden_imports:
+        - sympy
+        - mpmath
+        - sklearn
+        - jax
+        - torch
+        - tensorflow
+        - cvxpy
+        - casadi
+        - pysindy
+        - statsmodels
+        - pymc
+      - pattern: (?i)__import__\s*\(|importlib\.
+        forbidden: true
+      - pattern: (?i)reference[\/]|public_ref|instance_meta|flood_model\.py|flood_baselines\.py|(?:import|from)\s+flood_(?:model|baselines)|generate[_]gt
+        forbidden: true
+  scoring:
+  - scorer: flood_peak_reconstruction_score
+    weight: 100
+    config:
+      hydrograph_file: results/gauge_hydrographs.csv
+      propagation_file: results/propagation_section.csv
+      inflow_file: results/tributary_inflow.csv
+      summary_file: results/flood_summary.json
+      figure_file: results/diagnostics.png

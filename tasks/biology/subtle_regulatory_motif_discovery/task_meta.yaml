@@ -1,0 +1,62 @@
+id: biology.subtle_regulatory_motif_discovery
+name: Subtle Transcription-Factor Binding-Motif Discovery
+version: '1.0'
+status: final
+domain: biology
+subdomain: bioinformatics
+source:
+  paper: 'Pavel A. Pevzner and Sing-Hoi Sze (2000). Combinatorial approaches to finding
+    subtle signals in DNA sequences. Proc. ISMB 8, 269-278; Uri Keich and Pavel A.
+    Pevzner (2002). Subtle motifs: defining the limits of motif finding algorithms.
+    Bioinformatics 18(10), 1382-1390. DOI: 10.1093/bioinformatics/18.10.1382'
+  repo: null
+difficulty:
+  estimated_lines: 80-250
+  estimated_time_minutes: 30-120
+  requires_gpu: false
+  requires_network: false
+tags:
+- motif_discovery
+- transcription_factor_binding_sites
+- planted_motif
+- gene_regulation
+- bioinformatics
+- combinatorial_search
+- sequence_analysis
+runtime:
+  python: '>=3.11'
+  packages:
+  - numpy>=1.26
+  - scipy>=1.11
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: data/promoters.fa
+    type: data
+    description: 40 DNA sequences of 1000 bp in FASTA format (headers seq_00..seq_39,
+      one sequence line per record, alphabet ACGT).
+  - name: data/task_info.json
+    type: data
+    description: 'JSON object, all fields required: n_sequences (int), sequence_length
+      (int), motif_length (int), mismatches (int), alphabet (str), model {name, background,
+      sites, positions} (str each), output_schema {sites_table, motif_file, analysis.py}
+      (str each).'
+output:
+  files:
+  - name: analysis.py
+    type: code
+    description: Required. Deterministic Python 3.11+ script (numpy/scipy/stdlib only,
+      no network) run as `python analysis.py` from the workspace root; regenerates
+      both result files from data/ within 20 minutes on one CPU.
+  - name: results/sites.csv
+    type: data
+    description: Required. Header exactly seq_id,start; one row per sequence in file
+      order seq_00..seq_39; start = 0-based integer site start in [0, 970].
+  - name: results/motif.txt
+    type: data
+    description: 'Required. One line: the consensus motif, exactly 30 characters from
+      ACGT.'

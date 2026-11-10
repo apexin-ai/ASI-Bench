@@ -1,0 +1,137 @@
+task_id: finance.robust_arbitrage_free_option_surface
+output:
+  files:
+  - name: analysis.py
+    type: code
+  - name: results/query_surface.csv
+    type: data
+  - name: results/quote_diagnostics.csv
+    type: data
+  - name: results/arbitrage_audit.json
+    type: data
+  - name: results/surface_diagnostics.png
+    type: figure
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: analysis.py
+      - file: results/query_surface.csv
+      - file: results/quote_diagnostics.csv
+      - file: results/arbitrage_audit.json
+      - file: results/surface_diagnostics.png
+  - scorer: code_analysis
+    severity: hard
+    config:
+      target_file: analysis.py
+      scoring_mode: all_or_nothing
+      checks:
+      - forbidden_imports:
+        - QuantLib
+        - py_vollib
+        - yfinance
+        - tensorflow
+        - torch
+        - jax
+      - pattern: (?i)__import__\s*\(|importlib\.
+        forbidden: true
+      - pattern: (?i)reference[\/]|query_surface_ref|quote_diagnostics_ref|model_parameters_ref|instance_meta
+        forbidden: true
+  - scorer: option_surface_contract
+    severity: hard
+    config:
+      pred_file: results/query_surface.csv
+      ref_file: query_surface_ref.csv
+      quote_file: results/quote_diagnostics.csv
+      reference_quote_file: quote_diagnostics_ref.csv
+      audit_file: results/arbitrage_audit.json
+      figure_file: results/surface_diagnostics.png
+  scoring:
+  - scorer: option_surface_query_accuracy
+    weight: 10.5
+    config:
+      pred_file: results/query_surface.csv
+      ref_file: query_surface_ref.csv
+      full_price_error: 0.004
+      zero_price_error: 0.075
+      full_variance_error: 0.006
+      zero_variance_error: 0.12
+      full_iv_error: 0.003
+      zero_iv_error: 0.06
+  - scorer: option_surface_distribution_accuracy
+    weight: 19.25
+    config:
+      pred_file: results/query_surface.csv
+      ref_file: query_surface_ref.csv
+      query_file: data/query_grid.csv
+      full_l1_error: 0.007
+      zero_l1_error: 0.025
+      full_mass_error: 0.001
+      zero_mass_error: 0.02
+      full_digital_error: 0.0004
+      zero_digital_error: 0.0012
+      full_tail_digital_error: 0.00015
+      zero_tail_digital_error: 0.00035
+  - scorer: option_surface_quote_fit
+    weight: 1.75
+    config:
+      pred_file: results/quote_diagnostics.csv
+      ref_file: quote_diagnostics_ref.csv
+      quotes_file: data/quotes.csv
+      full_interval_error: 0.03
+      zero_interval_error: 1.75
+      full_true_price_error: 0.04
+      zero_true_price_error: 1.1
+  - scorer: option_surface_outlier_detection
+    weight: 1.05
+    config:
+      pred_file: results/quote_diagnostics.csv
+      ref_file: quote_diagnostics_ref.csv
+      full_auc: 0.97
+      zero_auc: 0.55
+      full_average_precision: 0.85
+      zero_average_precision: 0.12
+  - scorer: option_surface_arbitrage
+    weight: 1.75
+    config:
+      pred_file: results/query_surface.csv
+      ref_file: query_surface_ref.csv
+      query_file: data/query_grid.csv
+      full_bound_error: 1.0e-08
+      zero_bound_error: 0.002
+      full_monotonicity_error: 1.0e-08
+      zero_monotonicity_error: 0.002
+      full_convexity_error: 2.0e-06
+      zero_convexity_error: 0.08
+      full_calendar_error: 1.0e-08
+      zero_calendar_error: 0.04
+      full_density_negative_mass: 1.0e-08
+      zero_density_negative_mass: 0.08
+      full_consistency_error: 2.0e-05
+      zero_consistency_error: 0.08
+      full_digital_monotonicity_error: 1.0e-08
+      zero_digital_monotonicity_error: 0.03
+      full_digital_consistency_error: 0.0015
+      zero_digital_consistency_error: 0.08
+  - scorer: file_match
+    weight: 0.7
+    config:
+      scoring_mode: per_check
+      checks:
+      - file: analysis.py
+      - file: results/query_surface.csv
+      - file: results/quote_diagnostics.csv
+      - file: results/arbitrage_audit.json
+      - file: results/surface_diagnostics.png
+  - scorer: option_surface_hidden_replay_generalization
+    weight: 65
+    skip_in_gt_selfcheck: true
+    config:
+      analysis_file: analysis.py
+      timeout_seconds: 2400
+      zero_replay_score: 0.8
+      full_replay_score: 0.95
+      replay_ids:
+      - replay_1

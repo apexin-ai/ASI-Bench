@@ -1,0 +1,19 @@
+task_id: electrical_engineering.vector_pair_limits
+output:
+  files:
+  - name: results/solution.json
+    type: data
+    dtype: json
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: results/solution.json
+  scoring:
+  - scorer: custom
+    weight: 100
+    config:
+      script: custom_scorer.py
+      rel_tol: 1.0e-06

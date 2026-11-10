@@ -1,0 +1,45 @@
+id: biostat.adaptive_cohort_transport
+name: Adaptive cohort transport from pooled-reference experiments
+version: '1.0'
+status: final
+domain: biostat
+subdomain: ''
+source:
+  paper: null
+  repo: null
+difficulty:
+  requires_gpu: false
+  requires_network: false
+tags: []
+runtime:
+  python: '>=3.12,<3.13'
+  packages:
+  - numpy==2.3.5
+  - scipy==1.16.3
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: study.json
+    type: data
+    description: Experimental definitions and cohort preparation catalogs
+  - name: experiments.json
+    type: data
+    description: Pooled-reference ratios and absolute anchor
+  - name: policies.json
+    type: data
+    description: Adaptive treatment policies
+output:
+  files:
+  - name: predictions.json
+    type: data
+    description: Policy forecasts and calibration ratios
+  - name: analysis.py
+    type: code
+    description: Reproducible analysis
+  - name: report.md
+    type: text
+    description: Scientific interpretation

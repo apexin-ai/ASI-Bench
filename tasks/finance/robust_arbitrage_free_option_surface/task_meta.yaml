@@ -1,0 +1,89 @@
+id: finance.robust_arbitrage_free_option_surface
+name: Robust Arbitrage-Free Option Surface Reconstruction
+version: '2.8'
+status: final
+domain: finance
+subdomain: computational_finance
+source:
+  paper: Yin and Zhu (2010), Hybrid Switching Diffusions; Breeden and Litzenberger
+    (1978), Prices of State-Contingent Claims Implicit in Option Prices
+  repo: null
+difficulty:
+  estimated_lines: 650-950
+  estimated_time_minutes: 120-210
+  requires_gpu: false
+  requires_network: false
+tags:
+- option_pricing
+- volatility_surface
+- inverse_problem
+- robust_statistics
+- high_breakdown_consensus
+- mixture_regression
+- hidden_replay_generalization
+- no_arbitrage
+- risk_neutral_density
+- local_volatility
+- regime_switching
+- hidden_markov_model
+- fokker_planck
+- numerical_pde
+- digital_option
+runtime:
+  python: '>=3.11'
+  packages:
+  - numpy>=2.0
+  - scipy>=1.11
+  - pandas>=2.0
+  - matplotlib>=3.8
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: data/quotes.csv
+    type: data
+    shape:
+    - null
+    - 8
+    dtype: mixed
+    description: Sparse European call bid/ask quotes with quote_id, maturity, log_moneyness,
+      strike, forward, discount_factor, bid, and ask.
+  - name: data/query_grid.csv
+    type: data
+    shape:
+    - null
+    - 6
+    dtype: mixed
+    description: Rectangular audit/query grid with query_id, maturity, log_moneyness,
+      strike, forward, and discount_factor.
+  - name: data/market_meta.json
+    type: data
+    shape: null
+    dtype: json
+    description: Pricing conventions, units, schemas, and the complete public seven-state
+      Markov-modulated local-variance target-family contract.
+output:
+  files:
+  - name: analysis.py
+    type: code
+    description: End-to-end offline reconstruction program that reads data/ and writes
+      every required result.
+  - name: results/query_surface.csv
+    type: data
+    description: One row per query_id with call_price, implied_volatility, total_variance,
+      risk_neutral_density, and digital_survival_probability.
+  - name: results/quote_diagnostics.csv
+    type: data
+    description: One row per quote_id with fitted_call_price, standardized_residual,
+      and an outlier_score in [0,1].
+  - name: results/arbitrage_audit.json
+    type: data
+    description: Self-reported numerical audit; the scorer independently recomputes
+      every scored condition.
+  - name: results/surface_diagnostics.png
+    type: figure
+    description: Legible diagnostic figure showing quotes, fitted smiles/surface,
+      density, and flagged observations.

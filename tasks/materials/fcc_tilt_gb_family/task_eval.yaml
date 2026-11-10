@@ -1,0 +1,17 @@
+task_id: materials.fcc_tilt_gb_family
+output:
+  files:
+  - name: result.json
+    type: data
+evaluation:
+  runtime: task
+  gates:
+  - scorer: gb_family_schema
+    severity: hard
+    config: {}
+  scoring:
+  - scorer: gb_family_numeric
+    weight: 100
+    config:
+      pred_file: result.json
+      ref_file: reference.json

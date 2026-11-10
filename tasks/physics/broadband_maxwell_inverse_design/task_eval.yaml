@@ -1,0 +1,67 @@
+task_id: physics.broadband_maxwell_inverse_design
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      scoring_mode: all_or_nothing
+      checks:
+      - file: fields.npy
+        shape:
+        - 3
+        - 2
+        - 2
+        - 24
+        - 32
+        dtype: float64
+      - file: gradient.npy
+        shape:
+        - 24
+        - 32
+        dtype: float64
+      - file: hvp.npy
+        shape:
+        - 24
+        - 32
+        dtype: float64
+      - file: rho.npy
+        shape:
+        - 24
+        - 32
+        dtype: float64
+      - file: report.json
+      - check: no_nan_inf
+      - check: value_range
+        file: rho.npy
+        min: 0.0
+        max: 1.0
+  scoring:
+  - scorer: maxwell_scientific
+    weight: 100
+    config: {}
+output:
+  files:
+  - name: fields.npy
+    shape:
+    - 3
+    - 2
+    - 2
+    - 24
+    - 32
+    dtype: float64
+  - name: gradient.npy
+    shape:
+    - 24
+    - 32
+    dtype: float64
+  - name: hvp.npy
+    shape:
+    - 24
+    - 32
+    dtype: float64
+  - name: rho.npy
+    shape:
+    - 24
+    - 32
+    dtype: float64
+  - name: report.json

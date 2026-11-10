@@ -1,0 +1,26 @@
+task_id: biostat.adaptive_cohort_transport
+output:
+  files:
+  - name: predictions.json
+    type: data
+    description: Policy forecasts and calibration ratios
+  - name: analysis.py
+    type: code
+    description: Reproducible analysis
+  - name: report.md
+    type: text
+    description: Scientific interpretation
+evaluation:
+  runtime: task
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: predictions.json
+      - file: analysis.py
+      - file: report.md
+  scoring:
+  - scorer: adaptive_cohort_transport_v1
+    weight: 100
+    config: {}

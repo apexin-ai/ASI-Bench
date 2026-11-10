@@ -1,0 +1,46 @@
+id: biology.mixed_perturbation_gene_transfer
+name: Mixed-Perturbation Gene Regulatory Network Inference and Transfer
+version: '1.0'
+status: final
+domain: biology
+subdomain: Gene Networks
+source:
+  paper: null
+  repo: null
+difficulty:
+  requires_gpu: false
+  requires_network: false
+tags: []
+runtime:
+  python: '>=3.12,<3.13'
+  packages:
+  - numpy==2.3.5
+  - scipy==1.16.3
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: study.json
+    type: data
+    description: Study contract and measurement definitions
+  - name: observations.npz
+    type: data
+    description: Calibration observations
+  - name: experiments.json
+    type: data
+    description: Intervention mapping and prediction protocols
+output:
+  files:
+  - name: predictions.npz
+    type: data
+    description: Signed direct-edge weights, prospective intervention trajectories,
+      and top hubs
+  - name: analysis.py
+    type: code
+    description: Reproducible public-input analysis
+  - name: report.md
+    type: text
+    description: Scientific interpretation and validation

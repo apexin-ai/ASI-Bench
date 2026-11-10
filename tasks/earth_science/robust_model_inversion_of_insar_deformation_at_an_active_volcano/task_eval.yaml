@@ -1,0 +1,446 @@
+task_id: earth_science.robust_model_inversion_of_insar_deformation_at_an_active_volcano
+output:
+  files:
+  - name: timing.json
+  - name: analysis.py
+  - name: model.json
+  - name: modeled_los.npy
+    shape:
+    - 1321
+    dtype: float64
+evaluation:
+  hard_fail_score_mode: zero
+  gates:
+  - scorer: trident_reported_time
+    severity: hard
+    config: {}
+  - scorer: trident_completion
+    severity: hard
+    skip_in_gt_selfcheck: true
+    config: {}
+  - scorer: file_match
+    severity: hard
+    skip_in_gt_selfcheck: true
+    config:
+      checks:
+      - file: timing.json
+      - file: analysis.py
+      - file: model.json
+      - file: modeled_los.npy
+        shape:
+        - 1321
+        dtype: float64
+      - check: no_nan_inf
+  - scorer: trident_model_consistency
+    severity: soft
+    skip_in_gt_selfcheck: true
+    config:
+      model_file: model.json
+      modeled_file: modeled_los.npy
+      scoring_data_file: scoring_data.npz
+      max_relative_l2: 0.03
+  scoring:
+  - scorer: trident_time_deducted
+    weight: 20
+    skip_in_gt_selfcheck: true
+    config:
+      base_scorer: trident_model_consistency
+      model_file: model.json
+      modeled_file: modeled_los.npy
+      scoring_data_file: scoring_data.npz
+      scoring: linear_interpolation
+      full_score_threshold: 0.002
+      zero_score_threshold: 0.15
+      all_components:
+      - scorer: trident_model_consistency
+        weight: 20
+        config:
+          model_file: model.json
+          modeled_file: modeled_los.npy
+          scoring_data_file: scoring_data.npz
+          scoring: linear_interpolation
+          full_score_threshold: 0.002
+          zero_score_threshold: 0.15
+      - scorer: trident_los_plateau
+        weight: 20
+        config:
+          metric: relative_l2
+          pred_file: modeled_los.npy
+          ref_file: observed_los.npy
+          scoring: piecewise_linear_plateau
+          full_score_threshold: 0.05
+          half_score_start: 0.08
+          half_score_end: 0.12
+          zero_score_threshold: 0.7
+      - scorer: trident_locations
+        weight: 40
+        config:
+          model_file: model.json
+          target_file: source_target.npy
+          full_tolerances:
+          - - 500
+            - 500
+            - 500
+          - - 1000
+            - 1000
+            - 1500
+          zero_tolerances:
+          - - 6000
+            - 6000
+            - 4000
+          - - 8000
+            - 8000
+            - 6000
+      - scorer: trident_finite_inference
+        weight: 10
+        config:
+          model_file: model.json
+      - scorer: trident_geometry
+        weight: 10
+        config:
+          model_file: model.json
+          target_file: source_target.npy
+          indices:
+          - 8
+          - 9
+          - 10
+          - 11
+          full_tolerances:
+          - 2000
+          - 1000
+          - 30
+          - 25
+          zero_tolerances:
+          - 10000
+          - 5000
+          - 90
+          - 60
+          circular_periods:
+            '10': 180
+  - scorer: trident_time_deducted
+    weight: 20
+    config:
+      base_scorer: trident_los_plateau
+      metric: relative_l2
+      pred_file: modeled_los.npy
+      ref_file: observed_los.npy
+      scoring: piecewise_linear_plateau
+      full_score_threshold: 0.05
+      half_score_start: 0.08
+      half_score_end: 0.12
+      zero_score_threshold: 0.7
+      all_components:
+      - scorer: trident_model_consistency
+        weight: 20
+        config:
+          model_file: model.json
+          modeled_file: modeled_los.npy
+          scoring_data_file: scoring_data.npz
+          scoring: linear_interpolation
+          full_score_threshold: 0.002
+          zero_score_threshold: 0.15
+      - scorer: trident_los_plateau
+        weight: 20
+        config:
+          metric: relative_l2
+          pred_file: modeled_los.npy
+          ref_file: observed_los.npy
+          scoring: piecewise_linear_plateau
+          full_score_threshold: 0.05
+          half_score_start: 0.08
+          half_score_end: 0.12
+          zero_score_threshold: 0.7
+      - scorer: trident_locations
+        weight: 40
+        config:
+          model_file: model.json
+          target_file: source_target.npy
+          full_tolerances:
+          - - 500
+            - 500
+            - 500
+          - - 1000
+            - 1000
+            - 1500
+          zero_tolerances:
+          - - 6000
+            - 6000
+            - 4000
+          - - 8000
+            - 8000
+            - 6000
+      - scorer: trident_finite_inference
+        weight: 10
+        config:
+          model_file: model.json
+      - scorer: trident_geometry
+        weight: 10
+        config:
+          model_file: model.json
+          target_file: source_target.npy
+          indices:
+          - 8
+          - 9
+          - 10
+          - 11
+          full_tolerances:
+          - 2000
+          - 1000
+          - 30
+          - 25
+          zero_tolerances:
+          - 10000
+          - 5000
+          - 90
+          - 60
+          circular_periods:
+            '10': 180
+  - scorer: trident_time_deducted
+    weight: 40
+    skip_in_gt_selfcheck: true
+    config:
+      base_scorer: trident_locations
+      model_file: model.json
+      target_file: source_target.npy
+      full_tolerances:
+      - - 500
+        - 500
+        - 500
+      - - 1000
+        - 1000
+        - 1500
+      zero_tolerances:
+      - - 6000
+        - 6000
+        - 4000
+      - - 8000
+        - 8000
+        - 6000
+      all_components:
+      - scorer: trident_model_consistency
+        weight: 20
+        config:
+          model_file: model.json
+          modeled_file: modeled_los.npy
+          scoring_data_file: scoring_data.npz
+          scoring: linear_interpolation
+          full_score_threshold: 0.002
+          zero_score_threshold: 0.15
+      - scorer: trident_los_plateau
+        weight: 20
+        config:
+          metric: relative_l2
+          pred_file: modeled_los.npy
+          ref_file: observed_los.npy
+          scoring: piecewise_linear_plateau
+          full_score_threshold: 0.05
+          half_score_start: 0.08
+          half_score_end: 0.12
+          zero_score_threshold: 0.7
+      - scorer: trident_locations
+        weight: 40
+        config:
+          model_file: model.json
+          target_file: source_target.npy
+          full_tolerances:
+          - - 500
+            - 500
+            - 500
+          - - 1000
+            - 1000
+            - 1500
+          zero_tolerances:
+          - - 6000
+            - 6000
+            - 4000
+          - - 8000
+            - 8000
+            - 6000
+      - scorer: trident_finite_inference
+        weight: 10
+        config:
+          model_file: model.json
+      - scorer: trident_geometry
+        weight: 10
+        config:
+          model_file: model.json
+          target_file: source_target.npy
+          indices:
+          - 8
+          - 9
+          - 10
+          - 11
+          full_tolerances:
+          - 2000
+          - 1000
+          - 30
+          - 25
+          zero_tolerances:
+          - 10000
+          - 5000
+          - 90
+          - 60
+          circular_periods:
+            '10': 180
+  - scorer: trident_time_deducted
+    weight: 10
+    skip_in_gt_selfcheck: true
+    config:
+      base_scorer: trident_finite_inference
+      model_file: model.json
+      all_components:
+      - scorer: trident_model_consistency
+        weight: 20
+        config:
+          model_file: model.json
+          modeled_file: modeled_los.npy
+          scoring_data_file: scoring_data.npz
+          scoring: linear_interpolation
+          full_score_threshold: 0.002
+          zero_score_threshold: 0.15
+      - scorer: trident_los_plateau
+        weight: 20
+        config:
+          metric: relative_l2
+          pred_file: modeled_los.npy
+          ref_file: observed_los.npy
+          scoring: piecewise_linear_plateau
+          full_score_threshold: 0.05
+          half_score_start: 0.08
+          half_score_end: 0.12
+          zero_score_threshold: 0.7
+      - scorer: trident_locations
+        weight: 40
+        config:
+          model_file: model.json
+          target_file: source_target.npy
+          full_tolerances:
+          - - 500
+            - 500
+            - 500
+          - - 1000
+            - 1000
+            - 1500
+          zero_tolerances:
+          - - 6000
+            - 6000
+            - 4000
+          - - 8000
+            - 8000
+            - 6000
+      - scorer: trident_finite_inference
+        weight: 10
+        config:
+          model_file: model.json
+      - scorer: trident_geometry
+        weight: 10
+        config:
+          model_file: model.json
+          target_file: source_target.npy
+          indices:
+          - 8
+          - 9
+          - 10
+          - 11
+          full_tolerances:
+          - 2000
+          - 1000
+          - 30
+          - 25
+          zero_tolerances:
+          - 10000
+          - 5000
+          - 90
+          - 60
+          circular_periods:
+            '10': 180
+  - scorer: trident_time_deducted
+    weight: 10
+    skip_in_gt_selfcheck: true
+    config:
+      base_scorer: trident_geometry
+      model_file: model.json
+      target_file: source_target.npy
+      indices:
+      - 8
+      - 9
+      - 10
+      - 11
+      full_tolerances:
+      - 2000
+      - 1000
+      - 30
+      - 25
+      zero_tolerances:
+      - 10000
+      - 5000
+      - 90
+      - 60
+      circular_periods:
+        '10': 180
+      all_components:
+      - scorer: trident_model_consistency
+        weight: 20
+        config:
+          model_file: model.json
+          modeled_file: modeled_los.npy
+          scoring_data_file: scoring_data.npz
+          scoring: linear_interpolation
+          full_score_threshold: 0.002
+          zero_score_threshold: 0.15
+      - scorer: trident_los_plateau
+        weight: 20
+        config:
+          metric: relative_l2
+          pred_file: modeled_los.npy
+          ref_file: observed_los.npy
+          scoring: piecewise_linear_plateau
+          full_score_threshold: 0.05
+          half_score_start: 0.08
+          half_score_end: 0.12
+          zero_score_threshold: 0.7
+      - scorer: trident_locations
+        weight: 40
+        config:
+          model_file: model.json
+          target_file: source_target.npy
+          full_tolerances:
+          - - 500
+            - 500
+            - 500
+          - - 1000
+            - 1000
+            - 1500
+          zero_tolerances:
+          - - 6000
+            - 6000
+            - 4000
+          - - 8000
+            - 8000
+            - 6000
+      - scorer: trident_finite_inference
+        weight: 10
+        config:
+          model_file: model.json
+      - scorer: trident_geometry
+        weight: 10
+        config:
+          model_file: model.json
+          target_file: source_target.npy
+          indices:
+          - 8
+          - 9
+          - 10
+          - 11
+          full_tolerances:
+          - 2000
+          - 1000
+          - 30
+          - 25
+          zero_tolerances:
+          - 10000
+          - 5000
+          - 90
+          - 60
+          circular_periods:
+            '10': 180

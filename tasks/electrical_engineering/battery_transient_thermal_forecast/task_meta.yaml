@@ -1,0 +1,57 @@
+id: electrical_engineering.battery_transient_thermal_forecast
+name: Battery Transient Identification and Thermal Forecast
+version: '3.0'
+status: final
+domain: electrical_engineering
+subdomain: battery_management_systems
+source:
+  paper: Hu, Li, and Peng (2012), A comparative study of equivalent circuit models
+    for Li-ion batteries. Journal of Power Sources 198, 359-367.
+  repo: null
+difficulty:
+  estimated_lines: 250-500
+  estimated_time_minutes: 90-180
+  requires_gpu: false
+  requires_network: false
+tags:
+- battery_modeling
+- system_identification
+- electrothermal_modeling
+- forecast_extrapolation
+- sensor_dynamics
+runtime:
+  image: ai4sci-bench-task:15a585b32d01
+  python: '>=3.11'
+  packages:
+  - numpy>=2.0
+  - pandas>=3.0
+  - scipy>=1.11
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: calibration.csv
+    type: data
+    description: Calibration telemetry with time_s, current_a, ambient_temperature_c,
+      voltage_v, and temperature_c columns.
+  - name: forecast_profile.csv
+    type: data
+    description: Future time_s, current_a, and ambient_temperature_c profile; voltage
+      and temperature are intentionally withheld.
+  - name: task_context.json
+    type: data
+    description: Public input fields, sign convention, calibration-noise scale, forecast
+      objective, and exact output schema.
+output:
+  files:
+  - name: analysis.py
+    type: code
+    description: Reproducible analysis program that reads data/ and writes the required
+      forecast.
+  - name: results/forecast.csv
+    type: data
+    description: Predicted time_s, terminal voltage_v, and reported temperature_c
+      at every forecast sample.

@@ -1,0 +1,69 @@
+id: computer_science.planted_clique_community_recovery
+name: Hidden Fully-Connected Community Recovery (Planted Clique)
+version: '1.1'
+status: final
+domain: computer_science
+subdomain: combinatorial_optimization
+source:
+  paper: 'Uriel Feige and Dorit Ron (2010). Finding hidden cliques in linear time.
+    Discrete Mathematics & Theoretical Computer Science, DMTCS Proceedings AM, pp.
+    189-204 (degree peeling for planted cliques); Noga Alon, Michael Krivelevich and
+    Benny Sudakov (1998). Finding a large hidden clique in a random graph. Random
+    Structures & Algorithms 13(3-4), 457-466. DOI: 10.1002/(SICI)1098-2418(199810/12)13:3/4<457::AID-RSA14>3.0.CO;2-W'
+  repo: null
+difficulty:
+  estimated_lines: 60-200
+  estimated_time_minutes: 30-120
+  requires_gpu: false
+  requires_network: false
+tags:
+- planted_clique
+- hidden_community
+- combinatorial_optimization
+- hidden_instance
+- local_search
+- random_graphs
+- clique_search
+- degree_peeling
+- degree_corrected
+- network_science
+runtime:
+  python: '>=3.11'
+  packages:
+  - numpy>=1.26
+  - scipy>=1.11
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: data/adjacency.npy
+    type: data
+    shape:
+    - 24000
+    - 3000
+    dtype: uint8
+    description: Bit-packed symmetric adjacency matrix of the 24000-node contact network
+      (np.packbits along axis 1).
+  - name: data/task_info.json
+    type: data
+    description: 'JSON object, all fields required: n_nodes (int), community_size
+      (int), background_edge_model {type (str), edge_probability (float), member_nonmember_edge_probability
+      (float), description (str)}, adjacency_format {file (str), dtype (str), shape
+      (int[2]), packing (str)}, output_schema {results/community.csv (str), analysis.py
+      (str)}.'
+output:
+  files:
+  - name: analysis.py
+    type: code
+    description: Required. Deterministic Python 3.11+ script (numpy/scipy/stdlib only,
+      no network, no importlib, no reference/ paths) run as `python analysis.py` from
+      the workspace root; must regenerate results/community.csv from data/ within
+      20 minutes on one CPU.
+  - name: results/community.csv
+    type: data
+    description: 'Required. Single-column CSV: header exactly vertex_id; 1..community_size
+      rows of distinct non-negative integers in [0, n_nodes), strictly ascending;
+      no extra columns, quotes or index; violations score 0.'

@@ -1,0 +1,12 @@
+task_id: computer_science.generate_conforming_hexahedral_elements_with_planar_faces
+output:
+  files: []
+evaluation:
+  gates: []
+  scoring:
+  - scorer: mesh_quality
+    weight: 10
+  - scorer: coplanarity
+    weight: 10
+  - scorer: mesh_consistency
+    weight: 80

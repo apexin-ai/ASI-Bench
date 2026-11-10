@@ -346,13 +346,15 @@ def test_formal_scorer_allowlist_is_exact_and_references_existing_files():
         if yaml.safe_load(path.read_text(encoding="utf-8"))["status"] == "final"
     }
     assert set(policy["formal_tasks"]) == final_ids
-    assert len(policy["formal_tasks"]) == len(set(policy["formal_tasks"])) == 60
+    assert len(policy["formal_tasks"]) == len(set(policy["formal_tasks"])) == 75
     assert len(policy["tasks_with_custom_scorers"]) == len(
         set(policy["tasks_with_custom_scorers"])
-    ) == 57
+    ) == 72
     assert set(policy["tasks_with_custom_scorers"]) <= final_ids
     assert policy["task_helper_files"] == {
         "computer_science.euclidean_tsp_tour_optimization": ["tsp_common.py"],
+        "computer_science.retry_storm_fault_localization": ["retry_storm_eval_runtime.py"],
+        "physics.broadband_maxwell_inverse_design": ["maxwell_eval_runtime.py"],
         "electrical_engineering.cmos_opamp_design": ["cmos_eval_runtime.py"],
         "math.levin_context_grid_search": ["lts_eval_runtime.py"],
         "math.mpsc_safety_filter": ["mpsc_eval_runtime.py"],
@@ -585,9 +587,9 @@ def test_public_catalog_has_exact_final_and_sample_statuses():
     final_ids = {task_id for task_id, status in statuses.items() if status == "final"}
 
     assert sample_ids == EXPECTED_SAMPLE_TASKS
-    assert len(final_ids) == 60
+    assert len(final_ids) == 75
     assert set(statuses.values()) == {"final", "sample"}
-    assert len(statuses) == 65
+    assert len(statuses) == 80
     assert stale_abandoned_reasons == []
 
 

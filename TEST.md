@@ -1411,6 +1411,10 @@ running a solver that imports a helper, reads configuration and calls a real
 extensionless executable, whose execute permissions must survive both copies.
 This synthetic regression does not claim a benchmark score or model run.
 
+## Accepted v2 task publication (2026-11-10)
+
+Run `pytest tests/test_public_task_policy.py tests/test_accepted_finance_replay.py` to check the 75-task catalog allowlists and confirm that finance replay consumes pre-materialized data without a generator. These checks do not constitute model difficulty evaluations.
+
 ### Full-score floating-point endpoints
 
 `normalize_task_score` removes only machine-scale tails at a finite positive
