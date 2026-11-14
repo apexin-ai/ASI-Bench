@@ -179,6 +179,10 @@
   数值输出区分 native 自选 units/norm 和 convenience metal/norm-no；converged 按实际
   minimizer stop reason，不能从 exit 0 推断。直接镜像/HTTP 测试用 `ASIBENCH_LAMMPS_DOCKER=1`。
   sidecar 没有 agent workspace，必须用 MCP 上传/下载并在 teardown 前保存产物。
+- 首批芯片/工程 MCP 在 `scripts/mcp/engineering/`，六个 `_native` ID 保留旧第三方
+  模板合同；引擎/依赖构建时安装，作业按原生进程执行，代码具有容器权限。
+  完成状态不等于科学收敛；上传/下载不能被描述为脚本沙箱。
+  `ASIBENCH_ENGINEERING_DOCKER=1` 覆盖六引擎解析参考与 OSSandbox stdio/HTTP。
 - CHGNet-family 部署位于 `scripts/mcp/materials/`，复用固定 AtomisticSkills MatGL
   server；不是原始 `chgnet` 包。权重在构建时按 revision/SHA-256 下载，运行时
   `load_model` 使用 `/opt/models/CHGNet-PES-MatPES-PBE-1M-2026.9`，不依赖 HOME cache。

@@ -1,0 +1,16 @@
+FROM --platform=linux/amd64 python:3.12-slim@sha256:e8a38829209aea82774882e5157e1f7c3e8c8393ff53a697b3580896e57f345c
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ngspice=44.2+ds-1 iverilog=12.0-2+b1 verilator=5.032-1+b2 \
+    opensta=0~20191111gitc018cb2+dfsg-1.1 g++ make util-linux \
+    && dpkg-query -W > /opt/engine-packages.txt && rm -rf /var/lib/apt/lists/*
+COPY requirements.lock /opt/engineering-mcp/requirements.lock
+RUN python -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /opt/engineering-mcp/requirements.lock
+COPY runtime.py worker.py server.py healthcheck.py /opt/engineering-mcp/
+ENV PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin HOME=/home/agent \
+    ENGINEERING_MCP_WORKSPACE=/workspace OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+RUN mkdir -p /workspace /home/agent/.cache && chown -R 1000:1000 /workspace /home/agent \
+    && for engine in ngspice iverilog verilator opensta; do python /opt/engineering-mcp/worker.py --probe "$engine"; done
+USER 1000:1000
+WORKDIR /workspace
+HEALTHCHECK --interval=5s --timeout=10s --start-period=20s --retries=3 CMD ["/opt/venv/bin/python", "/opt/engineering-mcp/healthcheck.py"]
+CMD ["/opt/venv/bin/python", "/opt/engineering-mcp/server.py", "--backend", "ngspice"]

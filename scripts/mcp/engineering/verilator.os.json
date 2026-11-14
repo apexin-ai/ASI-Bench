@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "verilator_native": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/engineering-mcp/server.py",
+        "--backend",
+        "verilator"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ENGINEERING_MCP_WORKSPACE": "/workspace"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

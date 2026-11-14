@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "opensta_native": {
+      "url": "http://opensta-native:8765/mcp",
+      "sandbox": {
+        "deployment": "service",
+        "service": "opensta-native",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

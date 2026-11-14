@@ -1,0 +1,22 @@
+{
+  "runtime": {
+    "services": [
+      {
+        "name": "verilator-native",
+        "image": "asibench-engineering-eda:20261114",
+        "port": 8765,
+        "command": [
+          "/opt/venv/bin/python",
+          "/opt/engineering-mcp/server.py",
+          "--backend",
+          "verilator",
+          "--transport",
+          "streamable-http"
+        ],
+        "startup_timeout_seconds": 120,
+        "memory_mb": 2048,
+        "cpus": 2
+      }
+    ]
+  }
+}

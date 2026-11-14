@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "openmodelica_native": {
+      "url": "http://openmodelica-native:8765/mcp",
+      "sandbox": {
+        "deployment": "service",
+        "service": "openmodelica-native",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

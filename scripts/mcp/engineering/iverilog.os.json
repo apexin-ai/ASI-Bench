@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "iverilog_native": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/engineering-mcp/server.py",
+        "--backend",
+        "iverilog"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ENGINEERING_MCP_WORKSPACE": "/workspace"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

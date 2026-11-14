@@ -1,0 +1,134 @@
+{
+  "ngspice_native": {
+    "category": "electronic-simulation",
+    "source": "https://github.com/apexin-ai/ASI-Bench/tree/main/scripts/mcp/engineering",
+    "availability": "repository_adapter",
+    "notes": "Native engine jobs; build scripts/mcp/engineering/Dockerfile.eda; see docs/mcp/engineering.md. Existing third-party catalog contract stays separate.",
+    "server": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/engineering-mcp/server.py",
+        "--backend",
+        "ngspice"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ENGINEERING_MCP_WORKSPACE": "/workspace"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  },
+  "iverilog_native": {
+    "category": "hardware-verification",
+    "source": "https://github.com/apexin-ai/ASI-Bench/tree/main/scripts/mcp/engineering",
+    "availability": "repository_adapter",
+    "notes": "Native engine jobs; build scripts/mcp/engineering/Dockerfile.eda; see docs/mcp/engineering.md. Existing third-party catalog contract stays separate.",
+    "server": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/engineering-mcp/server.py",
+        "--backend",
+        "iverilog"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ENGINEERING_MCP_WORKSPACE": "/workspace"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  },
+  "verilator_native": {
+    "category": "hardware-verification",
+    "source": "https://github.com/apexin-ai/ASI-Bench/tree/main/scripts/mcp/engineering",
+    "availability": "repository_adapter",
+    "notes": "Native engine jobs; build scripts/mcp/engineering/Dockerfile.eda; see docs/mcp/engineering.md. Existing third-party catalog contract stays separate.",
+    "server": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/engineering-mcp/server.py",
+        "--backend",
+        "verilator"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ENGINEERING_MCP_WORKSPACE": "/workspace"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  },
+  "opensta_native": {
+    "category": "eda-timing",
+    "source": "https://github.com/apexin-ai/ASI-Bench/tree/main/scripts/mcp/engineering",
+    "availability": "repository_adapter",
+    "notes": "Native engine jobs; build scripts/mcp/engineering/Dockerfile.eda; see docs/mcp/engineering.md. Existing third-party catalog contract stays separate.",
+    "server": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/engineering-mcp/server.py",
+        "--backend",
+        "opensta"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ENGINEERING_MCP_WORKSPACE": "/workspace"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  },
+  "calculix_native": {
+    "category": "finite-element-analysis",
+    "source": "https://github.com/apexin-ai/ASI-Bench/tree/main/scripts/mcp/engineering",
+    "availability": "repository_adapter",
+    "notes": "Native engine jobs; build scripts/mcp/engineering/Dockerfile.cae; see docs/mcp/engineering.md. Existing third-party catalog contract stays separate.",
+    "server": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/engineering-mcp/server.py",
+        "--backend",
+        "calculix"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ENGINEERING_MCP_WORKSPACE": "/workspace"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  },
+  "openmodelica_native": {
+    "category": "system-simulation",
+    "source": "https://github.com/apexin-ai/ASI-Bench/tree/main/scripts/mcp/engineering",
+    "availability": "repository_adapter",
+    "notes": "Native engine jobs; build scripts/mcp/engineering/Dockerfile.cae; see docs/mcp/engineering.md. Existing third-party catalog contract stays separate.",
+    "server": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/engineering-mcp/server.py",
+        "--backend",
+        "openmodelica"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ENGINEERING_MCP_WORKSPACE": "/workspace"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

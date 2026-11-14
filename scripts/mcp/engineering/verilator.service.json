@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "verilator_native": {
+      "url": "http://verilator-native:8765/mcp",
+      "sandbox": {
+        "deployment": "service",
+        "service": "verilator-native",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

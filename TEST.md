@@ -1430,3 +1430,12 @@ uv run pytest -q tests/test_score_endpoint_precision.py tests/test_harbor_verify
 Coverage includes tails above/below full credit, divisors, genuine deductions,
 non-finite/missing scores, invalid/tiny maxima, and actual local/Harbor worker
 results with unchanged raw scorer details.
+
+## Native chip/engineering MCP
+
+`uv run --frozen pytest -q tests/mcp_e2e/test_engineering_adapters.py` checks
+configs, file transfer and job lifecycle offline. Build the two images in
+[the deployment guide](docs/mcp/engineering.md), then set
+`ASIBENCH_ENGINEERING_DOCKER=1` for real native results, invalid-input checks
+and actual OSSandbox stdio/HTTP preflight, artifact transfer and cleanup.
+No model API credentials are used by these protocol-client tests.

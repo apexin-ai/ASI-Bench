@@ -1,0 +1,16 @@
+FROM --platform=linux/amd64 openmodelica/openmodelica:v1.27.1-minimal@sha256:ac9a0223e69b8055d444b42f58ccb9680342b56848c68b81385bf83d7c0ba824
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends python3-venv calculix-ccx=2.17-3 util-linux \
+    && dpkg-query -W > /opt/engine-packages.txt && rm -rf /var/lib/apt/lists/*
+COPY requirements.lock /opt/engineering-mcp/requirements.lock
+RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /opt/engineering-mcp/requirements.lock
+COPY runtime.py worker.py server.py healthcheck.py /opt/engineering-mcp/
+ENV PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin HOME=/home/agent \
+    ENGINEERING_MCP_WORKSPACE=/workspace OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+RUN mkdir -p /workspace /home/agent/.cache && chown -R 1000:1000 /workspace /home/agent \
+    && for engine in calculix openmodelica; do python /opt/engineering-mcp/worker.py --probe "$engine"; done
+USER 1000:1000
+WORKDIR /workspace
+HEALTHCHECK --interval=5s --timeout=10s --start-period=20s --retries=3 CMD ["/opt/venv/bin/python", "/opt/engineering-mcp/healthcheck.py"]
+ENTRYPOINT []
+CMD ["/opt/venv/bin/python", "/opt/engineering-mcp/server.py", "--backend", "openmodelica"]

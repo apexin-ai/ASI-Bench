@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "iverilog_native": {
+      "url": "http://iverilog-native:8765/mcp",
+      "sandbox": {
+        "deployment": "service",
+        "service": "iverilog-native",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

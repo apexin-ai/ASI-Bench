@@ -1,0 +1,2 @@
+mcp==1.30.0
+tomli==2.2.1; python_version < '3.11'

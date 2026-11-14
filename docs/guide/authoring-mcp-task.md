@@ -143,6 +143,14 @@ asibench difficulty-check --task domain.my_task \
 The MCP server must be available to the image or sidecar used by the
 `difficulty-check`; a host-only config is not sufficient.
 
+## Chip design and engineering simulation
+
+Use the [native engineering MCP guide](../mcp/engineering.md) for ngspice,
+Icarus Verilog, Verilator, OpenSTA, CalculiX and OpenModelica. It covers the
+six `_native` server IDs, image builds, instance/sidecar configs, native input
+contracts and artifact transfer. Runtime images include engines; the config
+does not install them.
+
 ## Material-science servers
 
 The framework E2E manifest currently provides four material-science IDs. Use

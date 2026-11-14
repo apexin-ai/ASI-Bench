@@ -407,6 +407,11 @@ sandbox selection, and platform-specific commands.
 
 ### Scientific MCP tools
 
+For chip/circuit and engineering jobs (ngspice, Icarus, Verilator, OpenSTA,
+CalculiX and OpenModelica), see [native MCP deployment](docs/mcp/engineering.md).
+The six `_native` catalog IDs have repository-owned images and configs; older
+third-party template IDs remain separate.
+
 For the MatGL CHGNet-family server, see [installation and offline OS deployment](docs/mcp/chgnet.md).
 The catalog entry is a template; the guide supplies the install command and Docker/config files.
 

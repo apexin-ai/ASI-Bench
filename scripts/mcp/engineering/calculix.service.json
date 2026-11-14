@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "calculix_native": {
+      "url": "http://calculix-native:8765/mcp",
+      "sandbox": {
+        "deployment": "service",
+        "service": "calculix-native",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

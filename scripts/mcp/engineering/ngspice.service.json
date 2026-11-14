@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ngspice_native": {
+      "url": "http://ngspice-native:8765/mcp",
+      "sandbox": {
+        "deployment": "service",
+        "service": "ngspice-native",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}

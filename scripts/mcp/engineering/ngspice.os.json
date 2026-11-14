@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "ngspice_native": {
+      "command": "/opt/venv/bin/python",
+      "args": [
+        "/opt/engineering-mcp/server.py",
+        "--backend",
+        "ngspice"
+      ],
+      "cwd": "/workspace",
+      "env": {
+        "ENGINEERING_MCP_WORKSPACE": "/workspace"
+      },
+      "sandbox": {
+        "deployment": "instance",
+        "startup_timeout_seconds": 120
+      }
+    }
+  }
+}
