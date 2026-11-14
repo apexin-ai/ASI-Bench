@@ -1430,3 +1430,10 @@ uv run pytest -q tests/test_score_endpoint_precision.py tests/test_harbor_verify
 Coverage includes tails above/below full credit, divisors, genuine deductions,
 non-finite/missing scores, invalid/tiny maxima, and actual local/Harbor worker
 results with unchanged raw scorer details.
+
+### Scientific scoring contracts
+
+`python -m pytest tests/test_scoring_alignment.py -q` verifies finite-trajectory
+Ising acceptance boundaries and Homotopy termination diagnostics. Divergent
+paths must match trusted per-start status and the finite sentinel; reported
+small residuals cannot substitute for recomputed finite-root residuals.

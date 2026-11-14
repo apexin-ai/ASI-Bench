@@ -806,10 +806,11 @@ def _fit_log_log_masked(times: np.ndarray, sizes: np.ndarray, mask: np.ndarray) 
 def _growth_exponent_score(n: float) -> float:
     if not math.isfinite(n):
         return 0.0
-    if 0.30 <= n <= 0.50:
+    # Finite-trajectory acceptance; this interval is not an asymptotic law.
+    if 0.19 <= n <= 0.50:
         return 1.0
-    if 0.20 <= n < 0.30:
-        return (n - 0.20) / 0.10
+    if 0.09 <= n < 0.19:
+        return (n - 0.09) / 0.10
     if 0.50 < n <= 0.60:
         return (0.60 - n) / 0.10
     return 0.0

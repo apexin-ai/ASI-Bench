@@ -724,7 +724,7 @@ def test_tracked_tree_has_no_secret_containers_or_symlinks():
     assert not violations, "Potential secret container:\n" + "\n".join(violations)
 
 
-def test_gpt_judge_contracts_use_gpt55_with_medium_effort():
+def test_gpt_judge_contracts_use_gpt61_sol_with_medium_effort():
     gpt_judge_configs = []
     for path in TASKS.glob("*/*/task_eval.yaml"):
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -738,7 +738,7 @@ def test_gpt_judge_contracts_use_gpt55_with_medium_effort():
 
     assert len(gpt_judge_configs) == 17
     for path, config in gpt_judge_configs:
-        assert config["model"] == "openai/gpt-5.5", path
+        assert config["model"] == "openai/gpt-6.1-sol", path
         assert config["reasoning_effort"] == "medium", path
 
 
