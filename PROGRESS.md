@@ -1899,3 +1899,26 @@ Commit `611b2cc` adds 15 accepted scorer contracts without prompt/GT source. Opt
 - Evidence and isolated build/run scripts remain in the separate artifacts
   repository, `internal/harbor-oracle/endpoint-precision-20261105/`.
   No main integration, push or HF change was performed.
+
+## 2026-11-14 — Native chip/engineering MCP adapters
+
+- Implementation `311c272` adds repository-owned native jobs for ngspice,
+  Icarus Verilog, Verilator, OpenSTA, CalculiX and OpenModelica. `_native`
+  catalog IDs preserve existing third-party templates. Engines install during
+  image build; instance stdio and private HTTP sidecars share ten MCP tools.
+- Native programs have container privileges. File transfer checks do not
+  provide a script sandbox; native completion does not certify scientific
+  convergence or task validity. Preserve engine stage logs and output artifacts.
+- Real offline/native tests compare divider voltage, exhaustive sums, scalar
+  timing, uniform elastic displacement and analytic exponential decay. Bad
+  input must fail even for engines that return zero on some errors. The first
+  OpenSTA synthetic Liberty lacked thresholds; repaired the fixture, not the
+  engine/error handling.
+- Docker acceptance: 26 passed, including actual OSSandbox instance/HTTP
+  preflight, native work, transfer, filesystem separation and cleanup. These
+  use protocol clients, not live model agents. Offline-safe suite: 4100 passed,
+  73 skipped, 24 deselected. Wheel/sdist build and strict Twine checks pass.
+- Synchronize AGENTS.md and CLAUDE.md together. DNS-safe sidecar names use
+  hyphens; MCP IDs may use underscores. Keep compiled programs under writable
+  workspace job directories rather than the framework's noexec temporary HOME.
+- Main is unchanged; this task requires separate user approval for integration.
