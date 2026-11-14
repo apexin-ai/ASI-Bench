@@ -107,7 +107,7 @@ evaluation:
     weight: 5
     config:
       mode: vlm_judge
-      model: openai/gpt-5.5
+      model: "openai/gpt-6.1-sol"
       reasoning_effort: medium
       num_judges: 1
       pred_image: diagnostic_plots.png

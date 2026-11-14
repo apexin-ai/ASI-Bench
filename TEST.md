@@ -1439,3 +1439,10 @@ configs, file transfer and job lifecycle offline. Build the two images in
 `ASIBENCH_ENGINEERING_DOCKER=1` for real native results, invalid-input checks
 and actual OSSandbox stdio/HTTP preflight, artifact transfer and cleanup.
 No model API credentials are used by these protocol-client tests.
+
+### Scientific scoring contracts
+
+`python -m pytest tests/test_scoring_alignment.py -q` verifies finite-trajectory
+Ising acceptance boundaries and Homotopy termination diagnostics. Divergent
+paths must match trusted per-start status and the finite sentinel; reported
+small residuals cannot substitute for recomputed finite-root residuals.
