@@ -1446,3 +1446,24 @@ No model API credentials are used by these protocol-client tests.
 Ising acceptance boundaries and Homotopy termination diagnostics. Divergent
 paths must match trusted per-start status and the finite sentinel; reported
 small residuals cannot substitute for recomputed finite-root residuals.
+
+## Native Claude session recovery
+
+Offline policy, integrity, selectors, claims, accounting and submission privacy:
+
+```bash
+uv run pytest -q tests/test_session_checkpoints.py tests/test_submission_bundle.py
+```
+
+The opt-in Docker acceptance uses an installed Claude binary and a local fake
+Anthropic server, never a paid model endpoint. It exercises native CLI run,
+terminal quota failure, credential-free preview, original session/rootfs/workspace
+restoration, cumulative tokens/time, independent scoring and a hard deadline:
+
+```bash
+ASIBENCH_SESSION_DOCKER=1 ASIBENCH_CLAUDE_BINARY=/absolute/path/to/claude \
+  uv run pytest -q tests/test_session_resume_docker.py
+```
+
+Default suites skip this Docker test. A successful fixture is not evidence of
+provider availability or production campaign recovery.

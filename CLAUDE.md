@@ -261,6 +261,13 @@
   追加路径按工作区相对路径排序去重，排除输入、框架文件、缓存及符号链接/特殊文件；
   不补齐或移动缺失入口，不改变必交项及评分规则。显式输出优先于追加分支的排除规则。
 
+- 原生 Claude 续跑在框架 `runner/session_*` / `claude_checkpoint.py` 实现：
+  `run --checkpoint-sessions` 显式启用，`asibench resume` 按 task/level/instance
+  恢复完整外部故障检查点及原 session；累计预算/可观测 token，未知费用不记零。
+  v1 限 native Anthropic、OS/model-only、本地 Docker、无 MCP/services、单次尝试。
+  私有 checkpoints 不进入提交包；旧日志、OOM/预算耗尽/未知终止不可续跑。
+  详见 `docs/guide/session-recovery.md`。实验记录仓库不实现框架功能。
+
 ## 任务生命周期
 
 - Responses 翻译分支必须保留工具类型、原始 ID 和终止状态；未知字段须明确报错，

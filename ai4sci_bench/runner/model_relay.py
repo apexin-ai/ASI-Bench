@@ -16,6 +16,7 @@ from pathlib import Path
 import socketserver
 import tempfile
 import threading
+import time
 from urllib.parse import urlsplit
 
 POLICY_VERSION = "model-only-unix-v2"
@@ -333,6 +334,11 @@ class RelayHandler(BaseHTTPRequestHandler):
         else:
             headers["Authorization"] = "Bearer " + self.server.api_key
         sent_headers = False
+        observation = None
+        if getattr(self.server, 'observer', None) is not None:
+            from ai4sci_bench.runner.session_checkpoint import ResponseUsage
+            observation = ResponseUsage(urlsplit(self.path).path)
+        request_started = time.monotonic()
         with self.server.audit_lock:
             self.server.connections.add(connection)
         try:
@@ -340,6 +346,10 @@ class RelayHandler(BaseHTTPRequestHandler):
                 "POST", self.server.upstream_prefix + self.path, body, headers
             )
             response = connection.getresponse()
+            if observation is not None:
+                observation.record['status'] = response.status
+                observation.record['request_id'] = response.getheader('request-id') or response.getheader('x-request-id')
+                observation.sse = 'text/event-stream' in response.getheader('Content-Type', '')
             # Never follow upstream redirects to arbitrary targets.
             if 300 <= response.status < 400:
                 self._deny(502)
@@ -355,21 +365,31 @@ class RelayHandler(BaseHTTPRequestHandler):
             sent_headers = True
             # read1 preserves streaming SSE without waiting for an entire buffer.
             while chunk := response.read1(64 * 1024):
+                if observation is not None:
+                    observation.feed(chunk)
                 self.wfile.write(chunk)
                 self.wfile.flush()
         except (OSError, http.client.HTTPException):
+            if observation is not None:
+                observation.record['transport_error'] = True
             # Fixed diagnostic; do not leak upstream errors/keys into agent logs.
             if not sent_headers:
-                self.send_error(502, "Model upstream unavailable")
+                try:
+                    self.send_error(502, "Model upstream unavailable")
+                except OSError:
+                    pass  # CLI may already have exited at its budget deadline.
             self.close_connection = True
         finally:
             connection.close()
+            if observation is not None:
+                observation.record['elapsed_seconds'] = time.monotonic() - request_started
+                self.server.observer(observation.finish())
             with self.server.audit_lock:
                 self.server.connections.discard(connection)
 
 
 @contextmanager
-def model_relay(api_env: dict[str, str], runtime: dict, connection: dict | None = None):
+def model_relay(api_env: dict[str, str], runtime: dict, connection: dict | None = None, *, observer=None):
     connection = connection or {}
     protocol = connection.get("protocol", "anthropic")
     if protocol not in PROTOCOL_ROUTES:
@@ -427,6 +447,10 @@ def model_relay(api_env: dict[str, str], runtime: dict, connection: dict | None 
             encoding="utf-8",
         )
         server.audit, server.audit_lock = runtime, threading.Lock()
+        server.observer = observer
+        if observer is not None:
+            server.daemon_threads = False
+            server.block_on_close = True
         server.slots = threading.BoundedSemaphore(4)
         server.clients, server.connections = set(), set()
         # The container uses the host UID. No other host users need access.
@@ -437,7 +461,6 @@ def model_relay(api_env: dict[str, str], runtime: dict, connection: dict | None 
             yield root
         finally:
             server.shutdown()
-            server.server_close()
             with server.audit_lock:
                 connections, clients = list(server.connections), list(server.clients)
             for connection in connections:
@@ -448,4 +471,5 @@ def model_relay(api_env: dict[str, str], runtime: dict, connection: dict | None 
                 except OSError:
                     pass
                 client.close()
+            server.server_close()
             thread.join(timeout=5)

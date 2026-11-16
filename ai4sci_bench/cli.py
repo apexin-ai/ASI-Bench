@@ -1658,6 +1658,51 @@ def _ensure_run_sandbox_available(sandbox: str) -> None:
             raise click.ClickException(str(exc)) from exc
 
 
+@cli.command('resume')
+@click.option('--from', 'source', required=True, type=click.Path(exists=True), help='Original run directory or checkpoint.json')
+@click.option('--tasks', default=None, help='Task IDs, default all recoverable tasks')
+@click.option('--levels', '--prompt-levels', default=None, help='b1,b2,b3,b4, default all recoverable levels')
+@click.option('--instance-ids', default=None, help='Optional comma-separated instance IDs')
+@click.option('--output-dir', required=True, type=click.Path(), help='New recovery run directory')
+@click.option('--tasks-dir', default='tasks/', show_default=True, type=click.Path(exists=True, file_okay=False))
+@click.option('--instances-dir', default=None, type=click.Path(exists=True, file_okay=False), help='Original materialized bundles; inferred when available')
+@click.option('--parallel', default=1, type=click.IntRange(min=1), show_default=True)
+@click.option('--api-key-env', default=None, help='Credential environment variable name; never the secret value')
+@click.option('--api-base-env', default=None, help='Optional current native endpoint environment variable name')
+@click.option('--dry-run', is_flag=True, help='Validate checkpoint and original inputs without credentials, Docker, or model calls')
+def resume_sessions(source, tasks, levels, instance_ids, output_dir, tasks_dir, instances_dir,
+                    parallel, api_key_env, api_base_env, dry_run):
+    """Continue externally interrupted Claude sessions with their original budget.
+
+    This is distinct from run --resume (skip existing results). Scoring remains
+    independent. Missing native sessions never fall back to starting over.
+    """
+    from ai4sci_bench.runner.session_resume import plan_resume, preflight_inputs, execute_resume
+    try:
+        chosen, rejected = plan_resume(source, tasks, levels, instance_ids)
+        click.echo(json.dumps({'selected': [
+            {'cell': key, 'session_id': data['session_id'], 'budget': data['budget'],
+             'failure_class': data['failure_class'], 'accounting': data['accounting']}
+            for key, (_, data) in chosen.items()], 'rejected': rejected}, indent=2))
+        if rejected and any(value not in (None, 'all') for value in (tasks, levels, instance_ids)):
+            raise ValueError('An explicitly selected checkpoint is ineligible; no tasks were started')
+        if not chosen:
+            raise ValueError('No complete external-failure checkpoint with remaining budget')
+        output = Path(output_dir).expanduser().resolve()
+        if output.exists() or any(output.is_relative_to(path.parent) for path, _ in chosen.values()):
+            raise ValueError('Resume output must be a new directory outside source checkpoints')
+        instances = preflight_inputs(chosen, tasks_dir, instances_dir)
+        if dry_run:
+            return
+        _ensure_run_sandbox_available('os')
+        report = execute_resume(chosen, output, tasks_dir, instances, parallel, api_key_env, api_base_env)
+        click.echo(report.format_summary())
+        if any(result.status != RunStatus.COMPLETED for result in report.results):
+            raise click.exceptions.Exit(1)
+    except (ValueError, OSError, KeyError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 @cli.command()
 @click.option("--tasks", help="Comma-separated task IDs (or 'all')")
 @click.option("--prompt-levels", default="b1,b2,b3,b4", show_default=True,
@@ -1684,6 +1729,9 @@ def _ensure_run_sandbox_available(sandbox: str) -> None:
 @click.option("--analyze-backend", default="llm_api", help="Analysis backend")
 @click.option("--analyze-model", default="gemini/gemini-2.0-flash", help="Analysis model")
 @click.option("--resume", help="Resume from a prior output directory")
+@click.option('--checkpoint-sessions', is_flag=True, help='Persist native Claude session/workspace and external-fault container checkpoints.')
+@click.option('--token-prices', type=click.Path(exists=True, dir_okay=False), default=None,
+              help='Optional four USD-per-million token prices JSON, used only with --checkpoint-sessions.')
 @click.option("--retries", default=1, type=int, help="Attempts per instance (1=no retry)")
 @click.option("--retry-strategy", default="all", type=click.Choice(["all", "until_success"]),
               help="all: always run N times; until_success: stop on first success")
@@ -1736,6 +1784,8 @@ def run(
     fail_on_agent_error: bool,
     diagnose: bool,
     diagnose_threshold: float,
+    checkpoint_sessions: bool = False,
+    token_prices: str | None = None,
 ):
     """Run agents on benchmark instances and collect outputs for submission."""
     from ai4sci_bench.runner.orchestrator import BenchmarkOrchestrator, RunConfig
@@ -1743,6 +1793,20 @@ def run(
     from ai4sci_bench.runner.sandbox_support import print_sandbox_banner
 
     _restore_run_score_dotenv_state()
+    checkpoint_prices = None
+    if checkpoint_sessions:
+        if agent != 'claude_code_cli' or sandbox != 'os' or retries != 1 or resume:
+            raise click.ClickException('Session checkpoints require Claude Code/OS/single attempt; legacy --resume is separate')
+        if Path(output_dir).exists():
+            raise click.ClickException('Checkpoint run output must be a new directory')
+    if token_prices:
+        if not checkpoint_sessions:
+            raise click.ClickException('--token-prices requires --checkpoint-sessions')
+        from ai4sci_bench.runner.session_checkpoint import token_prices as validate_prices
+        try:
+            checkpoint_prices = validate_prices(json.loads(Path(token_prices).read_text()))
+        except (ValueError, OSError) as exc:
+            raise click.ClickException(str(exc)) from exc
 
     if tool_mode and allow_external_tools:
         raise click.ClickException(
@@ -1823,6 +1887,8 @@ def run(
         sandbox=sandbox,
         output_dir=output_dir,
         resume=resume,
+        checkpoint_sessions=checkpoint_sessions,
+        checkpoint_token_prices=checkpoint_prices,
         retries=retries,
         retry_strategy=retry_strategy,
         analyze=analyze,

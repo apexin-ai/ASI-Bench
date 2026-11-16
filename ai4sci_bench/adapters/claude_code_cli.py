@@ -149,6 +149,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         self._proxy_lock = threading.Lock()
         self._claude_home_root: Path | None = None
         self._claude_home_lock = threading.Lock()
+        self.checkpoint_options = None
 
     @staticmethod
     def _read_env_secret(env_name: str | None) -> str | None:
@@ -294,6 +295,14 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
 
     def setup(self, config: dict) -> None:
         super().setup(config)
+        self.checkpoint_options = config.get('session_checkpoints')
+        if self.checkpoint_options:
+            if self.sandbox != 'os' or self.effective_network_policy != 'model-only' or self.api_protocol != 'anthropic':
+                raise ValueError('Session checkpoints require Claude Code/native Anthropic/OS/model-only')
+            if self.mcp_servers:
+                raise ValueError('Session checkpoint v1 does not restore MCP process state')
+            if not os.environ.get('DOCKER_HOST', 'unix:///var/run/docker.sock').startswith('unix://'):
+                raise ValueError('Session deadlines require a local Unix-socket Docker daemon')
         self.permission_mode = config.get("permission_mode", self.permission_mode)
         if self.mcp_servers and self.sandbox == "os":
             from ai4sci_bench.runner.mcp_sandbox import validate_os_mcp
@@ -389,6 +398,12 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
 
     def solve(self, task_instance: TaskInstance) -> AgentOutput:
         """Execute agent — delegates to OSSandbox when sandbox == 'os'."""
+        if self.checkpoint_options:
+            from ai4sci_bench.runner.claude_checkpoint import run_checkpointed
+            return run_checkpointed(self, task_instance, self._solve)
+        return self._solve(task_instance)
+
+    def _solve(self, task_instance: TaskInstance, *, checkpoint=None) -> AgentOutput:
         if self.sandbox != "os":
             output = super().solve(task_instance)
             if output.cost is None and output.raw_stdout:
@@ -403,6 +418,13 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
         eff_timeout = self._get_effective_timeout(task_instance)
         workspace = task_instance.workspace_dir
         cmd = self._build_os_agent_cmd(workspace)
+        if checkpoint is not None:
+            index = cmd.index('--')
+            if checkpoint.parent:
+                cmd = cmd[:index] + ['--resume', checkpoint.session_id, '--',
+                    'Continue the interrupted task using the existing conversation and workspace.']
+            else:
+                cmd[index:index] = ['--session-id', checkpoint.session_id]
 
         extra_env: dict[str, str] | None = self._build_api_env() or None
         if self.effective_network_policy == "inherit" and (self._uses_proxy or self._uses_anthropic_rewrite_proxy or self._uses_tokenrouter_openai_chat_proxy):
@@ -427,6 +449,7 @@ class ClaudeCodeCLIAdapter(SubprocessAgentAdapter):
                     mcp_runtime=mcp_runtime,
                     network_policy=self.effective_network_policy,
                     network_runtime=network_runtime,
+                    **({'session_checkpoint': checkpoint} if checkpoint is not None else {}),
                 )
             )
         except (ValueError, RuntimeError, OSError) as exc:

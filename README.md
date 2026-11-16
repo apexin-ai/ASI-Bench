@@ -357,6 +357,16 @@ seed42 GT is not public. Local benchmark runs never calculate official scores.
 | Custom agents | `--agent-cmd` supports the `none` and `linux_ns` sandboxes for local runs; official seed42 submission requires an `os`-compatible built-in adapter |
 | Built-in agents | Use `--agent` with `--agent-config`; compatible adapters can use Docker-based `os` isolation |
 
+### Resume interrupted Claude sessions
+
+Opt in with `asibench run --checkpoint-sessions` to save private native Claude
+sessions and filesystem checkpoints. `asibench resume --from <run> --tasks <id>
+--levels b2,b4 --output-dir <new-run> --dry-run` previews eligible recovery;
+remove `--dry-run` to continue. Cumulative time and token accounting are retained.
+Only complete external-fault checkpoints are eligible; old logs alone cannot
+restore sessions. See [session recovery](docs/guide/session-recovery.md) for
+supported isolation, credential selectors, privacy and billing limits.
+
 ### Model-call observability
 
 Each result records model-call evidence separately from its visible trajectory.

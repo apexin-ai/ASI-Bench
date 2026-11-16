@@ -117,6 +117,9 @@ class RunConfig:
     sandbox: str = "none"
     output_dir: str = "results/"
     resume: str | None = None
+    checkpoint_sessions: bool = False
+    resume_checkpoints: dict[str, str] = field(default_factory=dict)
+    checkpoint_token_prices: dict[str, float] | None = None
 
     # Retry
     retries: int = 1  # 1 = no retry
@@ -161,6 +164,8 @@ class BenchmarkOrchestrator:
 
     def __init__(self, config: RunConfig):
         self.config = config
+        if config.resume_checkpoints and not config.checkpoint_sessions:
+            raise ValueError('Resume checkpoint plans require checkpoint_sessions')
         self.agent = config.agent
         self.repo_root = resolve_runtime_root(Path(config.tasks_dir))
         setup_cfg: dict[str, Any] = {
@@ -169,6 +174,15 @@ class BenchmarkOrchestrator:
         }
         if config.timeout is not None:
             setup_cfg["timeout"] = config.timeout
+        if config.checkpoint_sessions:
+            from ai4sci_bench.adapters.claude_code_cli import ClaudeCodeCLIAdapter
+            if not isinstance(self.agent, ClaudeCodeCLIAdapter) or config.retries != 1 or config.resume:
+                raise ValueError('Session checkpoints require Claude Code/single attempt; cannot combine legacy --resume')
+            from ai4sci_bench.runner.session_checkpoint import token_prices
+            setup_cfg['session_checkpoints'] = {
+                'root': str(Path(config.output_dir).resolve() / 'checkpoints'),
+                'resume': config.resume_checkpoints,
+                'token_prices': token_prices(config.checkpoint_token_prices)}
         self.agent.setup(setup_cfg)
         self.task_loader = TaskLoader(Path(config.tasks_dir))
         self.instance_generator = InstanceGenerator(
@@ -190,6 +204,17 @@ class BenchmarkOrchestrator:
         try:
             tasks = self._load_tasks(task_ids or self.config.tasks)
             instances = self._prepare_instances(tasks)
+            if self.config.resume_checkpoints:
+                from ai4sci_bench.runner.claude_checkpoint import instance_key
+                instances = [i for i in instances if instance_key(i) in self.config.resume_checkpoints]
+                if {instance_key(i) for i in instances} != set(self.config.resume_checkpoints):
+                    raise ValueError('Some selected resume instances are missing from the supplied bundle')
+                from ai4sci_bench.runner.claude_checkpoint import frozen_config
+                from ai4sci_bench.runner.session_checkpoint import load_checkpoint
+                for instance in instances:
+                    _, checkpoint = load_checkpoint(self.config.resume_checkpoints[instance_key(instance)])
+                    if checkpoint['config'] != frozen_config(self.agent, instance, self.config.checkpoint_token_prices):
+                        raise ValueError('Selected resume configuration changed; no model calls were started')
 
             # Save run metadata for reproducibility
             metadata = self._collect_run_metadata(tasks)
@@ -212,6 +237,11 @@ class BenchmarkOrchestrator:
             if latest_metadata != metadata:
                 save_run_metadata(self.output_dir, latest_metadata)
 
+            if self.config.checkpoint_sessions:
+                from ai4sci_bench.runner.claude_checkpoint import instance_key
+                from ai4sci_bench.runner.session_checkpoint import accounting_summary, atomic_json
+                atomic_json(self.output_dir / 'session-accounting.json', accounting_summary(
+                    self.output_dir / 'checkpoints', [instance_key(i) for i in instances]))
             return self._aggregate(results)
         finally:
             self.agent.teardown()

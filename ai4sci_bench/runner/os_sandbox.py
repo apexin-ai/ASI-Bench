@@ -197,6 +197,7 @@ class OSSandbox:
         network_policy: str = "inherit",
         network_runtime: dict | None = None,
         model_connection: dict | None = None,
+        session_checkpoint=None,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         """Run an arbitrary agent command inside the task container.
 
@@ -267,7 +268,8 @@ class OSSandbox:
             runtime.update(effective="inherit", enforced=False, policy="legacy-tool-policy-only")
         if network_policy == "model-only":
             from ai4sci_bench.runner.model_relay import model_relay
-            relay_scope = model_relay(extra_env or {}, runtime, model_connection)
+            relay_scope = model_relay(extra_env or {}, runtime, model_connection,
+                                      **({'observer': session_checkpoint.observe} if session_checkpoint is not None else {}))
         else:
             relay_scope = nullcontext(None)
         with relay_scope as relay_root:
@@ -303,6 +305,7 @@ class OSSandbox:
                     network_runtime=runtime,
                     isolate_mcp=bool(mcp_servers),
                     mcp_runtime=mcp_runtime,
+                    **({'session_checkpoint': session_checkpoint} if session_checkpoint is not None else {}),
                 )
         if pre_snapshot is not None:
             audit = self._diff_workspace(pre_snapshot, workspace)
@@ -333,10 +336,19 @@ class OSSandbox:
         mcp_runtime: dict | None = None,
         model_only: bool = False,
         network_runtime: dict | None = None,
+        session_checkpoint=None,
     ) -> tuple[bool, str, str | None, str | None, str | None]:
         service_network: str | None = None
         service_containers: list[str] = []
         try:
+            if session_checkpoint is not None:
+                if not model_only or agent_type != 'claude_code' or services:
+                    raise ValueError('Session restore requires an isolated Claude model-only container')
+                restored, exec_args, extra_mounts = session_checkpoint.prepare_container(
+                    container_name, image_identity, exec_args, extra_mounts or [])
+                image = restored or image
+                image_identity = restored or image_identity
+                timeout = session_checkpoint.remaining
             service_env = dict(extra_env or {})
             if services:
                 service_network = self._create_task_service_network()
@@ -428,7 +440,10 @@ class OSSandbox:
             self._kill_container(container_name)
             return False, f"{timeout_label} error: {exc}", None, None, image_identity
         finally:
-            self._remove_container(container_name)
+            if session_checkpoint is not None:
+                session_checkpoint.capture_safely(container_name)
+            else:
+                self._remove_container(container_name)
             for service_container in reversed(service_containers):
                 self._remove_container(service_container)
             if service_network:

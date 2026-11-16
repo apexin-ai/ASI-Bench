@@ -322,6 +322,20 @@ class TestBuildSubmission:
         assert (d / "instances" / entry.base_name / "outputs" / "solution.py").is_file()
         assert (d / "instances" / entry.base_name / "outputs" / "results" / "answer.npy").read_bytes() == b"\x00\x01\x02\x03"
 
+    def test_private_session_checkpoints_are_not_bundled(self, tmp_path):
+        results = _make_results_dir(tmp_path)
+        private = results / 'checkpoints' / 'physics.demo_task--b2'
+        private.mkdir(parents=True)
+        for name in ('checkpoint.json', 'rootfs-image.tar', 'session.jsonl'):
+            (private / name).write_text('PRIVATE_NATIVE_SESSION_SENTINEL')
+        (results / 'session-accounting.json').write_text('{"actual_cost_usd": null}')
+        bundle = build_submission(results)
+        assert bundle.instance_count == 1
+        for path in bundle.bundle_dir.rglob('*'):
+            if path.is_file():
+                assert b'PRIVATE_NATIVE_SESSION_SENTINEL' not in path.read_bytes()
+        assert not (bundle.bundle_dir / 'checkpoints').exists()
+
     def test_manifest_hashes_every_file(self, tmp_path):
         results = _make_results_dir(tmp_path)
         bundle = build_submission(results, archive=False)
