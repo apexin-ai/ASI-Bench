@@ -1922,3 +1922,27 @@ Commit `611b2cc` adds 15 accepted scorer contracts without prompt/GT source. Opt
   hyphens; MCP IDs may use underscores. Keep compiled programs under writable
   workspace job directories rather than the framework's noexec temporary HOME.
 - Main is unchanged; this task requires separate user approval for integration.
+
+## 2026-11-16 — Native Claude session checkpoints and selective recovery
+
+- Implementation `b732b84` adds opt-in `run --checkpoint-sessions` and a native
+  `asibench resume` command, integrated explicitly with the Claude adapter,
+  orchestrator, OS sandbox and model relay. Task/level/instance selection,
+  original session UUID, workspace, HOME and portable rootfs snapshots survive
+  eligible external faults. No monkey patches or experiment-specific paths.
+- Corrected the initial repository boundary error: framework features belong
+  here, not in the separate experiment records repository. That repository's
+  misplaced extension is withdrawn; production campaign pins remain unchanged.
+- Preserve cumulative execution budget and observed token/cost ledgers; unknown
+  billed usage/cost remains unknown. OOM, exhausted budgets, unknown kills and
+  incomplete sessions cannot be recovered. Checkpoints are private and excluded
+  from standard submission bundles; processes and tmpfs are not restored.
+- Baseline: 4112 passed, 73 skipped, 24 deselected. Final full offline suite:
+  4129 passed, 74 skipped, 24 deselected. Focused policy/privacy and
+  real Claude 2.1.310/Docker acceptance: 45 passed. Final Docker acceptance also
+  passes on the committed implementation: native run -> local fake API403 ->
+  credential-free dry-run -> original session/rootfs/workspace continuation ->
+  independent score100, plus a hard timeout. No real provider calls were made.
+- Wheel/sdist build, strict Twine metadata checks and clean wheel CLI installation
+  pass. Keep recovery claims after dispatch crashes for audit; never replay a
+  checkpoint whose continuation may have already consumed model budget.
