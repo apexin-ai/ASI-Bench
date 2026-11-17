@@ -1,0 +1,22 @@
+task_id: biology.unseen_perturbation_rna_response
+output:
+  files:
+  - name: analysis.py
+    type: code
+  - name: results/predictions.npy
+    type: data
+evaluation:
+  gates:
+  - scorer: prediction_replay_consistency
+    severity: hard
+    skip_in_gt_selfcheck: true
+    config:
+      reference_file: reference.json
+      replay_timeout_seconds: 1200
+  scoring:
+  - scorer: perturbation_prediction_score
+    weight: 100
+    config:
+      reference_file: reference.json
+      pred_file: results/predictions.npy
+      ref_file: results/predictions.npy

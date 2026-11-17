@@ -3,6 +3,9 @@
   "task_runtime_files": {
     "electrical_engineering.cmos_opamp_design": [
       "Dockerfile.os"
+    ],
+    "biology.unseen_perturbation_rna_response": [
+      "runtime.txt"
     ]
   }
 }

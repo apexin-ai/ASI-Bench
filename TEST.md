@@ -1480,3 +1480,13 @@ scientific scores and the click-log reference artifact score were 100/100.
 The five A2 scientific components scored 95/95; file/code-analysis components
 and licensed Wolfram execution were not exercised by that reference-artifact check.
 No model scores or new B3/B4 difficulty claims are implied.
+
+RNA completion: `tests/test_accepted_20261117.py` also checks missing-reference
+classification, the offline Docker replay command/resource contract, prediction
+matching and score anchors. The re-upload's 36 ZIP members passed CRC, all chunk
+and assembled asset hashes passed generation, and all six task/scorer bundles
+load. RNA's scientific oracle is checked separately from a public-input-only
+training-mean script used solely for replay compatibility; neither is a model
+difficulty evaluation. Source provenance remains private and is omitted from the
+HF numerical-reference payload. Harness seed31415 preserves the author's fixed
+measured-data split; it does not create an independent randomized split.

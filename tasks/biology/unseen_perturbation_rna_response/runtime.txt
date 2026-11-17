@@ -1,0 +1,27 @@
+# Task-specific scientific environment; the SDK adds the selected agent CLI.
+FROM python:3.11-slim
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates build-essential \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir uv==0.8.22
+RUN uv venv /opt/venv
+ENV PATH="/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV VIRTUAL_ENV="/opt/venv"
+RUN uv pip install numpy==1.24.3 scipy==1.11.4 pandas==1.5.3 scikit-learn==1.3.2
+RUN printf '%s\n' 'export PATH="/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"' 'export VIRTUAL_ENV="/opt/venv"' > /etc/profile.d/ai4sci-venv.sh
+RUN useradd -m -s /bin/bash -u 1000 agent \
+    && mkdir -p /opt/ai4sci-bench /home/agent/.codex /tmp/agent-auth /workspace \
+    && chown -R agent:agent /opt/venv /home/agent /tmp/agent-auth /workspace \
+    && chmod -R 0777 /home/agent /tmp/agent-auth
+ENV AI4SCI_SANDBOX="1"
+ENV HOME="/home/agent"
+ENV LANG="C.UTF-8"
+ENV OMP_NUM_THREADS="4"
+ENV OPENBLAS_NUM_THREADS="4"
+ENV MKL_NUM_THREADS="4"
+ENV NUMEXPR_NUM_THREADS="4"
+USER agent
+WORKDIR /workspace
