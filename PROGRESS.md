@@ -1946,3 +1946,17 @@ Commit `611b2cc` adds 15 accepted scorer contracts without prompt/GT source. Opt
 - Wheel/sdist build, strict Twine metadata checks and clean wheel CLI installation
   pass. Keep recovery claims after dispatch crashes for audit; never replay a
   checkpoint whose continuation may have already consumed model budget.
+
+## 2026-11-17 — Accepted task source import
+
+Commit `29205c5555cecf9bf25211bdbc1b737a13cd0a7f` imports five complete task uploads from the six-task batch;
+the RNA archive is truncated inside a data asset, so importing that task from
+a recovered partial ZIP would hide missing inputs. It remains pending.
+
+QP's author self-check read a generator and private reference program at score
+time; the integrated scorer now always executes the submitted solver offline
+against pre-materialized problems. Latent/Ising use the structured submission
+runner to distinguish infrastructure errors from submission errors. Reference
+programs remain outside public source/seed31415 artifacts. New regression tests
+cover those boundaries; reference compatibility passed, with Docker image/input
+mount evidence retained in the document repository's November 17 logs.
