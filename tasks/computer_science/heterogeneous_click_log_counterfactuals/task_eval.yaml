@@ -1,0 +1,74 @@
+task_id: computer_science.heterogeneous_click_log_counterfactuals
+output:
+  files:
+  - name: results/counterfactual_ctr.csv
+    type: data
+  - name: results/conditional_clicks.csv
+    type: data
+  - name: results/policy_values.csv
+    type: data
+  - name: results/new_query_rankings.csv
+    type: data
+  - name: results/model_summary.json
+    type: data
+  - name: results/diagnostics.png
+    type: figure
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: analysis.py
+      - file: results/counterfactual_ctr.csv
+      - file: results/conditional_clicks.csv
+      - file: results/policy_values.csv
+      - file: results/new_query_rankings.csv
+      - file: results/model_summary.json
+      - file: results/diagnostics.png
+  - scorer: code_analysis
+    severity: hard
+    config:
+      target_file: analysis.py
+      checks:
+      - forbidden_imports:
+        - pyclick
+        - clickmodels
+        - click_models
+        - ultr
+        - ultra
+        - allrank
+        - pytorchltr
+        - torch
+        - tensorflow
+        - jax
+      - pattern: (?i)__import__\s*\(|importlib
+        forbidden: true
+      - pattern: (?i)reference[\\/]|_ref\.(csv|json|png)|instance_meta|click_model_ref|segment_mix_ref|new_query_relevance|new_query_bounds|conditional_clicks_marginal|policy_values_independent
+        forbidden: true
+  scoring:
+  - scorer: heterogeneous_click_log_score
+    weight: 100
+    config:
+      counterfactual_file: results/counterfactual_ctr.csv
+      reference_counterfactual_file: counterfactual_ctr_ref.csv
+      conditional_file: results/conditional_clicks.csv
+      reference_conditional_file: conditional_clicks_ref.csv
+      policy_file: results/policy_values.csv
+      reference_policy_file: policy_values_ref.csv
+      ranking_file: results/new_query_rankings.csv
+      reference_ranking_file: new_query_rankings_ref.csv
+      summary_file: results/model_summary.json
+      reference_summary_file: model_summary_ref.json
+      figure_file: results/diagnostics.png
+      reference_figure_file: diagnostics_ref.png
+      ctr_mae_full: 0.022
+      ctr_mae_zero: 0.05
+      conditional_ratio_full: 0.4
+      conditional_ratio_zero: 0.9
+      ec_rel_full: 0.08
+      ec_rel_zero: 0.2
+      session_ratio_full: 0.4
+      session_ratio_zero: 0.9
+      ranking_gain_full: 0.7
+      ranking_gain_zero: 0.0

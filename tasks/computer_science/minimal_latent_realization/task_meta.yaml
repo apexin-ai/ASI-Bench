@@ -1,0 +1,40 @@
+id: computer_science.minimal_latent_realization
+name: Minimal Stochastic Latent Realization
+version: 0.4.0
+status: final
+domain: computer_science
+subdomain: latent_variable_models
+source:
+  paper: https://arxiv.org/abs/1605.06848
+  repo: null
+difficulty:
+  estimated_lines: 150-350
+  estimated_time_minutes: 60-180
+  requires_gpu: false
+  requires_network: false
+runtime:
+  python: '>=3.11'
+  packages:
+  - numpy>=1.26
+  - scipy>=1.11
+  - sympy==1.14.0
+  - mpmath>=1.3
+tags:
+- nonnegative_factorization
+- latent_variable_models
+- exact_computation
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: examples.json
+    type: data
+    description: Raw stochastic matrix example.
+output:
+  files:
+  - name: factorizer.py
+    type: code
+    description: Reusable minimal stochastic factorization.

@@ -1,0 +1,17 @@
+task_id: computer_science.minimal_latent_realization
+output:
+  files:
+  - name: factorizer.py
+    type: code
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: factorizer.py
+  scoring:
+  - scorer: minimal_latent_realization_v1
+    weight: 100
+    config:
+      script: custom_scorer.py

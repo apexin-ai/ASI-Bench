@@ -1,0 +1,109 @@
+task_id: physics.a2_trinion_full_index
+output:
+  files:
+  - name: solution.wl
+    type: code
+  - name: manifest_index.json
+    type: data
+  - name: result.json
+    type: data
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: solution.wl
+      - file: manifest_index.json
+      - file: result.json
+  - scorer: a2_trinion_output_contract
+    severity: hard
+    config:
+      result_file: result.json
+      manifest_file: manifest_index.json
+  - scorer: code_analysis
+    severity: soft
+    config:
+      target_file: solution.wl
+      scoring_mode: per_check
+      checks:
+      - pattern: Series|Coefficient|SeriesCoefficient|Normal
+        required: true
+      - pattern: Integrate|Residue|Coefficient|Weyl|Character
+        required: true
+      - pattern: SU3|SU\[3\]|Schur|WeylCharacter|Dynkin
+        required: true
+      - pattern: manifest|branch|recombin|adjoint
+        required: true
+      - pattern: Limit|ReplaceAll|Simplify|FullSimplify
+        required: true
+      - pattern: Together|Cancel|Factor|Apart
+        required: true
+      - pattern: Numerator|Denominator|CoefficientList
+        required: true
+      - pattern: hl_numerator_coefficients|hl_denominator_coefficients
+        required: true
+      - pattern: Export.*RawJSON|Export.*JSON
+        required: true
+      - pattern: Python|SymPy|SageMath
+        forbidden: true
+  scoring:
+  - scorer: file_match
+    weight: 2
+    config:
+      scoring_mode: per_check
+      checks:
+      - file: solution.wl
+      - file: manifest_index.json
+      - file: result.json
+  - scorer: code_analysis
+    weight: 3
+    config:
+      target_file: solution.wl
+      scoring_mode: per_check
+      checks:
+      - pattern: Series|Coefficient|SeriesCoefficient|Normal
+        required: true
+      - pattern: Integrate|Residue|Coefficient|Weyl|Character
+        required: true
+      - pattern: SU3|SU\[3\]|Schur|WeylCharacter|Dynkin
+        required: true
+      - pattern: manifest|branch|recombin|adjoint
+        required: true
+      - pattern: Limit|ReplaceAll|Simplify|FullSimplify
+        required: true
+      - pattern: Together|Cancel|Factor|Apart
+        required: true
+      - pattern: Numerator|Denominator|CoefficientList
+        required: true
+      - pattern: hl_numerator_coefficients|hl_denominator_coefficients
+        required: true
+      - pattern: Export
+        required: true
+  - scorer: a2_trinion_full_index
+    weight: 25
+    config:
+      result_file: result.json
+      reference_file: result.json
+  - scorer: a2_trinion_manifest_index
+    weight: 20
+    config:
+      manifest_file: manifest_index.json
+      manifest_reference_file: manifest_index.json
+  - scorer: a2_trinion_character_recombination
+    weight: 20
+    config:
+      result_file: result.json
+      reference_file: result.json
+      manifest_file: manifest_index.json
+      manifest_reference_file: manifest_index.json
+  - scorer: a2_trinion_hall_littlewood
+    weight: 10
+    config:
+      result_file: result.json
+      reference_file: result.json
+  - scorer: a2_trinion_hall_littlewood_closed_form
+    weight: 20
+    config:
+      result_file: result.json
+      reference_file: result.json

@@ -1,0 +1,17 @@
+task_id: computer_science.signed_ising_log_partition
+output:
+  files:
+  - name: normalizer.py
+    type: code
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: normalizer.py
+  scoring:
+  - scorer: signed_ising_log_partition_v3
+    weight: 100
+    config:
+      script: custom_scorer.py

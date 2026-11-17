@@ -1946,3 +1946,33 @@ Commit `611b2cc` adds 15 accepted scorer contracts without prompt/GT source. Opt
 - Wheel/sdist build, strict Twine metadata checks and clean wheel CLI installation
   pass. Keep recovery claims after dispatch crashes for audit; never replay a
   checkpoint whose continuation may have already consumed model budget.
+
+## 2026-11-17 — Accepted task source import
+
+Commit `29205c5555cecf9bf25211bdbc1b737a13cd0a7f` imports five complete task uploads from the six-task batch;
+the RNA archive is truncated inside a data asset, so importing that task from
+a recovered partial ZIP would hide missing inputs. It remains pending.
+
+QP's author self-check read a generator and private reference program at score
+time; the integrated scorer now always executes the submitted solver offline
+against pre-materialized problems. Latent/Ising use the structured submission
+runner to distinguish infrastructure errors from submission errors. Reference
+programs remain outside public source/seed31415 artifacts. New regression tests
+cover those boundaries; reference compatibility passed, with Docker image/input
+mount evidence retained in the document repository's November 17 logs.
+
+## 2026-11-17 — RNA source re-upload completed
+
+Commit `df84a53c1f467631f9da92af92b77f94189a4359` completes all six task imports using the intact 84,062,628-byte
+RNA archive (36 ZIP members with passing CRC); the previous truncated upload
+remains archived unchanged in the documentation repository. All chunk/assembled
+asset hashes and empirical anchors passed generation. The original fixed
+measured-data split is retained: harness seed31415 is not an independent split.
+
+Public task files contain contracts/scorer and declared `runtime.txt` only.
+Chunk assets stay private; private source provenance is omitted from the HF
+numerical-reference payload. RNA's scientific reference scored 100/100; a
+public-input-only training-mean script passed real offline Docker replay with
+max absolute prediction difference 0, recorded image identity and only public
+input mounts. This checks scorer/runtime compatibility, not model difficulty.
+Public targeted tests: 61 passed; private targeted tests: 37 passed.

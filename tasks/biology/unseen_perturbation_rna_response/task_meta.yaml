@@ -1,0 +1,79 @@
+id: biology.unseen_perturbation_rna_response
+name: Predict downstream RNA responses to unseen gene perturbations
+version: 0.12.2
+status: final
+domain: biology
+subdomain: single_cell_perturbation_prediction
+source:
+  paper: 'Replogle JM, et al. Mapping information-rich genotype-phenotype landscapes
+    with genome-scale Perturb-seq. Cell. 2022;185(14):2559–2575.e28. doi:10.1016/j.cell.2022.05.013.
+    Data: scPerturb, Zenodo record 13350497 (doi:10.5281/zenodo.13350497). Measured
+    K562 essential-gene CRISPRi responses.'
+  repo: https://github.com/sanderlab/scPerturb
+difficulty:
+  estimated_lines: 100-400
+  estimated_time_minutes: 30-60
+  requires_gpu: false
+  requires_network: false
+tags:
+- experimental_data
+- unseen_gene_perturbations
+- downstream_RNA_response
+- technical_reproducibility
+runtime:
+  dockerfile: runtime.txt
+  python: '>=3.11,<3.12'
+  packages:
+  - numpy==1.24.3
+  - scipy==1.11.4
+  - pandas==1.5.3
+  - scikit-learn==1.3.2
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: data/README.md
+    type: data
+    description: Fixed public training/validation observations, test identities, or
+      scientific file-contract metadata.
+  - name: data/genes.json
+    type: data
+    description: Fixed public training/validation observations, test identities, or
+      scientific file-contract metadata.
+  - name: data/manifest.json
+    type: data
+    description: Fixed public training/validation observations, test identities, or
+      scientific file-contract metadata.
+  - name: data/metadata.json
+    type: data
+    description: Fixed public training/validation observations, test identities, or
+      scientific file-contract metadata.
+  - name: data/provenance.json
+    type: data
+    description: Fixed public training/validation observations, test identities, or
+      scientific file-contract metadata.
+  - name: data/test_queries.json
+    type: data
+    description: Fixed public training/validation observations, test identities, or
+      scientific file-contract metadata.
+  - name: data/train_condition_stats.npz
+    type: data
+    description: Fixed public training/validation observations, test identities, or
+      scientific file-contract metadata.
+  - name: data/validation_targets.npz
+    type: data
+    description: Fixed public training/validation observations, test identities, or
+      scientific file-contract metadata.
+output:
+  files:
+  - name: analysis.py
+    type: code
+    description: Self-contained fresh computation from supplied public data; at most
+      64 KiB, at most 12 KiB zlib-compressed, at most 8,192 literal/comment characters.
+  - name: results/predictions.npy
+    type: data
+    description: Finite float32/float64 array[233,3323], at most8MiB, in supplied
+      condition/gene order.
