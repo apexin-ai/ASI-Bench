@@ -1467,3 +1467,16 @@ ASIBENCH_SESSION_DOCKER=1 ASIBENCH_CLAUDE_BINARY=/absolute/path/to/claude \
 
 Default suites skip this Docker test. A successful fixture is not evidence of
 provider availability or production campaign recovery.
+
+## Accepted 2026-11-17 task import
+
+Run `pytest tests/test_accepted_20261117.py -q` to check that QP scoring never
+reads a generator or private solver, missing/corrupt references are evaluator
+failures, and Docker startup errors are distinct from submission execution errors.
+Reference compatibility was also checked with generated seed31415 instances:
+QP, latent and signed Ising references execute in the offline second-stage
+Docker runner with reference answers outside the submission mount. Their
+scientific scores and the click-log reference artifact score were 100/100.
+The five A2 scientific components scored 95/95; file/code-analysis components
+and licensed Wolfram execution were not exercised by that reference-artifact check.
+No model scores or new B3/B4 difficulty claims are implied.

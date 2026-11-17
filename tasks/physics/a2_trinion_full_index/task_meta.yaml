@@ -1,0 +1,58 @@
+id: physics.a2_trinion_full_index
+name: Reconstruct a Fully Refined A2 Trinion Index and Its Complete Hall-Littlewood
+  Limit
+version: '0.5'
+status: final
+domain: physics
+subdomain: supersymmetric_quantum_field_theory
+source:
+  paper: null
+  repo: null
+difficulty:
+  estimated_lines: 240-520
+  estimated_time_minutes: 180-480
+  requires_gpu: false
+  requires_network: false
+tags:
+- class_s
+- superconformal_index
+- representation_theory
+- symmetry_enhancement
+- hall_littlewood
+- wolfram_language
+- mcp
+runtime:
+  image: asibench-wolfram:test
+  python: '>=3.11'
+  packages: []
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: problem.json
+    type: data
+    description: Exact truncation, output schema, fugacity constraints, Hall-Littlewood
+      scaling, and closed-form rational certificate.
+  - name: index_definition.md
+    type: text
+    description: Self-contained formal definition of two equal index channels and
+      the inversion kernel.
+output:
+  files:
+  - name: solution.wl
+    type: code
+    description: Complete Wolfram Language source for the t^11 fugacity expansion,
+      SU(3)^3 character decomposition, enhanced-character recombination, and exact
+      complete Hall-Littlewood contour calculation.
+  - name: manifest_index.json
+    type: data
+    description: Canonical full-index expansion through t^11 in manifest SU(3)^3 Dynkin-label
+      characters before enhanced-symmetry recombination.
+  - name: result.json
+    type: data
+    description: Canonical full-index highest-weight characters, SU(3)^3-to-enhanced-symmetry
+      recombination certificate, truncated Hall-Littlewood terms, and complete unrefined
+      Hall-Littlewood rational function.

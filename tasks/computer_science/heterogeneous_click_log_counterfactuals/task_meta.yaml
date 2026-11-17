@@ -1,0 +1,92 @@
+id: computer_science.heterogeneous_click_log_counterfactuals
+name: Counterfactual Questions from Heterogeneous Web-Search Click Logs
+version: '1.0'
+status: final
+domain: computer_science
+subdomain: information_retrieval
+source:
+  paper: 'Chuklin, Markov and de Rijke (2015) Click Models for Web Search; Joachims,
+    Swaminathan and Schnabel (2017) Unbiased Learning-to-Rank with Biased Feedback
+    (WSDM); Agarwal et al. (2019) Estimating Position Bias without Intrusive Interventions
+    (WSDM); Agarwal et al. (2019) Addressing Trust Bias for Unbiased Learning-to-Rank
+    (WWW); Vardasbi, Oosterhuis and de Rijke (2020) When Inverse Propensity Scoring
+    does not Work: Affine Corrections for Unbiased Learning to Rank (CIKM); Agrawal
+    et al. (2009) Diversifying Search Results (WSDM).'
+  repo: null
+difficulty:
+  estimated_lines: 300-600
+  estimated_time_minutes: 60-180
+  requires_gpu: false
+  requires_network: false
+tags:
+- click_models
+- unbiased_learning_to_rank
+- counterfactual_evaluation
+- latent_class_model
+- expectation_maximization
+- position_bias
+- trust_bias
+- search_result_diversification
+runtime:
+  python: '>=3.10'
+  packages:
+  - numpy>=1.24
+  - pandas>=2.0
+  - scipy>=1.11
+  - matplotlib>=3.7
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: data/sessions.csv
+    type: data
+    description: 'Logged search sessions: query, device, logging ranker, the 10 shown
+      documents and the 10 click indicators.'
+  - name: data/documents.csv
+    type: data
+    description: Candidate documents for every query (training and new queries) with
+      8 anonymous ranking features.
+  - name: data/ctr_requests.csv
+    type: data
+    description: Counterfactual (query, document, position, device) cells whose click-through
+      rate must be predicted.
+  - name: data/heldout_sessions.csv
+    type: data
+    description: Held-out sessions with clicks revealed only at positions 1-5.
+  - name: data/candidate_policies.csv
+    type: data
+    description: Top-10 rankings of several candidate ranking policies on the training
+      queries.
+  - name: data/task_info.json
+    type: data
+    description: Conventions, metric definitions and the required output schema.
+output:
+  files:
+  - name: analysis.py
+    type: code
+    description: End-to-end script that reads data/ and writes every artifact under
+      results/.
+  - name: results/counterfactual_ctr.csv
+    type: data
+    description: Predicted CTR for every row of data/ctr_requests.csv (columns request_id,ctr).
+  - name: results/conditional_clicks.csv
+    type: data
+    description: Predicted click probabilities at positions 6-10 of every held-out
+      session (columns session_id,position,p_click).
+  - name: results/policy_values.csv
+    type: data
+    description: Expected clicks, zero-click rate and multi-click rate of every candidate
+      policy for mobile, desktop and all.
+  - name: results/new_query_rankings.csv
+    type: data
+    description: Device-specific top-10 rankings for every new query (columns query_id,device,rank,doc_id).
+  - name: results/model_summary.json
+    type: data
+    description: Machine-readable summary with keys model_description, n_parameters,
+      heldout_validation.
+  - name: results/diagnostics.png
+    type: figure
+    description: Diagnostic figure of the fitted model.

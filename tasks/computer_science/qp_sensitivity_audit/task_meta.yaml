@@ -1,0 +1,53 @@
+id: computer_science.qp_sensitivity_audit
+name: Degenerate Critical-Region Atlas for General-Inequality mpQPs
+version: '0.6'
+status: final
+domain: computer_science
+subdomain: multiparametric_optimization
+source:
+  paper: Bemporad et al. (2002), The explicit linear quadratic regulator for constrained
+    systems; Best (1996), An algorithm for the solution of the parametric quadratic
+    programming problem
+  repo: null
+difficulty:
+  estimated_lines: 350-750
+  estimated_time_minutes: 120-240
+  requires_gpu: false
+  requires_network: false
+tags:
+- multiparametric_quadratic_programming
+- critical_regions
+- explicit_mpc
+- polyhedral_atlas
+- numerical_optimization
+runtime:
+  python: '>=3.11'
+  packages:
+  - numpy>=2.0
+  - scipy>=1.11
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: data/public_atlas_cases.npz
+    type: data
+    description: Transparent unscored two-parameter QPs with dense general inequalities.
+  - name: data/public_atlas_reference.npz
+    type: data
+    description: Reference critical-region atlases for the public calibration cases
+      only.
+  - name: data/interface.json
+    type: data
+    description: Exact input, output, padding, and event-code contract.
+  - name: data/public_runner.py
+    type: code
+    description: Local runner comparing solver.py with the public calibration paths.
+output:
+  files:
+  - name: solver.py
+    type: code
+    description: Reusable deterministic atlas solver that merges equivalent bases
+      under redundant general inequalities.

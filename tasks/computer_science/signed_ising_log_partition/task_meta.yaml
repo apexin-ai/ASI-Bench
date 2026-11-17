@@ -1,0 +1,40 @@
+id: computer_science.signed_ising_log_partition
+name: Signed Ising Log Partition
+version: 0.22.0
+status: final
+domain: computer_science
+subdomain: probabilistic_graph_inference
+source:
+  paper: null
+  repo: null
+difficulty:
+  estimated_lines: 150-500
+  estimated_time_minutes: 60-180
+  requires_gpu: false
+  requires_network: false
+runtime:
+  python: '>=3.11'
+  packages:
+  - numpy>=2.0
+  - scipy>=1.11
+  - sympy==1.14.0
+  - mpmath>=1.3.0
+tags:
+- probabilistic_inference
+- graph_algorithms
+- weighted_counting
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: examples.json
+    type: data
+    description: Example signed graph input.
+output:
+  files:
+  - name: normalizer.py
+    type: code
+    description: Reusable log-partition implementation.

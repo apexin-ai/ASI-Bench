@@ -1,0 +1,21 @@
+task_id: computer_science.qp_sensitivity_audit
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: solver.py
+  scoring:
+  - scorer: qp_active_path_v3
+    weight: 100
+    config:
+      private_problem_file: private_atlas_cases.npz
+      private_answer_file: private_atlas_answers.npz
+      runtime_timeout_seconds: 180
+output:
+  files:
+  - name: solver.py
+    type: code
+    description: Reusable deterministic atlas solver that merges equivalent bases
+      under redundant general inequalities.

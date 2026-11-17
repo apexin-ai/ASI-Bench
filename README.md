@@ -909,3 +909,12 @@ If you use ASI-Bench, please cite:
   year={2026}
 }
 ```
+
+## Accepted task additions — 2026-11-17
+
+Five complete uploads from the six-task accepted batch are staged under normal
+`tasks/<domain>/<name>/` paths: QP sensitivity audit, minimal latent realization,
+heterogeneous click-log counterfactuals, signed Ising log partition, and the A2
+trinion index. The RNA response upload is truncated and is deliberately excluded
+until a complete archive is supplied. These additions are outside the original
+60-task reported benchmark results; no new model difficulty evaluation was run.
