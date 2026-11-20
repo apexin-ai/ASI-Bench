@@ -346,10 +346,10 @@ def test_formal_scorer_allowlist_is_exact_and_references_existing_files():
         if yaml.safe_load(path.read_text(encoding="utf-8"))["status"] == "final"
     }
     assert set(policy["formal_tasks"]) == final_ids
-    assert len(policy["formal_tasks"]) == len(set(policy["formal_tasks"])) == 81
+    assert len(policy["formal_tasks"]) == len(set(policy["formal_tasks"])) == 82
     assert len(policy["tasks_with_custom_scorers"]) == len(
         set(policy["tasks_with_custom_scorers"])
-    ) == 78
+    ) == 79
     assert set(policy["tasks_with_custom_scorers"]) <= final_ids
     assert policy["task_helper_files"] == {
         "computer_science.euclidean_tsp_tour_optimization": ["tsp_common.py"],
@@ -587,9 +587,9 @@ def test_public_catalog_has_exact_final_and_sample_statuses():
     final_ids = {task_id for task_id, status in statuses.items() if status == "final"}
 
     assert sample_ids == EXPECTED_SAMPLE_TASKS
-    assert len(final_ids) == 81
+    assert len(final_ids) == 82
     assert set(statuses.values()) == {"final", "sample"}
-    assert len(statuses) == 86
+    assert len(statuses) == 87
     assert stale_abandoned_reasons == []
 
 

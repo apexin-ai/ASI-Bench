@@ -1,0 +1,97 @@
+task_id: math.sl4_affine_singular_vector
+output:
+  files:
+  - name: solution.wl
+    type: code
+  - name: result.json
+    type: data
+evaluation:
+  gates:
+  - scorer: file_match
+    severity: hard
+    config:
+      checks:
+      - file: solution.wl
+      - file: result.json
+  - scorer: affine_sl4_output_contract
+    severity: hard
+    config:
+      result_file: result.json
+  - scorer: code_analysis
+    severity: soft
+    config:
+      target_file: solution.wl
+      scoring_mode: per_check
+      checks:
+      - pattern: PBW|Poincare|monomial|colored
+        required: true
+      - pattern: conformal|degree|weightLoop|While|Do
+        required: true
+      - pattern: Cartan|weightBlock|Dynkin
+        required: true
+      - pattern: commutator|LieBracket|affineBracket
+        required: true
+      - pattern: reduce|normalOrder|PBWReduce
+        required: true
+      - pattern: NullSpace|RowReduce
+        required: true
+      - pattern: e12|e23|e34|f14|annihilat
+        required: true
+      - pattern: Zhu|Harish|GroebnerBasis|Reduce
+        required: true
+      - pattern: Export.*RawJSON|Export.*JSON
+        required: true
+      - pattern: Python|SymPy|SageMath
+        forbidden: true
+  scoring:
+  - scorer: file_match
+    weight: 2
+    config:
+      scoring_mode: per_check
+      checks:
+      - file: solution.wl
+      - file: result.json
+  - scorer: code_analysis
+    weight: 8
+    config:
+      target_file: solution.wl
+      scoring_mode: per_check
+      checks:
+      - pattern: PBW|Poincare|monomial|colored
+        required: true
+      - pattern: conformal|degree|weightLoop|While|Do
+        required: true
+      - pattern: Cartan|weightBlock|Dynkin
+        required: true
+      - pattern: commutator|LieBracket|affineBracket
+        required: true
+      - pattern: reduce|normalOrder|PBWReduce
+        required: true
+      - pattern: NullSpace|RowReduce
+        required: true
+      - pattern: e12|e23|e34|f14|annihilat
+        required: true
+      - pattern: Zhu|Harish|GroebnerBasis|Reduce
+        required: true
+      - pattern: Export
+        required: true
+  - scorer: affine_sl4_search
+    weight: 15
+    config:
+      result_file: result.json
+      reference_file: result.json
+  - scorer: affine_sl4_singular_vector
+    weight: 35
+    config:
+      result_file: result.json
+      reference_file: result.json
+  - scorer: affine_sl4_zhu
+    weight: 20
+    config:
+      result_file: result.json
+      reference_file: result.json
+  - scorer: affine_sl4_category_o
+    weight: 20
+    config:
+      result_file: result.json
+      reference_file: result.json

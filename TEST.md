@@ -1490,3 +1490,12 @@ training-mean script used solely for replay compatibility; neither is a model
 difficulty evaluation. Source provenance remains private and is omitted from the
 HF numerical-reference payload. Harness seed31415 preserves the author's fixed
 measured-data split; it does not create an independent randomized split.
+
+## Accepted 2026-11-20 task import
+
+Run `pytest tests/test_accepted_20261120.py tests/test_public_task_policy.py -q`
+to check the affine sl(4) public split, scorer registration, final-task count,
+and the absence of generation configuration from the public evaluation YAML.
+The generated seed31415 reference was independently validated by the exact
+Python scorer helpers. This is compatibility validation, not a model difficulty
+evaluation or licensed Wolfram execution.
