@@ -921,3 +921,11 @@ seed. Public exports contain scorers/contracts and the explicitly declared RNA
 runtime; private chunk assets and generators remain private. These additions are
 outside the original 60-task reported benchmark results; no new model difficulty
 evaluation was run.
+
+## Accepted task addition — 2026-11-20
+
+The accepted `math.sl4_affine_singular_vector` task is staged under
+`tasks/math/sl4_affine_singular_vector/`. The public repository contains only
+its metadata, scoring contract, and scorer. Its seed31415 instance carries the
+four prompts, algebra/problem inputs, and numerical reference certificates in
+the separate dataset payload. No model or B3/B4 difficulty evaluation was run.

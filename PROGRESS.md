@@ -1976,3 +1976,13 @@ public-input-only training-mean script passed real offline Docker replay with
 max absolute prediction difference 0, recorded image identity and only public
 input mounts. This checks scorer/runtime compatibility, not model difficulty.
 Public targeted tests: 61 passed; private targeted tests: 37 passed.
+
+## 2026-11-20 — Accepted affine sl(4) task source import
+
+The `math.sl4_affine_singular_vector` accepted upload is staged with only
+`task_meta.yaml`, scoring-only `task_eval.yaml`, and `custom_scorer.py` in the
+public task tree. The scorer's exact reference contract validates the 52-term
+singular vector, two-dimensional Zhu polynomial space, and sixteen category-O
+lines. The seed31415 instance and its public numerical certificate are prepared
+outside the Git tree. No Wolfram license run or model difficulty evaluation was
+performed.

@@ -1,0 +1,51 @@
+id: math.sl4_affine_singular_vector
+name: Singular Vector and Category O Modules for an Affine sl(4) VOA
+version: '0.1'
+status: final
+domain: math
+subdomain: vertex_operator_algebras
+source:
+  paper: null
+  repo: null
+difficulty:
+  estimated_lines: 300-700
+  estimated_time_minutes: 180-480
+  requires_gpu: false
+  requires_network: false
+tags:
+- affine_vertex_algebra
+- representation_theory
+- singular_vector
+- category_o
+- zhu_algebra
+- exact_symbolic_computation
+- wolfram_language
+- mcp
+runtime:
+  image: asibench-wolfram:test
+  python: '>=3.11'
+  packages: []
+prompts:
+  b1: prompt_b1.md
+  b2: prompt_b2.md
+  b3: prompt_b3.md
+  b4: prompt_b4.md
+input:
+  files:
+  - name: problem.json
+    type: data
+    description: Exact task, serialization, and required Wolfram MCP source/artifact
+      contracts.
+  - name: algebra_conventions.md
+    type: text
+    description: Affine sl(4), vacuum-module, weight, and singularity conventions.
+output:
+  files:
+  - name: solution.wl
+    type: code
+    description: Complete Wolfram Language source for the exact PBW search, verification,
+      Zhu calculation, and category-O classification.
+  - name: result.json
+    type: data
+    description: Exact search trace, singular vector, Harish-Chandra polynomial space,
+      highest-weight families, and linked MCP certificates.
